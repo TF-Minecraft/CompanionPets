@@ -1,0 +1,11 @@
+name: CompanionPets
+main: net.tfmc.pets.PetsPlugin
+version: ${project.version}
+api-version: "1.21"
+description: Pets you hatch, care for, and train. Each one keeps its needs, favorite toy, and tricks.
+
+softdepend:
+  - MythicMobs
+  - ModelEngine
+  - ItemsAdder
+  - MMOItems
