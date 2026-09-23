@@ -4,6 +4,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -359,7 +360,7 @@ public final class PetActions {
             player.sendMessage("Se ha cancelado el nombre. El huevo no se ha gastado.");
             return true;
         }
-        if (Names.cancels(text) && (prompt.name() != null || prompt.choosingSex())) {
+        if (Names.cancels(text)) {
             runtime.sessions().clearHatch(player.getUniqueId());
             player.sendMessage("El huevo no se ha gastado.");
             return true;
@@ -500,7 +501,7 @@ public final class PetActions {
         }
         TrainingSession session = runtime.sessions().training(player.getUniqueId());
         if (session != null && session.petId().equals(pet.id())) {
-            if (session.pendingWord() != null) {
+            if (session.pendingWord() != null || session.bored()) {
                 return;
             }
             Trick known = pet.trickFor(line);
@@ -535,7 +536,7 @@ public final class PetActions {
                 player.sendMessage(pet.name() + " no entiende.");
             }
             if (attempts >= runtime.config().training().attemptsBeforeBored()) {
-                runtime.sessions().clearTraining(player.getUniqueId());
+                session.bored(true);
                 runtime.sessions().rest(pet.id(), now + Math.round(runtime.config().training().restSeconds() * 1000.0));
                 PetFx.bar(player, pet.name() + " se aburre. Energía " + Math.round(pet.need(Need.ENERGY)));
             }
@@ -593,6 +594,9 @@ public final class PetActions {
                 runtime.config().training()));
         pet.need(Need.HUNGER, pet.need(Need.HUNGER) + runtime.config().training().treatHungerGain());
         session.clearReward();
+        if (session.bored()) {
+            runtime.sessions().clearTraining(player.getUniqueId());
+        }
         Entity entity = runtime.entity(pet);
         if (entity != null) {
             PetFx.eat(entity);
@@ -980,7 +984,9 @@ public final class PetActions {
         if (world != null) {
             int chunkX = ((int) Math.floor(pet.x())) >> 4;
             int chunkZ = ((int) Math.floor(pet.z())) >> 4;
-            world.getChunkAt(chunkX, chunkZ).load(true);
+            Chunk chunk = world.getChunkAt(chunkX, chunkZ);
+            chunk.load(true);
+            chunk.getEntities();
         }
         Entity entity = runtime.entity(pet);
         if (entity == null && pet.entityId() != null) {

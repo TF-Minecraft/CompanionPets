@@ -383,6 +383,8 @@ public final class PetTicker implements Runnable {
                 if (player.isOnline()) {
                     PetFx.bar(player, "La sesión de entrenamiento termina");
                 }
+            } else if (session.bored() && now > session.rewardUntil()) {
+                runtime.sessions().clearTraining(player.getUniqueId());
             }
         }
     }

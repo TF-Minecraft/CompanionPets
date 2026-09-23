@@ -11,6 +11,7 @@ public final class TrainingSession {
     private Boolean rewardSuccess;
     private String pendingWord;
     private Trick rewardTrick;
+    private boolean bored;
 
     public TrainingSession(UUID petId) {
         this.petId = petId;
@@ -59,5 +60,13 @@ public final class TrainingSession {
 
     public void pendingWord(String pendingWord) {
         this.pendingWord = pendingWord;
+    }
+
+    public boolean bored() {
+        return bored;
+    }
+
+    public void bored(boolean bored) {
+        this.bored = bored;
     }
 }

@@ -2,6 +2,8 @@ package net.tfminecraft.companionpets.store;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -13,6 +15,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -29,6 +32,7 @@ public final class PetStore {
     private final File file;
     private final Map<UUID, Pet> pets = new LinkedHashMap<>();
     private final Map<String, UUID> kennels = new LinkedHashMap<>();
+    private boolean loaded;
 
     public PetStore(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -38,10 +42,19 @@ public final class PetStore {
     public void load() {
         pets.clear();
         kennels.clear();
+        loaded = false;
         if (!file.exists()) {
+            loaded = true;
             return;
         }
-        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+        YamlConfiguration yaml = new YamlConfiguration();
+        try {
+            yaml.load(file);
+        } catch (IOException | InvalidConfigurationException ex) {
+            plugin.getLogger().log(Level.SEVERE, "Could not read pets.yml; saving is disabled so it is not overwritten", ex);
+            return;
+        }
+        loaded = true;
         ConfigurationSection petSection = yaml.getConfigurationSection("pets");
         if (petSection != null) {
             for (String id : petSection.getKeys(false)) {
@@ -75,6 +88,9 @@ public final class PetStore {
     }
 
     public void save() {
+        if (!loaded) {
+            return;
+        }
         YamlConfiguration yaml = new YamlConfiguration();
         for (Pet pet : pets.values()) {
             String path = "pets." + pet.id();
@@ -135,8 +151,10 @@ public final class PetStore {
             kennelRows.add(row);
         }
         yaml.set("kennels", kennelRows);
+        File temp = new File(file.getParentFile(), file.getName() + ".tmp");
         try {
-            yaml.save(file);
+            yaml.save(temp);
+            Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException ex) {
             plugin.getLogger().log(Level.SEVERE, "Could not save pets.yml", ex);
         }
@@ -163,7 +181,11 @@ public final class PetStore {
                 (float) section.getDouble("yaw"));
         String entity = section.getString("entity", "");
         if (!entity.isBlank()) {
-            pet.entityId(UUID.fromString(entity));
+            try {
+                pet.entityId(UUID.fromString(entity));
+            } catch (IllegalArgumentException ignored) {
+                pet.entityId(null);
+            }
         }
         for (Need need : Need.values()) {
             String key = need.name().toLowerCase(Locale.ROOT);

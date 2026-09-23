@@ -19,9 +19,12 @@ import net.tfminecraft.companionpets.visual.IdleVisual;
 import net.tfminecraft.companionpets.visual.PetVisual;
 
 public final class PetsPlugin extends JavaPlugin {
+    private static final long AUTOSAVE_TICKS = 20L * 300;
+
     private PetStore store;
     private PetActions actions;
     private BukkitTask ticker;
+    private BukkitTask autosave;
 
     @Override
     public void onEnable() {
@@ -37,6 +40,7 @@ public final class PetsPlugin extends JavaPlugin {
         actions = new PetActions(runtime);
         Bukkit.getPluginManager().registerEvents(new PetListener(runtime, actions), this);
         ticker = Bukkit.getScheduler().runTaskTimer(this, new PetTicker(runtime, actions), 10L, 10L);
+        autosave = Bukkit.getScheduler().runTaskTimer(this, store::save, AUTOSAVE_TICKS, AUTOSAVE_TICKS);
         for (org.bukkit.World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {
                 actions.reattach(entity);
@@ -49,6 +53,9 @@ public final class PetsPlugin extends JavaPlugin {
     public void onDisable() {
         if (ticker != null) {
             ticker.cancel();
+        }
+        if (autosave != null) {
+            autosave.cancel();
         }
         if (actions != null) {
             actions.stashLooseToys();

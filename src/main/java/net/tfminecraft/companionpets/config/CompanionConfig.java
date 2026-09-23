@@ -60,37 +60,38 @@ public final class CompanionConfig {
 
     public static CompanionConfig load(JavaPlugin plugin) {
         FileConfiguration config = plugin.getConfig();
+        Logger logger = plugin.getLogger();
         CareSettings defaults = CareSettings.defaults();
         ConfigurationSection care = config.getConfigurationSection("care");
         CareSettings careSettings = new CareSettings(
-                num(care, "hunger-minutes-to-critical", defaults.hungerMinutesToCritical()),
-                num(care, "mood-minutes-to-critical", defaults.moodMinutesToCritical()),
-                num(care, "energy-minutes-to-critical", defaults.energyMinutesToCritical()),
-                num(care, "dirty-every-minutes", defaults.dirtyEveryMinutes()),
-                num(care, "dirty-loss", defaults.dirtyLoss()),
-                num(care, "minutes-until-unwell", defaults.minutesUntilUnwell()),
-                num(care, "minutes-until-sick", defaults.minutesUntilSick()),
+                num(logger, care, "hunger-minutes-to-critical", defaults.hungerMinutesToCritical()),
+                num(logger, care, "mood-minutes-to-critical", defaults.moodMinutesToCritical()),
+                num(logger, care, "energy-minutes-to-critical", defaults.energyMinutesToCritical()),
+                num(logger, care, "dirty-every-minutes", defaults.dirtyEveryMinutes()),
+                num(logger, care, "dirty-loss", defaults.dirtyLoss()),
+                num(logger, care, "minutes-until-unwell", defaults.minutesUntilUnwell()),
+                num(logger, care, "minutes-until-sick", defaults.minutesUntilSick()),
                 care != null && care.contains("decay-while-stored") ? care.getBoolean("decay-while-stored") : defaults.decayWhileStored(),
                 care != null && care.contains("death-on-neglect") ? care.getBoolean("death-on-neglect") : defaults.deathOnNeglect(),
-                num(care, "play-seconds", defaults.playSeconds()),
-                num(care, "play-mood-gain", defaults.playMoodGain()),
-                num(care, "play-energy-cost", defaults.playEnergyCost()),
-                num(care, "favorite-mood-multiplier", defaults.favoriteMoodMultiplier()),
-                num(care, "favorite-food-mood", defaults.favoriteFoodMood()),
-                num(care, "sleep-minutes-to-full", defaults.sleepMinutesToFull()),
-                num(care, "sleeping-hunger-multiplier", defaults.sleepingHungerMultiplier()),
-                num(care, "health-loss-per-minute", defaults.healthLossPerMinute()),
-                num(care, "health-regen-per-minute", defaults.healthRegenPerMinute()),
-                num(care, "medicine-health-bump", defaults.medicineHealthBump()),
-                num(care, "bond-gain-per-minute", defaults.bondGainPerMinute()),
-                num(care, "bond-loss-per-minute", defaults.bondLossPerMinute()),
-                num(care, "wake-mood-penalty", defaults.wakeMoodPenalty()),
-                num(care, "critical-sound-seconds", defaults.criticalSoundSeconds()));
+                num(logger, care, "play-seconds", defaults.playSeconds()),
+                num(logger, care, "play-mood-gain", defaults.playMoodGain()),
+                num(logger, care, "play-energy-cost", defaults.playEnergyCost()),
+                num(logger, care, "favorite-mood-multiplier", defaults.favoriteMoodMultiplier()),
+                num(logger, care, "favorite-food-mood", defaults.favoriteFoodMood()),
+                num(logger, care, "sleep-minutes-to-full", defaults.sleepMinutesToFull()),
+                num(logger, care, "sleeping-hunger-multiplier", defaults.sleepingHungerMultiplier()),
+                num(logger, care, "health-loss-per-minute", defaults.healthLossPerMinute()),
+                num(logger, care, "health-regen-per-minute", defaults.healthRegenPerMinute()),
+                num(logger, care, "medicine-health-bump", defaults.medicineHealthBump()),
+                num(logger, care, "bond-gain-per-minute", defaults.bondGainPerMinute()),
+                num(logger, care, "bond-loss-per-minute", defaults.bondLossPerMinute()),
+                num(logger, care, "wake-mood-penalty", defaults.wakeMoodPenalty()),
+                num(logger, care, "critical-sound-seconds", defaults.criticalSoundSeconds()));
 
         ConfigurationSection play = config.getConfigurationSection("play");
         PlaySettings playSettings = new PlaySettings(
-                num(play, "throw-speed-low", PlaySettings.defaults().throwSpeedLow()),
-                num(play, "throw-speed-high", PlaySettings.defaults().throwSpeedHigh()));
+                num(logger, play, "throw-speed-low", PlaySettings.defaults().throwSpeedLow()),
+                num(logger, play, "throw-speed-high", PlaySettings.defaults().throwSpeedHigh()));
 
         ConfigurationSection training = config.getConfigurationSection("training");
         TrainingSettings trainingDefaults = TrainingSettings.defaults();
@@ -98,17 +99,17 @@ public final class CompanionConfig {
                 training != null && training.contains("attempts-before-bored")
                         ? training.getInt("attempts-before-bored")
                         : trainingDefaults.attemptsBeforeBored(),
-                num(training, "reward-gain", trainingDefaults.rewardGain()),
-                num(training, "fail-gain", trainingDefaults.failGain()),
-                num(training, "reward-window-seconds", trainingDefaults.rewardWindowSeconds()),
-                num(training, "sometimes-at", trainingDefaults.sometimesAt()),
-                num(training, "learned-at", trainingDefaults.learnedAt()),
-                num(training, "session-distance", trainingDefaults.sessionDistance()),
-                num(training, "attempt-energy-cost", trainingDefaults.attemptEnergyCost()),
-                num(training, "attempt-hunger-cost", trainingDefaults.attemptHungerCost()),
-                num(training, "attempt-mood-cost", trainingDefaults.attemptMoodCost()),
-                num(training, "treat-hunger-gain", trainingDefaults.treatHungerGain()),
-                num(training, "rest-seconds", trainingDefaults.restSeconds()));
+                num(logger, training, "reward-gain", trainingDefaults.rewardGain()),
+                num(logger, training, "fail-gain", trainingDefaults.failGain()),
+                num(logger, training, "reward-window-seconds", trainingDefaults.rewardWindowSeconds()),
+                num(logger, training, "sometimes-at", trainingDefaults.sometimesAt()),
+                num(logger, training, "learned-at", trainingDefaults.learnedAt()),
+                num(logger, training, "session-distance", trainingDefaults.sessionDistance()),
+                num(logger, training, "attempt-energy-cost", trainingDefaults.attemptEnergyCost()),
+                num(logger, training, "attempt-hunger-cost", trainingDefaults.attemptHungerCost()),
+                num(logger, training, "attempt-mood-cost", trainingDefaults.attemptMoodCost()),
+                num(logger, training, "treat-hunger-gain", trainingDefaults.treatHungerGain()),
+                num(logger, training, "rest-seconds", trainingDefaults.restSeconds()));
 
         ConfigurationSection limits = config.getConfigurationSection("limits");
         Limits limitDefaults = Limits.defaults();
@@ -117,10 +118,10 @@ public final class CompanionConfig {
                 limits != null && limits.contains("max-out") ? limits.getInt("max-out") : limitDefaults.maxOut());
 
         ConfigurationSection presence = config.getConfigurationSection("presence");
-        double near = num(presence, "owner-near-radius", 32);
-        double away = num(presence, "away-rate", 0.25);
-        double teleport = num(presence, "follow-teleport-blocks", 16);
-        double cry = num(presence, "cry-interval-seconds", 45);
+        double near = num(logger, presence, "owner-near-radius", 32);
+        double away = num(logger, presence, "away-rate", 0.25);
+        double teleport = num(logger, presence, "follow-teleport-blocks", 16);
+        double cry = num(logger, presence, "cry-interval-seconds", 45);
 
         ConfigurationSection items = config.getConfigurationSection("items");
         Material kennel = material(items, "kennel", Material.BARREL, plugin.getLogger());
@@ -245,11 +246,21 @@ public final class CompanionConfig {
         return value;
     }
 
-    private static double num(ConfigurationSection section, String path, double fallback) {
+    private static double num(Logger logger, ConfigurationSection section, String path, double fallback) {
         if (section == null || !section.contains(path)) {
             return fallback;
         }
-        return section.getDouble(path);
+        Object raw = section.get(path);
+        if (!(raw instanceof Number number)) {
+            logger.warning("Config value " + section.getCurrentPath() + "." + path + " is not a number; using " + fallback);
+            return fallback;
+        }
+        double value = number.doubleValue();
+        if (value < 0.0 || Double.isNaN(value) || Double.isInfinite(value)) {
+            logger.warning("Config value " + section.getCurrentPath() + "." + path + " must be 0 or more; using " + fallback);
+            return fallback;
+        }
+        return value;
     }
 
     public CareSettings care() {
