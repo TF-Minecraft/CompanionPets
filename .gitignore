@@ -1,14 +1,57 @@
-# Maven build output
-/target/
+# Build output
+target/
+build/
+out/
+dist/
+nbbuild/
+nbdist/
+*.class
+dependency-reduced-pom.xml
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
 
-# IDE metadata
+# Build dependencies
+/.build/
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE files
 .idea/
 *.iml
-.classpath
+*.ipr
+*.iws
+.vscode/
 .project
+.classpath
 .settings/
+nbproject/private/
+.nb-gradle/
 
-# Logs and operating-system files
+# Logs and temporary files
 *.log
+hs_err_pid*
+replay_pid*
+*.bak
+*.swp
+*.tmp
+*~
+
+# Operating system files
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Local investigation notes and test artifacts
+/.scratch/
+
+# Technical documentation is maintained in TF-Minecraft/Docs
+/docs/

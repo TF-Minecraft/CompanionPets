@@ -1,0 +1,120 @@
+name: Maven plugin release
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-release-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+
+      - name: Validate release version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]] || {
+            echo '::error::Expected vMAJOR.MINOR or vMAJOR.MINOR.PATCH, with an optional prerelease suffix.'
+            exit 1
+          }
+          [[ "${TAG^^}" != *SNAPSHOT* ]] || exit 1
+
+      - name: Set version from tag and build
+        id: maven
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mvn -B --no-transfer-progress -P'!deploy-live' org.codehaus.mojo:versions-maven-plugin:2.22.0:set \
+            -DnewVersion="${TAG#v}" -DgenerateBackupPoms=false
+          mvn -B --no-transfer-progress -P'!deploy-live' help:evaluate \
+            -Dexpression=project.build.finalName -Doutput="$RUNNER_TEMP/final-name"
+          final_name=$(cat "$RUNNER_TEMP/final-name")
+          [[ "$final_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || exit 1
+          echo "jar=target/$final_name.jar" >> "$GITHUB_OUTPUT"
+          mvn -B --no-transfer-progress -P'!deploy-live' clean verify -DskipTests=false -Dmaven.test.skip=false
+
+      - name: Stage only the release JAR
+        env:
+          ARTIFACT_PATH: ${{ steps.maven.outputs.jar }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 .github/scripts/plugin-artifact.py \
+            --jar "$ARTIFACT_PATH" --version "${TAG#v}" \
+            --stage "$RUNNER_TEMP/plugin-release"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plugin-release-${{ github.sha }}
+          path: ${{ runner.temp }}/plugin-release/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: plugin-release-${{ github.sha }}
+          path: release
+
+      - name: Create draft release
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          sha256sum --check SHA256SUMS
+          flags=()
+          if [[ "$TAG" == *-* ]]; then flags+=(--prerelease); fi
+          gh api --method POST "repos/$GH_REPO/releases/generate-notes" \
+            -f tag_name="$TAG" --jq .body > "$RUNNER_TEMP/release-changes.md"
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          from urllib.parse import quote
+          temp = Path(os.environ['RUNNER_TEMP'])
+          changes = (temp / 'release-changes.md').read_text().strip()
+          changes = re.sub(r"^## What's Changed\s*", '', changes)
+          changes = re.sub(r'^(#{1,5}) ', r'\1# ', changes, flags=re.MULTILINE)
+          lines = ['## Changes', '', changes or 'Initial release.', '', '## Downloads', '']
+          assets = sorted([*Path('.').glob('*.jar'), *Path('.').glob('*.tar.gz')])
+          assets += [Path('SHA256SUMS'), Path('build.json')]
+          base = f"https://github.com/{os.environ['GH_REPO']}/releases/download/{quote(os.environ['TAG'], safe='')}/"
+          for asset in assets:
+              if not asset.is_file():
+                  raise SystemExit(f'Missing release asset: {asset}')
+              description = {'SHA256SUMS': ' — SHA-256 checksums.', 'build.json': ' — Build metadata.'}.get(asset.name, '')
+              lines.append(f'- [`{asset.name}`]({base}{quote(asset.name)}){description}')
+          (temp / 'release-notes.md').write_text('\n'.join(lines) + '\n')
+          PY
+          gh release create "$TAG" ./*.jar SHA256SUMS build.json \
+            --verify-tag --draft --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md" "${flags[@]}"
