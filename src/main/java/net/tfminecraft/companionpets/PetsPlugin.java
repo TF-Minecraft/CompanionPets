@@ -1,4 +1,4 @@
-package net.tfmc.pets;
+package net.tfminecraft.companionpets;
 
 import org.bukkit.plugin.java.JavaPlugin;
 
