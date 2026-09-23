@@ -6,8 +6,6 @@ CompanionPets is an early plugin scaffold. Its design covers pets with individua
 needs, favourite toys, and learned tricks. The current plugin only logs its
 startup and shutdown; the pet systems are not implemented yet.
 
-Originally created by [Drefvelin](https://github.com/Drefvelin).
-
 ## Documentation
 
 [Project documentation](https://github.com/TF-Minecraft/Docs/blob/main/projects/CompanionPets/README.md)
