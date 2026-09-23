@@ -120,6 +120,9 @@ public final class PetTicker implements Runnable {
                     }
                 }
             }
+            if (online) {
+                actions.menus().refreshCare(owner, pet);
+            }
             PetTypeDef type = runtime.config().type(pet.typeId());
             String before = pet.favoriteToy();
             FavoriteToy.Result favorite = FavoriteToy.reconcile(before, PetActions.toyNames(type), runtime.random());
@@ -391,15 +394,23 @@ public final class PetTicker implements Runnable {
             if (pet == null) {
                 continue;
             }
+            TrainingSession session = runtime.sessions().training(player.getUniqueId());
+            if (session != null && session.petId().equals(pet.id())) {
+                if (session.pendingWord() == null && session.rewardTrick() == null) {
+                    PetFx.status(player, "Di la orden mirando a " + pet.name()
+                            + ". Energía " + Math.round(pet.need(Need.ENERGY)));
+                }
+                continue;
+            }
             if (pet.illness() != Illness.NONE) {
-                PetFx.bar(player, PetTexts.illness(pet.name(), pet.sex(), pet.illness()));
+                PetFx.status(player, PetTexts.illness(pet.name(), pet.sex(), pet.illness()));
                 continue;
             }
             Need dominant = DominantNeed.select(pet);
             if (dominant != null && NeedBand.of(pet.need(dominant)) == NeedBand.CRITICAL) {
-                PetFx.bar(player, PetTexts.lowNeed(pet.name(), pet.sex(), dominant));
+                PetFx.status(player, PetTexts.lowNeed(pet.name(), pet.sex(), dominant));
             } else {
-                PetFx.bar(player, PetTexts.summary(pet));
+                PetFx.status(player, PetTexts.summary(pet));
             }
         }
     }

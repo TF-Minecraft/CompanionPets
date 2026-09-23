@@ -7,9 +7,14 @@ public record TrainingSettings(
         double rewardWindowSeconds,
         double sometimesAt,
         double learnedAt,
-        double sessionDistance) {
+        double sessionDistance,
+        double attemptEnergyCost,
+        double attemptHungerCost,
+        double attemptMoodCost,
+        double treatHungerGain,
+        double restSeconds) {
 
     public static TrainingSettings defaults() {
-        return new TrainingSettings(6, 20, 2, 3, 40, 80, 8);
+        return new TrainingSettings(6, 20, 2, 3, 40, 80, 8, 8, 5, 4, 3, 90);
     }
 }

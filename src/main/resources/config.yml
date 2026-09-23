@@ -36,6 +36,11 @@ training:
   sometimes-at: 40
   learned-at: 80
   session-distance: 8
+  attempt-energy-cost: 8
+  attempt-hunger-cost: 5
+  attempt-mood-cost: 4
+  treat-hunger-gain: 3
+  rest-seconds: 90
 
 limits:
   max-stored: 20

@@ -1,5 +1,9 @@
 package net.tfminecraft.companionpets.fx;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
@@ -17,10 +21,34 @@ import org.bukkit.util.Vector;
 import net.kyori.adventure.text.Component;
 
 public final class PetFx {
+    private static final long REPEAT_AFTER_MILLIS = 1_600L;
+    private static final long HOLD_MILLIS = 2_200L;
+    private static final Map<UUID, Hold> HOLDS = new HashMap<>();
+    private static final Map<UUID, Long> QUIET = new HashMap<>();
+
     private PetFx() {
     }
 
     public static void bar(Player player, String text) {
+        show(player, text);
+        QUIET.put(player.getUniqueId(), System.currentTimeMillis() + HOLD_MILLIS);
+    }
+
+    public static void status(Player player, String text) {
+        Long until = QUIET.get(player.getUniqueId());
+        if (until != null && System.currentTimeMillis() < until) {
+            return;
+        }
+        show(player, text);
+    }
+
+    private static void show(Player player, String text) {
+        long now = System.currentTimeMillis();
+        Hold hold = HOLDS.get(player.getUniqueId());
+        if (hold != null && text.equals(hold.text) && now - hold.at < REPEAT_AFTER_MILLIS) {
+            return;
+        }
+        HOLDS.put(player.getUniqueId(), new Hold(text, now));
         player.sendActionBar(Component.text(text));
     }
 
@@ -78,6 +106,9 @@ public final class PetFx {
         if (entity instanceof LivingEntity living && target != null) {
             living.lookAt(target.getX(), target.getY(), target.getZ(), LookAnchor.EYES);
         }
+    }
+
+    private record Hold(String text, long at) {
     }
 
     public static Sound ambientSound(EntityType type) {

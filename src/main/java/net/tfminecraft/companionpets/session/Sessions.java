@@ -8,6 +8,7 @@ public final class Sessions {
     private final Map<UUID, HatchPrompt> hatches = new HashMap<>();
     private final Map<UUID, RenamePrompt> renames = new HashMap<>();
     private final Map<UUID, TrainingSession> training = new HashMap<>();
+    private final Map<UUID, Long> trainingRest = new HashMap<>();
 
     public HatchPrompt hatch(UUID playerId) {
         return hatches.get(playerId);
@@ -43,6 +44,22 @@ public final class Sessions {
 
     public void clearTraining(UUID playerId) {
         training.remove(playerId);
+    }
+
+    public boolean resting(UUID petId, long now) {
+        Long until = trainingRest.get(petId);
+        if (until == null) {
+            return false;
+        }
+        if (now >= until) {
+            trainingRest.remove(petId);
+            return false;
+        }
+        return true;
+    }
+
+    public void rest(UUID petId, long until) {
+        trainingRest.put(petId, until);
     }
 
     public void clearPlayer(UUID playerId) {

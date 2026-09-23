@@ -103,7 +103,12 @@ public final class CompanionConfig {
                 num(training, "reward-window-seconds", trainingDefaults.rewardWindowSeconds()),
                 num(training, "sometimes-at", trainingDefaults.sometimesAt()),
                 num(training, "learned-at", trainingDefaults.learnedAt()),
-                num(training, "session-distance", trainingDefaults.sessionDistance()));
+                num(training, "session-distance", trainingDefaults.sessionDistance()),
+                num(training, "attempt-energy-cost", trainingDefaults.attemptEnergyCost()),
+                num(training, "attempt-hunger-cost", trainingDefaults.attemptHungerCost()),
+                num(training, "attempt-mood-cost", trainingDefaults.attemptMoodCost()),
+                num(training, "treat-hunger-gain", trainingDefaults.treatHungerGain()),
+                num(training, "rest-seconds", trainingDefaults.restSeconds()));
 
         ConfigurationSection limits = config.getConfigurationSection("limits");
         Limits limitDefaults = Limits.defaults();

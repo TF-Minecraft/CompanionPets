@@ -46,6 +46,7 @@ import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.text.Names;
 import net.tfminecraft.companionpets.text.PetTexts;
 import net.tfminecraft.companionpets.training.TrainingMath;
+import net.tfminecraft.companionpets.training.TrainingSettings;
 
 public final class PetActions {
     private static final long PROMPT_MILLIS = 60_000L;
@@ -326,15 +327,16 @@ public final class PetActions {
     }
 
     private void clickTrick(Player player, MenuHolder holder, int slot) {
+        int index = PetMenus.trickIndex(slot);
         Trick[] tricks = Trick.values();
-        if (slot < 0 || slot >= tricks.length || holder.word() == null || holder.petId() == null) {
+        if (index < 0 || index >= tricks.length || holder.word() == null || holder.petId() == null) {
             return;
         }
         Pet pet = runtime.store().get(holder.petId());
         if (pet == null || !pet.ownerId().equals(player.getUniqueId())) {
             return;
         }
-        bindTrick(player, pet, holder.word(), tricks[slot]);
+        bindTrick(player, pet, holder.word(), tricks[index]);
     }
 
     private void beginHatch(Player player, PetTypeDef type) {
@@ -515,6 +517,9 @@ public final class PetActions {
                 perform(player, pet, looked, known, false);
                 return;
             }
+            if (!spendTrainingEffort(player, pet)) {
+                return;
+            }
             int attempts = session.addAttempt();
             TrainingMath.Attempt result = TrainingMath.attempt(pet.progress(known), runtime.random(), runtime.config().training());
             perform(player, pet, looked, known, result != TrainingMath.Attempt.SUCCESS);
@@ -531,7 +536,8 @@ public final class PetActions {
             }
             if (attempts >= runtime.config().training().attemptsBeforeBored()) {
                 runtime.sessions().clearTraining(player.getUniqueId());
-                PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "bored"));
+                runtime.sessions().rest(pet.id(), now + Math.round(runtime.config().training().restSeconds() * 1000.0));
+                PetFx.bar(player, pet.name() + " se aburre. Energía " + Math.round(pet.need(Need.ENERGY)));
             }
             return;
         }
@@ -542,12 +548,35 @@ public final class PetActions {
     }
 
     private void beginTraining(Player player, Pet pet, Entity entity) {
+        TrainingSession existing = runtime.sessions().training(player.getUniqueId());
+        if (existing != null && existing.petId().equals(pet.id())) {
+            return;
+        }
+        if (runtime.sessions().resting(pet.id(), System.currentTimeMillis())) {
+            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "bored"));
+            return;
+        }
         runtime.sessions().training(player.getUniqueId(), new TrainingSession(pet.id()));
         PetFx.look(entity, player.getEyeLocation());
         if (entity instanceof Mob mob) {
             mob.getPathfinder().stopPathfinding();
         }
-        PetFx.bar(player, "Di la orden mirando a " + pet.name());
+        PetFx.bar(player, "Di la orden mirando a " + pet.name()
+                + ". Energía " + Math.round(pet.need(Need.ENERGY)));
+    }
+
+    private boolean spendTrainingEffort(Player player, Pet pet) {
+        if (TrainingMath.attentionBlocked(pet.need(Need.HUNGER), pet.need(Need.ENERGY), sick(pet))) {
+            runtime.sessions().clearTraining(player.getUniqueId());
+            String reason = pet.need(Need.ENERGY) < 25.0 ? "tired" : "attention";
+            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), reason));
+            return false;
+        }
+        TrainingSettings training = runtime.config().training();
+        pet.need(Need.ENERGY, pet.need(Need.ENERGY) - training.attemptEnergyCost());
+        pet.need(Need.HUNGER, pet.need(Need.HUNGER) - training.attemptHungerCost());
+        pet.need(Need.MOOD, pet.need(Need.MOOD) - training.attemptMoodCost());
+        return true;
     }
 
     private void reward(Player player, Pet pet, TrainingSession session, ItemStack hand) {
@@ -562,7 +591,7 @@ public final class PetActions {
                 pet.need(Need.MOOD),
                 pet.bond(),
                 runtime.config().training()));
-        pet.need(Need.HUNGER, pet.need(Need.HUNGER) + 8);
+        pet.need(Need.HUNGER, pet.need(Need.HUNGER) + runtime.config().training().treatHungerGain());
         session.clearReward();
         Entity entity = runtime.entity(pet);
         if (entity != null) {

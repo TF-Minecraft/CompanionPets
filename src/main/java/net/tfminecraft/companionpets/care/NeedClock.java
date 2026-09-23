@@ -31,8 +31,9 @@ public final class NeedClock {
             if (!input.playing()) {
                 pet.need(Need.MOOD, pet.need(Need.MOOD) - dropPerMinute(care.moodMinutesToCritical()) * minutes);
             }
-            if (input.walking()) {
-                pet.need(Need.ENERGY, pet.need(Need.ENERGY) - dropPerMinute(care.energyMinutesToCritical()) * minutes);
+            if (input.walking() || (input.presence() == Presence.NEAR && !input.sleeping())) {
+                double energyRate = input.walking() ? 1.0 : 0.35;
+                pet.need(Need.ENERGY, pet.need(Need.ENERGY) - dropPerMinute(care.energyMinutesToCritical()) * minutes * energyRate);
             }
             if (input.sleeping()) {
                 double fill = care.sleepMinutesToFull() <= 0 ? 100.0 : 100.0 / care.sleepMinutesToFull();

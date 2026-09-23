@@ -39,7 +39,7 @@ class NeedClockTest {
         Pet playing = pet();
         NeedClock.advance(playing, input(Presence.NEAR, false, true, false, true, minutes(30)));
         assertEquals(100.0, playing.need(Need.MOOD), 0.001);
-        assertEquals(100.0, playing.need(Need.ENERGY), 0.001);
+        assertEquals(80.05, playing.need(Need.ENERGY), 0.001);
 
         Pet walking = pet();
         NeedClock.advance(walking, input(Presence.NEAR, true, false, false, true, minutes(40)));
