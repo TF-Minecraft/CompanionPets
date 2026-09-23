@@ -1,0 +1,104 @@
+# Numbers are a comfortable starting point. The rules stay the same if a server changes them.
+care:
+  hunger-minutes-to-critical: 30
+  mood-minutes-to-critical: 30
+  energy-minutes-to-critical: 40
+  dirty-every-minutes: 20
+  dirty-loss: 30
+  minutes-until-unwell: 3
+  minutes-until-sick: 3
+  decay-while-stored: false
+  death-on-neglect: false
+  play-seconds: 6
+  play-mood-gain: 22
+  play-energy-cost: 10
+  favorite-mood-multiplier: 1.5
+  favorite-food-mood: 8
+  sleep-minutes-to-full: 8
+  sleeping-hunger-multiplier: 0.5
+  health-loss-per-minute: 12
+  health-regen-per-minute: 20
+  medicine-health-bump: 20
+  bond-gain-per-minute: 0.4
+  bond-loss-per-minute: 0.8
+  wake-mood-penalty: 8
+  critical-sound-seconds: 8
+
+play:
+  throw-speed-low: 0.6
+  throw-speed-high: 1.1
+
+training:
+  attempts-before-bored: 6
+  reward-gain: 20
+  fail-gain: 2
+  reward-window-seconds: 3
+  sometimes-at: 40
+  learned-at: 80
+  session-distance: 8
+  attempt-energy-cost: 8
+  attempt-hunger-cost: 5
+  attempt-mood-cost: 4
+  treat-hunger-gain: 3
+  rest-seconds: 90
+
+limits:
+  max-stored: 20
+  max-out: 4
+
+presence:
+  owner-near-radius: 32
+  away-rate: 0.25
+  follow-teleport-blocks: 16
+  cry-interval-seconds: 45
+
+items:
+  kennel: BARREL
+  whistle: GOAT_HORN
+
+pets:
+  wolf:
+    entity: WOLF
+    egg: WOLF_SPAWN_EGG
+    sex: random
+    care:
+      foods:
+        BEEF: 35
+        COOKED_BEEF: 55
+      favorite: COOKED_BEEF
+      medicine: HONEY_BOTTLE
+    toys:
+      - STICK
+      - FEATHER
+    animations:
+      FOLLOWING: walk
+      SITTING: sit
+      PLAYING: play
+      SLEEPING: sleep
+      SICK: sick
+  cat:
+    entity: CAT
+    egg: CAT_SPAWN_EGG
+    sex: random
+    care:
+      foods:
+        COD: 35
+        SALMON: 55
+      favorite: SALMON
+      medicine: HONEY_BOTTLE
+    toys:
+      - STRING
+      - FEATHER
+  fox:
+    entity: FOX
+    egg: FOX_SPAWN_EGG
+    sex: choose
+    care:
+      foods:
+        SWEET_BERRIES: 35
+        GLOW_BERRIES: 55
+      favorite: GLOW_BERRIES
+      medicine: HONEY_BOTTLE
+    toys:
+      - STICK
+      - FEATHER
