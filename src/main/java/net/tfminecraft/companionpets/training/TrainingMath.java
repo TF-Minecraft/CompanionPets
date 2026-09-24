@@ -43,6 +43,13 @@ public final class TrainingMath {
         return Math.min(100.0, progress + gain);
     }
 
+    public static int percentLearned(double progress, TrainingSettings settings) {
+        if (settings.learnedAt() <= 0.0) {
+            return 100;
+        }
+        return (int) Math.min(100L, Math.max(0L, Math.round(progress / settings.learnedAt() * 100.0)));
+    }
+
     public static boolean attentionBlocked(double hunger, double energy, boolean sickOrWeak) {
         return hunger < 25.0 || energy < 25.0 || sickOrWeak;
     }

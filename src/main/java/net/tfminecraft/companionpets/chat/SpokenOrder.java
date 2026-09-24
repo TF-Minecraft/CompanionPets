@@ -13,10 +13,17 @@ public final class SpokenOrder {
         return message.trim();
     }
 
+    public static String key(String message) {
+        return line(message)
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("^[\\p{Punct}\\s]+|[\\p{Punct}\\s]+$", "")
+                .replaceAll("\\s+", " ");
+    }
+
     public static boolean matches(String message, String word) {
         if (word == null || word.isBlank()) {
             return false;
         }
-        return line(message).toLowerCase(Locale.ROOT).equals(word.trim().toLowerCase(Locale.ROOT));
+        return key(message).equals(key(word));
     }
 }

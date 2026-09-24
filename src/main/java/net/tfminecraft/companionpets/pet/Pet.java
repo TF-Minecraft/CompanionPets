@@ -4,10 +4,10 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
+import net.tfminecraft.companionpets.chat.SpokenOrder;
 import net.tfminecraft.companionpets.play.FetchJob;
 
 public final class Pet {
@@ -28,6 +28,7 @@ public final class Pet {
     private UUID entityId;
     private final EnumMap<Need, Double> needs = new EnumMap<>(Need.class);
     private double bond;
+    private long bornAt;
     private long criticalMillis;
     private long dirtyMillis;
     private final EnumSet<Need> announcedLow = EnumSet.noneOf(Need.class);
@@ -84,6 +85,14 @@ public final class Pet {
 
     public void sex(PetSex sex) {
         this.sex = sex;
+    }
+
+    public long bornAt() {
+        return bornAt;
+    }
+
+    public void bornAt(long bornAt) {
+        this.bornAt = bornAt;
     }
 
     public PetOrder order() {
@@ -262,14 +271,14 @@ public final class Pet {
     }
 
     public void bindWord(String word, Trick trick) {
-        words.put(word.toLowerCase(Locale.ROOT), trick);
+        words.put(SpokenOrder.key(word), trick);
     }
 
     public Trick trickFor(String word) {
         if (word == null) {
             return null;
         }
-        return words.get(word.toLowerCase(Locale.ROOT));
+        return words.get(SpokenOrder.key(word));
     }
 
     public boolean knowsWord(String word) {

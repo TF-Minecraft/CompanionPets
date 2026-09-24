@@ -10,6 +10,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -24,14 +25,22 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+
+import net.tfminecraft.companionpets.care.DominantNeed;
+import net.tfminecraft.companionpets.chat.SpokenOrder;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
+import net.tfminecraft.companionpets.fx.PetHolograms;
 import net.tfminecraft.companionpets.gui.MenuHolder;
 import net.tfminecraft.companionpets.gui.PetMenus;
+import net.tfminecraft.companionpets.gui.StatLook;
 import net.tfminecraft.companionpets.management.Quota;
 import net.tfminecraft.companionpets.pet.Activity;
 import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
+import net.tfminecraft.companionpets.pet.NeedBand;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.pet.PetOrder;
 import net.tfminecraft.companionpets.pet.PetSex;
@@ -41,6 +50,7 @@ import net.tfminecraft.companionpets.play.FavoriteToy;
 import net.tfminecraft.companionpets.play.FetchJob;
 import net.tfminecraft.companionpets.play.ThrowSpeed;
 import net.tfminecraft.companionpets.session.HatchPrompt;
+import net.tfminecraft.companionpets.session.PlayerHints;
 import net.tfminecraft.companionpets.session.RenamePrompt;
 import net.tfminecraft.companionpets.session.TrainingSession;
 import net.tfminecraft.companionpets.store.PetStore;
@@ -52,16 +62,31 @@ import net.tfminecraft.companionpets.training.TrainingSettings;
 public final class PetActions {
     private static final long PROMPT_MILLIS = 60_000L;
 
+    private static final long ATTEMPT_HOLOGRAM_TICKS = 60L;
+    private static final long REWARD_HOLOGRAM_TICKS = 60L;
+    private static final long LEARNED_HOLOGRAM_TICKS = 100L;
+    private static final long PET_COOLDOWN_MILLIS = 30_000L;
+    private static final double PET_MOOD_GAIN = 4.0;
+
     private final PetRuntime runtime;
     private final PetMenus menus;
+    private final PetHolograms holograms;
+    private final PlayerHints hints;
+    private final java.util.Map<UUID, Long> pettedAt = new java.util.HashMap<>();
 
     public PetActions(PetRuntime runtime) {
         this.runtime = runtime;
         this.menus = new PetMenus(runtime);
+        this.holograms = new PetHolograms(runtime.plugin());
+        this.hints = new PlayerHints(runtime.plugin());
     }
 
     public PetMenus menus() {
         return menus;
+    }
+
+    public PetHolograms holograms() {
+        return holograms;
     }
 
     public boolean useOnPet(Player player, Entity entity, ItemStack hand) {
@@ -84,14 +109,14 @@ public final class PetActions {
             pet.need(Need.HEALTH, pet.need(Need.HEALTH) + runtime.config().care().medicineHealthBump());
             comfort(pet, now);
             PetFx.hearts(entity, 3);
-            PetFx.bar(player, pet.name() + " empieza a recuperarse");
+            PetFx.bar(player, pet.name() + " is already starting to feel better");
             return true;
         }
         if (held == Material.BRUSH) {
             pet.need(Need.CLEANLINESS, 100);
             comfort(pet, now);
             PetFx.hearts(entity, 2);
-            PetFx.bar(player, pet.name() + (pet.sex() == PetSex.FEMALE ? " queda limpia" : " queda limpio"));
+            PetFx.bar(player, pet.name() + "'s coat is clean and shiny again");
             return true;
         }
         if (owner && held == type.favoriteFood()) {
@@ -102,7 +127,7 @@ public final class PetActions {
             }
             if (pet.need(Need.HUNGER) >= 60.0) {
                 if (TrainingMath.attentionBlocked(pet.need(Need.HUNGER), pet.need(Need.ENERGY), sick(pet))) {
-                    PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "attention"));
+                    PetFx.bar(player, pet.name() + " can't train right now: " + focusReason(pet));
                     return true;
                 }
                 beginTraining(player, pet, entity);
@@ -112,17 +137,62 @@ public final class PetActions {
         Double gain = type.foodGain(held);
         if (gain != null) {
             feed(player, pet, entity, hand, gain, held == type.favoriteFood());
+            if (owner && held == type.favoriteFood()) {
+                PetFx.bar(player, pet.name() + " was too hungry to train, so " + PetTexts.he(pet.sex())
+                        + " ate the treat. Keep feeding " + PetTexts.him(pet.sex()) + " before training");
+            } else {
+                PetFx.bar(player, pet.name() + " eats happily");
+            }
             return true;
         }
         if (held == Material.AIR) {
-            menus.openCare(player, pet);
+            if (player.isSneaking()) {
+                menus.openCare(player, pet);
+                return true;
+            }
+            checkIn(player, pet, entity, type, now);
             return true;
         }
         if (type.acceptsToy(held)) {
-            PetFx.bar(player, "Lanza el juguete al aire");
+            PetFx.bar(player, "Throw it into the air and " + pet.name() + " will fetch it");
             return true;
         }
         return false;
+    }
+
+    private void checkIn(Player player, Pet pet, Entity entity, PetTypeDef type, long now) {
+        PetFx.look(entity, player.getEyeLocation());
+        if (pet.illness() != Illness.NONE) {
+            String medicine = type.medicine() == null ? "medicine" : "a " + PetTexts.itemName(type.medicine().name());
+            PetFx.bar(player, PetTexts.illnessCheck(pet.name(), pet.sex(), pet.illness(), medicine));
+            PetFx.sad(entity);
+            return;
+        }
+        Need need = DominantNeed.select(pet);
+        if (need != null) {
+            PetFx.bar(player, PetTexts.needCheck(pet.name(), pet.sex(), need, NeedBand.of(pet.need(need)) == NeedBand.CRITICAL));
+            PetFx.sad(entity);
+            return;
+        }
+        comfort(pet, now);
+        Long last = pettedAt.get(pet.id());
+        if (last == null || now - last >= PET_COOLDOWN_MILLIS) {
+            pettedAt.put(pet.id(), now);
+            pet.need(Need.MOOD, pet.need(Need.MOOD) + PET_MOOD_GAIN);
+        }
+        if (runtime.sessions().resting(pet.id(), now)) {
+            PetFx.bar(player, PetTexts.restingCheck(pet.name(), pet.sex()));
+            PetFx.happy(entity, false);
+            PetFx.hearts(entity, 1);
+            return;
+        }
+        boolean devoted = pet.bond() >= 85.0;
+        PetFx.bar(player, PetTexts.petted(pet.name(), pet.sex(), pet.typeId(), devoted));
+        PetFx.happy(entity, runtime.random().nextInt(3) == 0);
+        PetFx.hearts(entity, devoted ? 4 : 2);
+        if (devoted && pet.order() != PetOrder.SIT && !pet.staying()) {
+            PetFx.jump(entity, true);
+        }
     }
 
     public void useWorld(Player player, ItemStack hand, Block clicked, BlockFace face, boolean sneaking, boolean air) {
@@ -131,7 +201,7 @@ public final class PetActions {
             UUID owner = runtime.store().kennelOwner(PetStore.kennelKey(
                     clicked.getWorld().getName(), clicked.getX(), clicked.getY(), clicked.getZ()));
             if (owner != null && !owner.equals(player.getUniqueId())) {
-                PetFx.bar(player, "Esta caseta no es tuya");
+                PetFx.bar(player, "This kennel belongs to someone else");
                 return;
             }
             menus.openKennel(player);
@@ -174,7 +244,6 @@ public final class PetActions {
 
     public void clickMenu(Player player, MenuHolder holder, int slot, ItemStack current, boolean rightClick, boolean shift) {
         if (holder.kind() == MenuHolder.Kind.CARE) {
-            clickCare(player, holder.petId(), slot);
             return;
         }
         if (holder.kind() == MenuHolder.Kind.TRICK) {
@@ -234,7 +303,22 @@ public final class PetActions {
             session.pendingWord(null);
         }
         player.closeInventory();
-        PetFx.bar(player, word + " significa " + PetTexts.trickName(trick).toLowerCase(Locale.ROOT));
+        String name = PetTexts.trickName(trick);
+        hologram(pet, "“" + word + "” → " + name, NamedTextColor.WHITE, ATTEMPT_HOLOGRAM_TICKS);
+        PetFx.bar(player, "Say “" + word + "” again to practice " + name);
+        PetFx.cue(player, Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f);
+        if (pet.progress(trick) >= runtime.config().training().learnedAt()) {
+            PetFx.tell(player, "“" + word + "” is now another way to ask " + pet.name() + " to " + name.toLowerCase(Locale.ROOT)
+                    + ". " + PetTexts.He(pet.sex()) + " already knows this trick.");
+            return;
+        }
+        PetFx.tell(player, "“" + word + "” now means " + name + " for " + pet.name() + ". "
+                + PetTexts.He(pet.sex()) + " doesn't know it yet, so keep practicing.");
+        if (hints.firstTime(player, "practice")) {
+            PetFx.tip(player, "Say “" + word + "” while looking at " + pet.name() + " and reward each try with "
+                    + treatName(pet) + " right away. Early tries are clumsy, but once " + PetTexts.he(pet.sex())
+                    + " catches on, rewarded successes teach much faster.");
+        }
     }
 
     public void reattach(Entity entity) {
@@ -274,60 +358,11 @@ public final class PetActions {
         }
     }
 
-    private void clickCare(Player player, UUID petId, int slot) {
-        Pet pet = runtime.store().get(petId);
-        if (pet == null) {
+    private void clickTrick(Player player, MenuHolder holder, int slot) {
+        if (slot == PetMenus.SKIP_SLOT) {
+            player.closeInventory();
             return;
         }
-        boolean owner = pet.ownerId().equals(player.getUniqueId());
-        Entity entity = runtime.entity(pet);
-        switch (slot) {
-            case 19 -> feedFromInventory(player, pet, entity);
-            case 20 -> {
-                if (!owner) {
-                    PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "owner"));
-                    return;
-                }
-                startPlay(player, pet);
-            }
-            case 21 -> {
-                if (!owner) {
-                    PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "owner"));
-                    return;
-                }
-                toggleSleep(player, pet);
-            }
-            case 22 -> {
-                if (!owner) {
-                    PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "owner"));
-                    return;
-                }
-                toggleSit(player, pet);
-            }
-            case 23 -> {
-                if (!player.getInventory().contains(Material.BRUSH)) {
-                    PetFx.bar(player, "Hace falta un cepillo");
-                    return;
-                }
-                pet.need(Need.CLEANLINESS, 100);
-                comfort(pet, System.currentTimeMillis());
-                if (entity != null) {
-                    PetFx.hearts(entity, 2);
-                }
-            }
-            case 24 -> healFromInventory(player, pet, entity);
-            default -> {
-                return;
-            }
-        }
-        Bukkit.getScheduler().runTask(runtime.plugin(), () -> {
-            if (player.isOnline() && runtime.store().get(pet.id()) != null) {
-                menus.openCare(player, pet);
-            }
-        });
-    }
-
-    private void clickTrick(Player player, MenuHolder holder, int slot) {
         int index = PetMenus.trickIndex(slot);
         Trick[] tricks = Trick.values();
         if (index < 0 || index >= tricks.length || holder.word() == null || holder.petId() == null) {
@@ -347,7 +382,14 @@ public final class PetActions {
         }
         HatchPrompt prompt = new HatchPrompt(type.id(), System.currentTimeMillis() + PROMPT_MILLIS);
         runtime.sessions().hatch(player.getUniqueId(), prompt);
-        player.sendMessage("Escribe el nombre de la mascota. Escribe no para cancelar.");
+        String species = PetTexts.speciesName(type.id()).toLowerCase(Locale.ROOT);
+        if (type.sexMode() == SexMode.CHOOSE) {
+            PetFx.tell(player, "Will your new " + species + " be a boy or a girl? Type \"male\" or \"female\", or \"cancel\" to keep the egg.");
+            return;
+        }
+        prompt.sex(runtime.random().nextBoolean() ? PetSex.MALE : PetSex.FEMALE);
+        PetFx.tell(player, "Your new " + species + " is a " + (prompt.sex() == PetSex.FEMALE ? "girl" : "boy") + "! What will you call "
+                + PetTexts.him(prompt.sex()) + "? Type a name in chat, or \"cancel\" to keep the egg.");
     }
 
     private boolean handleHatchChat(Player player, String text, long now) {
@@ -357,12 +399,12 @@ public final class PetActions {
         }
         if (now > prompt.expiresAt()) {
             runtime.sessions().clearHatch(player.getUniqueId());
-            player.sendMessage("Se ha cancelado el nombre. El huevo no se ha gastado.");
+            PetFx.tell(player, "You took too long to answer. Your egg is safe.");
             return true;
         }
         if (Names.cancels(text)) {
             runtime.sessions().clearHatch(player.getUniqueId());
-            player.sendMessage("El huevo no se ha gastado.");
+            PetFx.tell(player, "Hatching cancelled. Your egg is safe.");
             return true;
         }
         PetTypeDef type = runtime.config().type(prompt.typeId());
@@ -370,43 +412,34 @@ public final class PetActions {
             runtime.sessions().clearHatch(player.getUniqueId());
             return true;
         }
+        if (prompt.sex() == null) {
+            PetSex sex = Names.sex(text);
+            if (sex == null) {
+                PetFx.tell(player, "Type \"male\" or \"female\", or \"cancel\" to keep the egg.");
+                return true;
+            }
+            prompt.sex(sex);
+            PetFx.tell(player, "A " + (sex == PetSex.FEMALE ? "girl" : "boy") + "! What will you call "
+                    + PetTexts.him(sex) + "? Type a name in chat.");
+            return true;
+        }
         if (prompt.name() == null) {
             String name = Names.sanitize(text);
             if (name.isBlank()) {
-                player.sendMessage("El nombre está vacío.");
+                PetFx.tell(player, "That name is empty. Try another one.");
                 return true;
             }
             prompt.name(name);
             prompt.confirming(true);
-            player.sendMessage("Confirma el nombre " + name + " escribiendo sí.");
+            PetFx.tell(player, "Name " + PetTexts.him(prompt.sex()) + " " + name + "? Type \"yes\" to confirm or \"no\" to cancel.");
             return true;
         }
-        if (prompt.confirming() && !prompt.choosingSex()) {
+        if (prompt.confirming()) {
             if (!Names.confirms(text)) {
-                player.sendMessage("Escribe sí para confirmar o no para cancelar.");
+                PetFx.tell(player, "Type \"yes\" to confirm or \"no\" to cancel.");
                 return true;
             }
-            prompt.confirming(false);
-            if (type.sexMode() == SexMode.CHOOSE) {
-                prompt.choosingSex(true);
-                player.sendMessage("Escribe macho o hembra.");
-                return true;
-            }
-            finishHatch(player, type, prompt.name(), runtime.random().nextBoolean() ? PetSex.MALE : PetSex.FEMALE);
-            return true;
-        }
-        if (prompt.choosingSex()) {
-            String line = text.trim().toLowerCase(Locale.ROOT);
-            PetSex sex;
-            if (line.equals("macho") || line.equals("male")) {
-                sex = PetSex.MALE;
-            } else if (line.equals("hembra") || line.equals("female")) {
-                sex = PetSex.FEMALE;
-            } else {
-                player.sendMessage("Escribe macho o hembra.");
-                return true;
-            }
-            finishHatch(player, type, prompt.name(), sex);
+            finishHatch(player, type, prompt.name(), prompt.sex());
         }
         return true;
     }
@@ -415,25 +448,26 @@ public final class PetActions {
         runtime.sessions().clearHatch(player.getUniqueId());
         ItemStack hand = player.getInventory().getItemInMainHand();
         if (hand.getType() != type.egg()) {
-            player.sendMessage("El huevo ya no está en tu mano.");
+            PetFx.tell(player, "The egg left your hand, so nothing hatched. Use it again to start over.");
             return;
         }
         if (!Quota.canBringOut(runtime.store().countOut(player.getUniqueId()), runtime.config().limits().maxOut())) {
-            player.sendMessage(PetTexts.refusal(name, sex, "full-out"));
+            PetFx.tell(player, PetTexts.refusal(name, sex, "full-out"));
             return;
         }
         if (!consumeHand(player, hand)) {
             return;
         }
         Pet pet = new Pet(UUID.randomUUID(), player.getUniqueId(), type.id(), name, sex);
+        pet.bornAt(System.currentTimeMillis());
         FavoriteToy.Result favorite = FavoriteToy.reconcile(null, toyNames(type), runtime.random());
         pet.favoriteToy(favorite.toy());
         runtime.store().add(pet);
-        player.sendMessage("Ha nacido " + name + ". Es " + (sex == PetSex.FEMALE ? "hembra." : "macho."));
+        PetFx.tell(player, name + " has hatched! Welcome to the family.");
         Entity entity = runtime.bodies().spawn(pet, type, PetRuntime.beside(player), player);
         if (entity == null) {
             pet.stored(true);
-            player.sendMessage(name + " no ha podido salir. Está en la caseta.");
+            PetFx.tell(player, "There was no room out here, so " + name + " is waiting for you in the kennel.");
         } else {
             pet.stored(false);
             runtime.remember(pet, entity);
@@ -443,7 +477,7 @@ public final class PetActions {
 
     private void beginRename(Player player, Pet pet) {
         runtime.sessions().rename(player.getUniqueId(), new RenamePrompt(pet.id(), System.currentTimeMillis() + PROMPT_MILLIS));
-        player.sendMessage("Escribe el nuevo nombre de " + pet.name() + ".");
+        PetFx.tell(player, "Type a new name for " + pet.name() + " in chat, or \"cancel\" to keep it.");
     }
 
     private boolean handleRenameChat(Player player, String text, long now) {
@@ -456,27 +490,27 @@ public final class PetActions {
             runtime.sessions().clearRename(player.getUniqueId());
             return true;
         }
+        if (Names.cancels(text)) {
+            runtime.sessions().clearRename(player.getUniqueId());
+            PetFx.tell(player, pet.name() + " keeps " + PetTexts.his(pet.sex()) + " name.");
+            return true;
+        }
         if (prompt.name() == null) {
             String name = Names.sanitize(text);
             if (name.isBlank()) {
-                player.sendMessage("El nombre está vacío.");
+                PetFx.tell(player, "That name is empty. Try another one.");
                 return true;
             }
             prompt.name(name);
             prompt.confirming(true);
-            player.sendMessage("Confirma el nombre " + name + " escribiendo sí.");
+            PetFx.tell(player, "Rename " + pet.name() + " to " + name + "? Type \"yes\" to confirm or \"no\" to cancel.");
             return true;
         }
         if (!prompt.confirming()) {
             return true;
         }
-        if (Names.cancels(text)) {
-            runtime.sessions().clearRename(player.getUniqueId());
-            player.sendMessage("Se mantiene el nombre " + pet.name() + ".");
-            return true;
-        }
         if (!Names.confirms(text)) {
-            player.sendMessage("Escribe sí para confirmar o no para cancelar.");
+            PetFx.tell(player, "Type \"yes\" to confirm or \"no\" to cancel.");
             return true;
         }
         pet.name(prompt.name());
@@ -485,7 +519,7 @@ public final class PetActions {
             runtime.bodies().name(entity, pet.name());
         }
         runtime.sessions().clearRename(player.getUniqueId());
-        player.sendMessage("Ahora se llama " + pet.name() + ".");
+        PetFx.tell(player, "From now on, your pet answers to " + pet.name() + ".");
         return true;
     }
 
@@ -495,13 +529,18 @@ public final class PetActions {
         if (pet == null || !pet.ownerId().equals(player.getUniqueId()) || pet.stored()) {
             return;
         }
-        String line = text.trim();
+        String line = SpokenOrder.key(text);
         if (line.isEmpty()) {
             return;
         }
         TrainingSession session = runtime.sessions().training(player.getUniqueId());
+        TrainingSettings training = runtime.config().training();
         if (session != null && session.petId().equals(pet.id())) {
-            if (session.pendingWord() != null || session.bored()) {
+            if (session.pendingWord() != null) {
+                return;
+            }
+            if (session.bored()) {
+                PetFx.bar(player, pet.name() + " has stopped listening. Give " + PetTexts.him(pet.sex()) + " a last treat");
                 return;
             }
             Trick known = pet.trickFor(line);
@@ -511,66 +550,149 @@ public final class PetActions {
                 if (looked != null) {
                     PetFx.particle(looked, Particle.END_ROD, 4);
                 }
-                PetFx.bar(player, pet.name() + " inclina la cabeza");
+                PetFx.bar(player, pet.name() + " tilts " + PetTexts.his(pet.sex()) + " head at “" + line + "”. Pick what it means");
                 return;
             }
-            if (pet.progress(known) >= runtime.config().training().learnedAt()) {
+            if (pet.progress(known) >= training.learnedAt()) {
                 perform(player, pet, looked, known, false);
+                PetFx.bar(player, pet.name() + " already knows " + PetTexts.trickName(known) + ". No practice needed");
                 return;
             }
             if (!spendTrainingEffort(player, pet)) {
                 return;
             }
             int attempts = session.addAttempt();
-            TrainingMath.Attempt result = TrainingMath.attempt(pet.progress(known), runtime.random(), runtime.config().training());
+            session.lastWord(line);
+            TrainingMath.Attempt result = TrainingMath.attempt(pet.progress(known), runtime.random(), training);
             perform(player, pet, looked, known, result != TrainingMath.Attempt.SUCCESS);
             session.reward(
-                    now + Math.round(runtime.config().training().rewardWindowSeconds() * 1000.0),
+                    now + Math.round(training.rewardWindowSeconds() * 1000.0),
                     result == TrainingMath.Attempt.SUCCESS,
                     known);
-            if (result == TrainingMath.Attempt.SUCCESS) {
-                player.sendMessage("Premia a " + pet.name() + ".");
-            } else if (result == TrainingMath.Attempt.PARTIAL) {
-                player.sendMessage(pet.name() + " lo intenta.");
-            } else {
-                player.sendMessage(pet.name() + " no entiende.");
-            }
-            if (attempts >= runtime.config().training().attemptsBeforeBored()) {
+            boolean last = attempts >= training.attemptsBeforeBored();
+            if (last) {
                 session.bored(true);
-                runtime.sessions().rest(pet.id(), now + Math.round(runtime.config().training().restSeconds() * 1000.0));
-                PetFx.bar(player, pet.name() + " se aburre. Energía " + Math.round(pet.need(Need.ENERGY)));
+                runtime.sessions().rest(pet.id(), now + Math.round(training.restSeconds() * 1000.0));
+            }
+            String encourage = last
+                    ? "Last try before a break. A treat now still helps a little"
+                    : "A treat now encourages " + PetTexts.him(pet.sex()) + " a little, or say “" + line + "” again";
+            switch (result) {
+                case SUCCESS -> {
+                    hologram(pet, "Nailed it! Quick, give a treat", NamedTextColor.GREEN, ATTEMPT_HOLOGRAM_TICKS);
+                    PetFx.bar(player, "Reward " + PetTexts.him(pet.sex()) + " now! Right-click " + pet.name()
+                            + " with " + treatName(pet) + (last ? " · last try before a break" : ""));
+                    PetFx.cue(player, Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.4f);
+                }
+                case PARTIAL -> {
+                    hologram(pet, "Almost got it…", NamedTextColor.YELLOW, ATTEMPT_HOLOGRAM_TICKS);
+                    PetFx.bar(player, encourage);
+                }
+                case FAIL -> {
+                    hologram(pet, "Doesn't get it yet", NamedTextColor.GRAY, ATTEMPT_HOLOGRAM_TICKS);
+                    PetFx.bar(player, encourage);
+                }
             }
             return;
         }
         Trick known = pet.trickFor(line);
-        if (known != null && pet.progress(known) >= runtime.config().training().learnedAt()) {
-            perform(player, pet, looked, known, false);
+        if (known == null) {
+            return;
         }
+        if (pet.progress(known) >= training.learnedAt()) {
+            perform(player, pet, looked, known, false);
+            return;
+        }
+        if (runtime.sessions().resting(pet.id(), now)) {
+            PetFx.bar(player, pet.name() + " " + restPhrase(pet, now));
+            return;
+        }
+        PetFx.bar(player, pet.name() + " isn't training right now. Hold " + treatName(pet)
+                + " and right-click " + PetTexts.him(pet.sex()) + " to start");
+    }
+
+    public void endTraining(Player player, Pet pet, String reason) {
+        runtime.sessions().clearTraining(player.getUniqueId());
+        if (!player.isOnline()) {
+            return;
+        }
+        String name = pet == null ? "your pet" : pet.name();
+        PetFx.tell(player, "Training with " + name + " is over: " + reason + ".");
+        PetFx.cue(player, Sound.BLOCK_NOTE_BLOCK_BASS, 0.7f);
+    }
+
+    public void missedReward(Player player, Pet pet, TrainingSession session) {
+        boolean success = Boolean.TRUE.equals(session.rewardSuccess());
+        session.clearReward();
+        if (success && pet != null && player.isOnline()) {
+            PetFx.bar(player, "You missed the moment to reward " + pet.name() + ". Say “" + session.lastWord() + "” again");
+        }
+    }
+
+    private String restPhrase(Pet pet, long now) {
+        double total = runtime.config().training().restSeconds() * 1000.0;
+        double left = runtime.sessions().restUntil(pet.id()) - now;
+        if (total <= 0.0 || left <= total * 0.15) {
+            return "is almost ready to train again";
+        }
+        if (left <= total * 0.5) {
+            return "is still resting after training";
+        }
+        return "needs a good rest before training again";
+    }
+
+    public String treatName(Pet pet) {
+        PetTypeDef type = runtime.config().type(pet.typeId());
+        return type == null || type.favoriteFood() == null ? "a treat" : PetTexts.itemName(type.favoriteFood().name());
     }
 
     private void beginTraining(Player player, Pet pet, Entity entity) {
         TrainingSession existing = runtime.sessions().training(player.getUniqueId());
         if (existing != null && existing.petId().equals(pet.id())) {
+            PetFx.bar(player, PetTexts.trainingPrompt(pet));
             return;
         }
-        if (runtime.sessions().resting(pet.id(), System.currentTimeMillis())) {
-            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "bored"));
+        long now = System.currentTimeMillis();
+        if (runtime.sessions().resting(pet.id(), now)) {
+            hologram(pet, "Resting…", NamedTextColor.GRAY, ATTEMPT_HOLOGRAM_TICKS);
+            PetFx.bar(player, pet.name() + " " + restPhrase(pet, now));
             return;
+        }
+        if (existing != null) {
+            endTraining(player, runtime.store().get(existing.petId()), "you started training another pet");
         }
         runtime.sessions().training(player.getUniqueId(), new TrainingSession(pet.id()));
         PetFx.look(entity, player.getEyeLocation());
         if (entity instanceof Mob mob) {
             mob.getPathfinder().stopPathfinding();
         }
-        PetFx.bar(player, "Di la orden mirando a " + pet.name()
-                + ". Energía " + Math.round(pet.need(Need.ENERGY)));
+        PetFx.bar(player, PetTexts.trainingPrompt(pet));
+        PetFx.tell(player, "Training " + pet.name() + ". Look at " + PetTexts.him(pet.sex()) + " and say a command in chat."
+                + practiceList(pet));
+        PetFx.cue(player, Sound.BLOCK_NOTE_BLOCK_CHIME, 1.2f);
+        if (hints.firstTime(player, "training")) {
+            PetFx.tip(player, "Any word works. If " + pet.name() + " doesn't know it yet, you'll pick which trick it means. "
+                    + "Keep holding the " + treatName(pet) + " and stay close, or the session ends.");
+        }
+    }
+
+    private String practiceList(Pet pet) {
+        TrainingSettings training = runtime.config().training();
+        java.util.List<String> words = new java.util.ArrayList<>();
+        for (java.util.Map.Entry<String, Trick> entry : pet.words().entrySet()) {
+            double progress = pet.progress(entry.getValue());
+            if (progress < training.learnedAt()) {
+                words.add("“" + entry.getKey() + "”");
+            }
+        }
+        return words.isEmpty() ? "" : " Still practicing: " + String.join(", ", words) + ".";
     }
 
     private boolean spendTrainingEffort(Player player, Pet pet) {
         if (TrainingMath.attentionBlocked(pet.need(Need.HUNGER), pet.need(Need.ENERGY), sick(pet))) {
-            runtime.sessions().clearTraining(player.getUniqueId());
             String reason = pet.need(Need.ENERGY) < 25.0 ? "tired" : "attention";
-            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), reason));
+            hologram(pet, PetTexts.refusal(pet.name(), pet.sex(), reason), NamedTextColor.RED, ATTEMPT_HOLOGRAM_TICKS);
+            endTraining(player, pet, focusReason(pet));
             return false;
         }
         TrainingSettings training = runtime.config().training();
@@ -586,17 +708,12 @@ public final class PetActions {
             return;
         }
         boolean success = Boolean.TRUE.equals(session.rewardSuccess());
-        pet.progress(trick, TrainingMath.afterReward(
-                pet.progress(trick),
-                success,
-                pet.need(Need.MOOD),
-                pet.bond(),
-                runtime.config().training()));
+        TrainingSettings training = runtime.config().training();
+        double before = pet.progress(trick);
+        double after = TrainingMath.afterReward(before, success, pet.need(Need.MOOD), pet.bond(), training);
+        pet.progress(trick, after);
         pet.need(Need.HUNGER, pet.need(Need.HUNGER) + runtime.config().training().treatHungerGain());
         session.clearReward();
-        if (session.bored()) {
-            runtime.sessions().clearTraining(player.getUniqueId());
-        }
         Entity entity = runtime.entity(pet);
         if (entity != null) {
             PetFx.eat(entity);
@@ -604,8 +721,65 @@ public final class PetActions {
                 PetFx.hearts(entity, 3);
             }
         }
-        PetFx.bar(player, success ? pet.name() + " aprende" : "Eso casi no ayuda");
         comfort(pet, System.currentTimeMillis());
+        showProgress(player, pet, trick, session.lastWord(), before, after, success, training);
+        if (session.bored()) {
+            endForRest(player, pet);
+        }
+    }
+
+    public void endForRest(Player player, Pet pet) {
+        endTraining(player, pet, PetTexts.he(pet.sex()) + " needs a break. Let " + PetTexts.him(pet.sex())
+                + " rest for a while before training again");
+        if (player.isOnline() && hints.firstTime(player, "rest")) {
+            PetFx.tip(player, "Pets can only focus for a few tries at a time. Progress is kept, so come back after the break.");
+        }
+    }
+
+    private void showProgress(Player player, Pet pet, Trick trick, String word, double before, double after, boolean success,
+            TrainingSettings training) {
+        String name = PetTexts.trickName(trick);
+        String say = "“" + (word == null ? name.toLowerCase(Locale.ROOT) : word) + "”";
+        if (before < training.learnedAt() && after >= training.learnedAt()) {
+            hologram(pet, "✦ Learned " + name + "! ✦", NamedTextColor.GOLD, LEARNED_HOLOGRAM_TICKS);
+            Entity entity = runtime.entity(pet);
+            if (entity != null) {
+                PetFx.particle(entity, Particle.TOTEM_OF_UNDYING, 20);
+            }
+            PetFx.tell(player, pet.name() + " has learned " + name + "! Say " + say
+                    + " any time and " + PetTexts.he(pet.sex()) + "'ll do it, no treats needed.");
+            PetFx.cue(player, Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f);
+            return;
+        }
+        Component progress = StatLook.bar(TrainingMath.percentLearned(after, training), NamedTextColor.AQUA);
+        if (before < training.sometimesAt() && after >= training.sometimesAt()) {
+            holograms.show(runtime.entity(pet), Component.text("Catching on to " + name + "  ", NamedTextColor.AQUA).append(progress),
+                    REWARD_HOLOGRAM_TICKS);
+            PetFx.tell(player, pet.name() + " is catching on to " + name + "! From now on " + PetTexts.he(pet.sex())
+                    + " gets it right more often, and every success you reward counts a lot more.");
+            PetFx.cue(player, Sound.ENTITY_PLAYER_LEVELUP, 1.4f);
+            return;
+        }
+        holograms.show(runtime.entity(pet),
+                Component.text((success ? "Good job! " : "A little closer ") + name + "  ",
+                        success ? NamedTextColor.GREEN : NamedTextColor.YELLOW).append(progress),
+                REWARD_HOLOGRAM_TICKS);
+        PetFx.bar(player, Component.text(name + " ", NamedTextColor.WHITE).append(progress)
+                .append(Component.text("  Say " + say + " again to keep practicing", NamedTextColor.GRAY)));
+    }
+
+    private String focusReason(Pet pet) {
+        if (sick(pet)) {
+            return PetTexts.he(pet.sex()) + " is too unwell to focus";
+        }
+        if (pet.need(Need.ENERGY) < 25.0) {
+            return PetTexts.he(pet.sex()) + " is too tired to focus. Let " + PetTexts.him(pet.sex()) + " rest";
+        }
+        return PetTexts.he(pet.sex()) + " is too hungry to focus. Feed " + PetTexts.him(pet.sex()) + " first";
+    }
+
+    private void hologram(Pet pet, String text, NamedTextColor color, long ticks) {
+        holograms.show(runtime.entity(pet), Component.text(text, color), ticks);
     }
 
     private void perform(Player player, Pet pet, Entity entity, Trick trick, boolean partial) {
@@ -647,8 +821,10 @@ public final class PetActions {
                 }
             }
             case BEG -> {
+                pet.forcedSitUntilMillis(now + (partial ? 800L : 2_000L));
                 if (entity != null) {
                     PetFx.beg(entity);
+                    Bukkit.getScheduler().runTaskLater(runtime.plugin(), () -> PetFx.stopBeg(entity), partial ? 16L : 40L);
                 }
             }
             case PAW -> {
@@ -682,51 +858,6 @@ public final class PetActions {
         }.runTaskTimer(runtime.plugin(), 0L, 2L);
     }
 
-    private void startPlay(Player player, Pet pet) {
-        if (sick(pet)) {
-            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "sick"));
-            return;
-        }
-        if (pet.need(Need.ENERGY) < 25.0) {
-            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "tired"));
-            return;
-        }
-        releaseFetch(pet, player, true);
-        pet.activity(Activity.PLAYING);
-        pet.playUntilMillis(System.currentTimeMillis() + Math.round(runtime.config().care().playSeconds() * 1000.0));
-        PetFx.bar(player, pet.name() + " juega");
-    }
-
-    private void toggleSleep(Player player, Pet pet) {
-        if (pet.activity() == Activity.SLEEPING) {
-            wake(pet, pet.need(Need.ENERGY) < 25.0);
-            PetFx.bar(player, pet.name() + " se despierta");
-            return;
-        }
-        if (pet.need(Need.ENERGY) >= 60.0 && pet.illness() != Illness.WEAKENED) {
-            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "sleepy"));
-            return;
-        }
-        releaseFetch(pet, player, true);
-        pet.activity(Activity.SLEEPING);
-        PetFx.bar(player, pet.name() + " se echa");
-    }
-
-    private void toggleSit(Player player, Pet pet) {
-        if (pet.activity() == Activity.SLEEPING) {
-            wake(pet, pet.need(Need.ENERGY) < 25.0);
-        }
-        if (pet.order() == PetOrder.SIT) {
-            pet.order(PetOrder.FOLLOW);
-            pet.staying(false);
-            PetFx.bar(player, pet.name() + " te sigue");
-        } else {
-            pet.order(PetOrder.SIT);
-            pet.staying(false);
-            PetFx.bar(player, pet.name() + " se sienta");
-        }
-    }
-
     private void wake(Pet pet, boolean penalize) {
         pet.activity(Activity.NONE);
         if (penalize) {
@@ -749,65 +880,11 @@ public final class PetActions {
         }
     }
 
-    private void feedFromInventory(Player player, Pet pet, Entity entity) {
-        PetTypeDef type = runtime.config().type(pet.typeId());
-        if (type == null) {
-            return;
-        }
-        ItemStack chosen = null;
-        int slot = -1;
-        for (int index = 0; index < player.getInventory().getSize(); index++) {
-            ItemStack stack = player.getInventory().getItem(index);
-            if (stack != null && type.foodGain(stack.getType()) != null) {
-                chosen = stack;
-                slot = index;
-                if (stack.getType() == type.favoriteFood()) {
-                    break;
-                }
-            }
-        }
-        if (chosen == null) {
-            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "food"));
-            return;
-        }
-        feed(player, pet, entity, chosen, type.foodGain(chosen.getType()), chosen.getType() == type.favoriteFood());
-        if (slot >= 0 && chosen.getAmount() <= 0) {
-            player.getInventory().setItem(slot, null);
-        }
-    }
-
-    private void healFromInventory(Player player, Pet pet, Entity entity) {
-        PetTypeDef type = runtime.config().type(pet.typeId());
-        if (type == null) {
-            return;
-        }
-        if (pet.illness() != Illness.SICK && pet.illness() != Illness.WEAKENED) {
-            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "medicine"));
-            return;
-        }
-        int slot = player.getInventory().first(type.medicine());
-        if (slot < 0) {
-            PetFx.bar(player, "No tienes la medicina");
-            return;
-        }
-        ItemStack stack = player.getInventory().getItem(slot);
-        if (!consumeHand(player, stack)) {
-            return;
-        }
-        pet.treated(true);
-        pet.need(Need.HEALTH, pet.need(Need.HEALTH) + runtime.config().care().medicineHealthBump());
-        comfort(pet, System.currentTimeMillis());
-        if (entity != null) {
-            PetFx.hearts(entity, 3);
-        }
-        PetFx.bar(player, pet.name() + " empieza a recuperarse");
-    }
-
     private void throwToy(Player player, ItemStack hand) {
         Material material = hand.getType();
         Pet pet = nearestToyPet(player, material);
         if (pet == null) {
-            PetFx.bar(player, "No hay una mascota contigo que juegue con eso");
+            PetFx.bar(player, "None of your pets nearby wants to play with that");
             return;
         }
         if (sick(pet) || pet.illness() == Illness.WEAKENED || pet.need(Need.ENERGY) < 25.0) {
@@ -946,7 +1023,7 @@ public final class PetActions {
         PetTypeDef type = runtime.config().type(pet.typeId());
         Entity entity = runtime.bodies().spawn(pet, type, PetRuntime.beside(player), player);
         if (entity == null) {
-            PetFx.bar(player, "No he podido sacar a " + pet.name());
+            PetFx.bar(player, "There's no room here for " + pet.name() + " to come out");
             return;
         }
         pet.stored(false);
@@ -993,18 +1070,19 @@ public final class PetActions {
             entity = Bukkit.getEntity(pet.entityId());
         }
         if (entity == null || !entity.isValid() || entity.isDead()) {
-            PetFx.bar(player, "No encuentro a " + pet.name() + ". Guárdala para recuperarla.");
+            PetFx.bar(player, pet.name() + " can't be found. Send " + PetTexts.him(pet.sex()) + " to the kennel to bring "
+                    + PetTexts.him(pet.sex()) + " back");
             return;
         }
         entity.teleport(PetRuntime.beside(player));
         runtime.remember(pet, entity);
-        PetFx.bar(player, pet.name() + " viene");
+        PetFx.bar(player, pet.name() + " comes running to your side");
     }
 
     private void placeKennel(Player player, ItemStack hand, Block clicked, BlockFace face) {
         Block place = clicked.getRelative(face);
         if (!place.getType().isAir() && !place.isReplaceable()) {
-            PetFx.bar(player, "Ahí no cabe la caseta");
+            PetFx.bar(player, "There isn't enough room for a kennel there");
             return;
         }
         if (!consumeHand(player, hand)) {
@@ -1012,7 +1090,7 @@ public final class PetActions {
         }
         place.setType(runtime.config().kennel());
         runtime.store().kennel(PetStore.kennelKey(place.getWorld().getName(), place.getX(), place.getY(), place.getZ()), player.getUniqueId());
-        PetFx.bar(player, "Has colocado la caseta");
+        PetFx.bar(player, "Kennel built. Right-click it to look after your pets");
     }
 
     private boolean isKennel(Block block) {
@@ -1096,6 +1174,7 @@ public final class PetActions {
             Pet pet = runtime.store().get(session.petId());
             if (pet == null || !pet.knowsWord(word)) {
                 session.pendingWord(null);
+                PetFx.bar(player, "“" + word + "” wasn't linked to a trick. Say it again to choose one");
             }
         }
     }

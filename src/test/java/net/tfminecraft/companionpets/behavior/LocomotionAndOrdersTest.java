@@ -36,9 +36,10 @@ class LocomotionAndOrdersTest {
     @Test
     void aChatLineIsTheWholeOrder() {
         assertTrue(SpokenOrder.matches("sit", "sit"));
-        assertTrue(SpokenOrder.matches("  Siéntate ", "siéntate"));
+        assertTrue(SpokenOrder.matches("  SIT! ", "sit"));
+        assertTrue(SpokenOrder.matches("Roll   over.", "roll over"));
         assertFalse(SpokenOrder.matches("please sit", "sit"));
-        assertEquals("Luna tiene hambre", PetTexts.lowNeed("Luna", PetSex.FEMALE, net.tfminecraft.companionpets.pet.Need.HUNGER));
+        assertEquals("Luna's stomach is rumbling", PetTexts.lowNeed("Luna", PetSex.FEMALE, net.tfminecraft.companionpets.pet.Need.HUNGER));
     }
 
     private static Locomotion.Mode choose(

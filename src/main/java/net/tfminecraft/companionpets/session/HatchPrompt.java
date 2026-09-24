@@ -1,11 +1,13 @@
 package net.tfminecraft.companionpets.session;
 
+import net.tfminecraft.companionpets.pet.PetSex;
+
 public final class HatchPrompt {
     private final String typeId;
     private final long expiresAt;
+    private PetSex sex;
     private String name;
     private boolean confirming;
-    private boolean choosingSex;
 
     public HatchPrompt(String typeId, long expiresAt) {
         this.typeId = typeId;
@@ -18,6 +20,14 @@ public final class HatchPrompt {
 
     public long expiresAt() {
         return expiresAt;
+    }
+
+    public PetSex sex() {
+        return sex;
+    }
+
+    public void sex(PetSex sex) {
+        this.sex = sex;
     }
 
     public String name() {
@@ -34,13 +44,5 @@ public final class HatchPrompt {
 
     public void confirming(boolean confirming) {
         this.confirming = confirming;
-    }
-
-    public boolean choosingSex() {
-        return choosingSex;
-    }
-
-    public void choosingSex(boolean choosingSex) {
-        this.choosingSex = choosingSex;
     }
 }

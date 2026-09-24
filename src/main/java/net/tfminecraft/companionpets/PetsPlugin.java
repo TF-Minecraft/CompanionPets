@@ -58,6 +58,7 @@ public final class PetsPlugin extends JavaPlugin {
             autosave.cancel();
         }
         if (actions != null) {
+            actions.holograms().clear();
             actions.stashLooseToys();
         }
         if (store != null) {
