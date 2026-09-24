@@ -14,9 +14,10 @@ plugins are installed.
   only after the name is confirmed and there is room in the outside quota.
 - Sneak and right-click the pet with an empty hand for its info screen. A
   plain right-click checks on the pet: it tells you what is wrong, or you pet
-  it when it is fine. Pets only sit through the trained Sit trick. Food, a
+  it when it is fine. Pets only sit through the trained Sit trick. A worn-out
+  pet lies down on its own and recovers energy while it sleeps. Food, a
   brush, and medicine act immediately. Anyone nearby can feed, clean, and heal. Play,
-  sleep, tricks, and the whistle belong to the owner.
+  tricks, and the whistle belong to the owner.
 - Sneak and right-click with the kennel item to place a kennel. The kennel and
   the whistle open the same list: take a pet out, call one, store one, or
   rename it.

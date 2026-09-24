@@ -91,6 +91,15 @@ public final class PetTicker implements Runnable {
                             pet.order(),
                             pet.staying());
             boolean withOwner = !pet.stored() && online && distance <= runtime.config().ownerNearRadius();
+            if (!pet.stored()
+                    && pet.activity() == Activity.NONE
+                    && pet.fetch() == null
+                    && pet.need(Need.ENERGY) < 25.0) {
+                pet.activity(Activity.SLEEPING);
+                if (online) {
+                    PetFx.bar(owner, pet.name() + " lies down to rest");
+                }
+            }
             List<CareNotice> notices = NeedClock.advance(pet, new CareInput(
                     presence,
                     mode == Locomotion.Mode.FOLLOW,

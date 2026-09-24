@@ -171,7 +171,7 @@ public final class PetStore {
                 section.getString("type"),
                 section.getString("name", "Mascota"),
                 enumValue(PetSex.class, section.getString("sex"), PetSex.FEMALE));
-        pet.bornAt(section.contains("born-at") ? section.getLong("born-at") : System.currentTimeMillis());
+        pet.bornAt(section.getLong("born-at", 0L));
         pet.order(enumValue(PetOrder.class, section.getString("order"), PetOrder.FOLLOW));
         pet.staying(section.getBoolean("staying"));
         pet.stored(section.getBoolean("stored"));
