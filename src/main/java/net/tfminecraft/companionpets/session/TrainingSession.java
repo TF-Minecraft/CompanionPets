@@ -12,9 +12,18 @@ public final class TrainingSession {
     private String pendingWord;
     private Trick rewardTrick;
     private boolean bored;
+    private String lastWord;
 
     public TrainingSession(UUID petId) {
         this.petId = petId;
+    }
+
+    public String lastWord() {
+        return lastWord;
+    }
+
+    public void lastWord(String lastWord) {
+        this.lastWord = lastWord;
     }
 
     public UUID petId() {

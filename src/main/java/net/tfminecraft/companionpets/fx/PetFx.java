@@ -19,6 +19,8 @@ import io.papermc.paper.entity.LookAnchor;
 import org.bukkit.util.Vector;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 public final class PetFx {
     private static final long REPEAT_AFTER_MILLIS = 1_600L;
@@ -30,11 +32,31 @@ public final class PetFx {
     }
 
     public static void bar(Player player, String text) {
+        bar(player, Component.text(text));
+    }
+
+    public static void bar(Player player, Component text) {
         show(player, text);
         QUIET.put(player.getUniqueId(), System.currentTimeMillis() + HOLD_MILLIS);
     }
 
+    public static void tell(Player player, String text) {
+        player.sendMessage(Component.text("✦ ", NamedTextColor.GOLD).append(Component.text(text, NamedTextColor.YELLOW)));
+    }
+
+    public static void tip(Player player, String text) {
+        player.sendMessage(Component.text("   Tip: ", NamedTextColor.AQUA).append(Component.text(text, NamedTextColor.GRAY)));
+    }
+
+    public static void cue(Player player, Sound sound, float pitch) {
+        player.playSound(player.getLocation(), sound, 0.7f, pitch);
+    }
+
     public static void status(Player player, String text) {
+        status(player, Component.text(text));
+    }
+
+    public static void status(Player player, Component text) {
         Long until = QUIET.get(player.getUniqueId());
         if (until != null && System.currentTimeMillis() < until) {
             return;
@@ -42,14 +64,15 @@ public final class PetFx {
         show(player, text);
     }
 
-    private static void show(Player player, String text) {
+    private static void show(Player player, Component text) {
         long now = System.currentTimeMillis();
+        String key = PlainTextComponentSerializer.plainText().serialize(text);
         Hold hold = HOLDS.get(player.getUniqueId());
-        if (hold != null && text.equals(hold.text) && now - hold.at < REPEAT_AFTER_MILLIS) {
+        if (hold != null && key.equals(hold.text) && now - hold.at < REPEAT_AFTER_MILLIS) {
             return;
         }
-        HOLDS.put(player.getUniqueId(), new Hold(text, now));
-        player.sendActionBar(Component.text(text));
+        HOLDS.put(player.getUniqueId(), new Hold(key, now));
+        player.sendActionBar(text);
     }
 
     public static void ambient(Entity entity) {
@@ -96,6 +119,12 @@ public final class PetFx {
         }
     }
 
+    public static void stopBeg(Entity entity) {
+        if (entity instanceof Wolf wolf && wolf.isValid()) {
+            wolf.setInterested(false);
+        }
+    }
+
     public static void jump(Entity entity, boolean partial) {
         Vector velocity = entity.getVelocity();
         velocity.setY(partial ? 0.28 : 0.48);
@@ -109,6 +138,26 @@ public final class PetFx {
     }
 
     private record Hold(String text, long at) {
+    }
+
+    public static void happy(Entity entity, boolean loud) {
+        Sound sound = switch (entity.getType()) {
+            case WOLF -> loud ? Sound.ENTITY_WOLF_AMBIENT : Sound.ENTITY_WOLF_PANT;
+            case CAT -> loud ? Sound.ENTITY_CAT_PURREOW : Sound.ENTITY_CAT_PURR;
+            case FOX -> loud ? Sound.ENTITY_FOX_AMBIENT : Sound.ENTITY_FOX_SNIFF;
+            default -> ambientSound(entity.getType());
+        };
+        entity.getWorld().playSound(entity.getLocation(), sound, 0.9f, 1.1f);
+    }
+
+    public static void sad(Entity entity) {
+        Sound sound = switch (entity.getType()) {
+            case WOLF -> Sound.ENTITY_WOLF_WHINE;
+            case CAT -> Sound.ENTITY_CAT_BEG_FOR_FOOD;
+            case FOX -> Sound.ENTITY_FOX_SNIFF;
+            default -> ambientSound(entity.getType());
+        };
+        entity.getWorld().playSound(entity.getLocation(), sound, 0.8f, 0.9f);
     }
 
     public static Sound ambientSound(EntityType type) {

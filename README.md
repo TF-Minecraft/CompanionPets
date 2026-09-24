@@ -12,8 +12,10 @@ plugins are installed.
 
 - Use a configured egg, name the pet in chat, and confirm. The egg is spent
   only after the name is confirmed and there is room in the outside quota.
-- Right-click the pet with an empty hand for the care screen. Food, a brush,
-  and medicine act immediately. Anyone nearby can feed, clean, and heal. Play,
+- Sneak and right-click the pet with an empty hand for its info screen. A
+  plain right-click checks on the pet: it tells you what is wrong, or you pet
+  it when it is fine. Pets only sit through the trained Sit trick. Food, a
+  brush, and medicine act immediately. Anyone nearby can feed, clean, and heal. Play,
   sleep, tricks, and the whistle belong to the owner.
 - Sneak and right-click with the kennel item to place a kennel. The kennel and
   the whistle open the same list: take a pet out, call one, store one, or

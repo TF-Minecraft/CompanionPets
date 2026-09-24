@@ -32,6 +32,14 @@ class TrainingMathTest {
     }
 
     @Test
+    void percentLearnedIsMeasuredAgainstTheLearnedThreshold() {
+        assertEquals(0, TrainingMath.percentLearned(0, settings));
+        assertEquals(50, TrainingMath.percentLearned(40, settings));
+        assertEquals(100, TrainingMath.percentLearned(80, settings));
+        assertEquals(100, TrainingMath.percentLearned(95, settings));
+    }
+
+    @Test
     void criticalNeedsAndSicknessBlockAttention() {
         assertTrue(TrainingMath.attentionBlocked(10, 100, false));
         assertTrue(TrainingMath.attentionBlocked(100, 10, false));

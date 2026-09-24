@@ -13,6 +13,9 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+
 import net.tfminecraft.companionpets.behavior.Locomotion;
 import net.tfminecraft.companionpets.care.CareInput;
 import net.tfminecraft.companionpets.care.CareNotice;
@@ -24,13 +27,13 @@ import net.tfminecraft.companionpets.management.PresenceRules;
 import net.tfminecraft.companionpets.pet.Activity;
 import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
-import net.tfminecraft.companionpets.pet.NeedBand;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.pet.Presence;
 import net.tfminecraft.companionpets.play.FavoriteToy;
 import net.tfminecraft.companionpets.play.FetchJob;
 import net.tfminecraft.companionpets.play.FetchPhase;
 import net.tfminecraft.companionpets.session.TrainingSession;
+import net.tfminecraft.companionpets.gui.StatLook;
 import net.tfminecraft.companionpets.text.PetTexts;
 
 public final class PetTicker implements Runnable {
@@ -103,7 +106,7 @@ public final class PetTicker implements Runnable {
                 }
                 runtime.store().remove(pet.id());
                 if (online) {
-                    owner.sendMessage(pet.name() + " no ha podido seguir.");
+                    PetFx.tell(owner, pet.name() + " grew too weak without care and has passed away.");
                 }
                 continue;
             }
@@ -129,8 +132,9 @@ public final class PetTicker implements Runnable {
             if ((before == null && favorite.toy() != null) || (before != null && !before.equals(favorite.toy()))) {
                 pet.favoriteToy(favorite.toy());
                 if (favorite.notifyLost() && online) {
-                    String next = favorite.toy() == null ? "ninguno" : favorite.toy().toLowerCase();
-                    owner.sendMessage(pet.name() + " cambia de juguete favorito. Ahora prefiere " + next + ".");
+                    PetFx.tell(owner, favorite.toy() == null
+                            ? pet.name() + " has lost interest in " + PetTexts.his(pet.sex()) + " favorite toy."
+                            : pet.name() + " has a new favorite toy: the " + PetTexts.itemName(favorite.toy()) + ".");
                 }
             }
             if (pet.carriedToy() != null && withOwner && body != null && owner != null) {
@@ -149,7 +153,7 @@ public final class PetTicker implements Runnable {
             if (pet.activity() == Activity.SLEEPING && pet.need(Need.ENERGY) >= 100.0) {
                 pet.activity(Activity.NONE);
                 if (online) {
-                    PetFx.bar(owner, pet.name() + " se despierta");
+                    PetFx.bar(owner, pet.name() + " wakes up, fully rested");
                 }
             }
         }
@@ -378,13 +382,19 @@ public final class PetTicker implements Runnable {
             boolean close = body != null
                     && body.getWorld().equals(player.getWorld())
                     && body.getLocation().distance(player.getLocation()) <= runtime.config().training().sessionDistance();
-            if (pet == null || pet.stored() || !holding || !close) {
-                runtime.sessions().clearTraining(player.getUniqueId());
-                if (player.isOnline()) {
-                    PetFx.bar(player, "La sesión de entrenamiento termina");
-                }
+            if (pet == null || pet.stored()) {
+                actions.endTraining(player, pet, "your pet went back to the kennel");
+            } else if (!holding) {
+                String treatName = actions.treatName(pet);
+                actions.endTraining(player, pet, player.getInventory().contains(treat)
+                        ? "you put the " + treatName + " away"
+                        : "you ran out of " + treatName);
+            } else if (!close) {
+                actions.endTraining(player, pet, "you walked too far from " + PetTexts.him(pet.sex()));
             } else if (session.bored() && now > session.rewardUntil()) {
-                runtime.sessions().clearTraining(player.getUniqueId());
+                actions.endForRest(player, pet);
+            } else if (session.rewardTrick() != null && now > session.rewardUntil()) {
+                actions.missedReward(player, pet, session);
             }
         }
     }
@@ -397,23 +407,12 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             TrainingSession session = runtime.sessions().training(player.getUniqueId());
-            if (session != null && session.petId().equals(pet.id())) {
-                if (session.pendingWord() == null && session.rewardTrick() == null) {
-                    PetFx.status(player, "Di la orden mirando a " + pet.name()
-                            + ". Energía " + Math.round(pet.need(Need.ENERGY)));
-                }
+            boolean training = session != null && session.petId().equals(pet.id());
+            if (training && (session.pendingWord() != null || session.rewardTrick() != null)) {
                 continue;
             }
-            if (pet.illness() != Illness.NONE) {
-                PetFx.status(player, PetTexts.illness(pet.name(), pet.sex(), pet.illness()));
-                continue;
-            }
-            Need dominant = DominantNeed.select(pet);
-            if (dominant != null && NeedBand.of(pet.need(dominant)) == NeedBand.CRITICAL) {
-                PetFx.status(player, PetTexts.lowNeed(pet.name(), pet.sex(), dominant));
-            } else {
-                PetFx.status(player, PetTexts.summary(pet));
-            }
+            Component tag = training ? StatLook.tag("Training · say a command", NamedTextColor.AQUA) : null;
+            PetFx.status(player, StatLook.summary(pet, tag));
         }
     }
 

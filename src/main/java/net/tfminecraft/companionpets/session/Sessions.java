@@ -58,6 +58,10 @@ public final class Sessions {
         return true;
     }
 
+    public long restUntil(UUID petId) {
+        return trainingRest.getOrDefault(petId, 0L);
+    }
+
     public void rest(UUID petId, long until) {
         trainingRest.put(petId, until);
     }
