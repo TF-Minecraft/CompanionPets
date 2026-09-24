@@ -48,14 +48,14 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          mvn -B --no-transfer-progress -P'!deploy-live' org.codehaus.mojo:versions-maven-plugin:2.22.0:set \
+          mvn -B --no-transfer-progress org.codehaus.mojo:versions-maven-plugin:2.22.0:set \
             -DnewVersion="${TAG#v}" -DgenerateBackupPoms=false
-          mvn -B --no-transfer-progress -P'!deploy-live' help:evaluate \
+          mvn -B --no-transfer-progress help:evaluate \
             -Dexpression=project.build.finalName -Doutput="$RUNNER_TEMP/final-name"
           final_name=$(cat "$RUNNER_TEMP/final-name")
           [[ "$final_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || exit 1
           echo "jar=target/$final_name.jar" >> "$GITHUB_OUTPUT"
-          mvn -B --no-transfer-progress -P'!deploy-live' clean verify -DskipTests=false -Dmaven.test.skip=false
+          mvn -B --no-transfer-progress clean verify -DskipTests=false -Dmaven.test.skip=false
 
       - name: Stage only the release JAR
         env:
