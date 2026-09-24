@@ -33,9 +33,9 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             dev_version="DEV-$(date -u +%Y%m%d-%H%M)"
           fi
-          mvn -B --no-transfer-progress -P'!deploy-live' org.codehaus.mojo:versions-maven-plugin:2.22.0:set \
+          mvn -B --no-transfer-progress org.codehaus.mojo:versions-maven-plugin:2.22.0:set \
             -DnewVersion="$dev_version" -DgenerateBackupPoms=false
-          mvn -B --no-transfer-progress -P'!deploy-live' help:evaluate \
+          mvn -B --no-transfer-progress help:evaluate \
             -Dexpression=project.build.finalName -Doutput="$RUNNER_TEMP/final-name"
           final_name=$(cat "$RUNNER_TEMP/final-name")
           [[ "$final_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || exit 1
@@ -44,7 +44,7 @@ jobs:
           echo "jar=target/$final_name.jar" >> "$GITHUB_OUTPUT"
 
       - name: Run unit tests and build
-        run: mvn -B --no-transfer-progress -P'!deploy-live' clean verify -DskipTests=false -Dmaven.test.skip=false
+        run: mvn -B --no-transfer-progress clean verify -DskipTests=false -Dmaven.test.skip=false
 
       - name: Verify runtime JAR
         env:
