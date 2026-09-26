@@ -120,8 +120,9 @@ public final class PetActions {
             PetFx.tell(player, "Look at one of your own pets to give it an order.");
             return;
         }
+        TrainingSession session = runtime.sessions().training(player.getUniqueId());
         if (target.trickFor(SpokenOrder.key(word)) == null
-                && runtime.sessions().training(player.getUniqueId()) == null) {
+                && (session == null || !session.petId().equals(target.id()))) {
             PetFx.tell(player, target.name() + " has not learned that word. Check the Tricks page in the pet profile.");
             return;
         }
@@ -574,8 +575,10 @@ public final class PetActions {
             return;
         }
         Pet looked = runtime.byEntity(lookingAt(player, 6.0));
+        TrainingSession session = runtime.sessions().training(player.getUniqueId());
         if (looked != null && looked.ownerId().equals(player.getUniqueId()) && !looked.stored()
-                && looked.trickFor(SpokenOrder.key(text)) != null) {
+                && (looked.trickFor(SpokenOrder.key(text)) != null
+                        || session != null && session.petId().equals(looked.id()))) {
             handleTrainingChat(player, text, now);
             return;
         }
