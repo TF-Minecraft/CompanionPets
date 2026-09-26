@@ -237,7 +237,8 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             if (mode == Locomotion.Mode.FETCH) {
-                stepFetch(pet, mob, owner, now);
+                FetchNavigationGoal.ensure(runtime, pet, mob,
+                        () -> stepFetch(pet, mob, Bukkit.getPlayer(pet.ownerId()), System.currentTimeMillis()));
             } else {
                 stepMode(pet, mob, owner, mode, now);
             }
@@ -324,7 +325,6 @@ public final class PetTicker implements Runnable {
         if (job == null) {
             return;
         }
-        FetchNavigationGoal.ensure(runtime, pet, mob);
         if (owner == null || !owner.isOnline()) {
             actions.releaseFetch(pet, null, false);
             return;

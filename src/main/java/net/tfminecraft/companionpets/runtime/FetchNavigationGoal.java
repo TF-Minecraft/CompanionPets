@@ -17,16 +17,22 @@ import net.tfminecraft.companionpets.pet.Pet;
 final class FetchNavigationGoal implements Goal<Mob> {
     private final GoalKey<Mob> key;
     private final Pet pet;
+    private Runnable fetchStep;
+    private long nextStepAt;
 
-    private FetchNavigationGoal(GoalKey<Mob> key, Pet pet) {
+    private FetchNavigationGoal(GoalKey<Mob> key, Pet pet, Runnable fetchStep) {
         this.key = key;
         this.pet = pet;
+        this.fetchStep = fetchStep;
     }
 
-    static void ensure(PetRuntime runtime, Pet pet, Mob body) {
+    static void ensure(PetRuntime runtime, Pet pet, Mob body, Runnable fetchStep) {
         GoalKey<Mob> key = GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "fetch_navigation"));
-        if (!Bukkit.getMobGoals().hasGoal(body, key)) {
-            Bukkit.getMobGoals().addGoal(body, 0, new FetchNavigationGoal(key, pet));
+        Goal<Mob> registered = Bukkit.getMobGoals().getGoal(body, key);
+        if (registered instanceof FetchNavigationGoal goal) {
+            goal.fetchStep = fetchStep;
+        } else {
+            Bukkit.getMobGoals().addGoal(body, 0, new FetchNavigationGoal(key, pet, fetchStep));
         }
     }
 
@@ -38,6 +44,15 @@ final class FetchNavigationGoal implements Goal<Mob> {
     @Override
     public boolean shouldStayActive() {
         return shouldActivate();
+    }
+
+    @Override
+    public void tick() {
+        long now = System.currentTimeMillis();
+        if (now >= nextStepAt) {
+            fetchStep.run();
+            nextStepAt = now + 500L;
+        }
     }
 
     @Override
