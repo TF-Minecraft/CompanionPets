@@ -42,6 +42,11 @@ final class PetRoaming {
         owners.keySet().removeIf(id -> Bukkit.getPlayer(id) == null);
     }
 
+    boolean ownerStationary(Player owner, long now) {
+        OwnerMotion motion = owners.get(owner.getUniqueId());
+        return motion != null && now - motion.lastMovedAt >= runtime.config().roaming().stationarySeconds() * 1000.0;
+    }
+
     void attend(Pet pet, Player owner, long now) {
         plans.remove(pet.id());
         pet.activity(Activity.ATTENDING);
@@ -81,8 +86,7 @@ final class PetRoaming {
             plans.remove(pet.id());
             return false;
         }
-        OwnerMotion motion = owners.get(owner.getUniqueId());
-        if (motion == null || now - motion.lastMovedAt < settings.stationarySeconds() * 1000.0) {
+        if (!ownerStationary(owner, now)) {
             plans.remove(pet.id());
             return false;
         }
@@ -92,17 +96,25 @@ final class PetRoaming {
             plans.put(pet.id(), plan);
         }
         Entity targetEntity = plan.targetId == null ? null : Bukkit.getEntity(plan.targetId);
-        Location target = targetEntity == null ? plan.point : targetEntity.getLocation();
-        if (target == null || !target.getWorld().equals(body.getWorld())) {
+        Location target = plan.point;
+        if (target == null || !target.getWorld().equals(body.getWorld())
+                || targetEntity != null && !targetEntity.getWorld().equals(body.getWorld())) {
             plans.remove(pet.id());
             return false;
         }
         double stopDistance = targetEntity == null ? 0.8 : 2.0;
         if (body.getLocation().distanceSquared(target) > square(stopDistance)) {
-            body.getPathfinder().moveTo(target, speed * 0.9);
+            plan.arrived = false;
+            if (now >= plan.nextMoveAt) {
+                body.getPathfinder().moveTo(target, speed * 0.9);
+                plan.nextMoveAt = now + 1_500L;
+            }
         } else {
-            body.getPathfinder().stopPathfinding();
-            if (targetEntity != null) {
+            if (!plan.arrived) {
+                body.getPathfinder().stopPathfinding();
+                plan.arrived = true;
+            }
+            if (targetEntity != null && body.getLocation().distanceSquared(targetEntity.getLocation()) <= 16.0) {
                 PetFx.look(body, targetEntity.getLocation().add(0, 0.8, 0));
                 if (!plan.greeted && targetEntity instanceof Player) {
                     PetFx.happy(body, false);
@@ -123,11 +135,13 @@ final class PetRoaming {
                 Math.max(settings.petRadius(), settings.playerRadius()))) {
             if (entity.getWorld() != owner.getWorld() || entity == body) continue;
             if (entity instanceof Player player && player != owner
-                    && body.getLocation().distanceSquared(player.getLocation()) <= square(settings.playerRadius())) {
+                    && body.getLocation().distanceSquared(player.getLocation()) <= square(settings.playerRadius())
+                    && owner.getLocation().distanceSquared(player.getLocation()) <= square(settings.radius())) {
                 players.add(entity);
             } else if (runtime.byEntity(entity) instanceof Pet other && other != pet
                     && !other.stored() && !other.dead()
-                    && body.getLocation().distanceSquared(entity.getLocation()) <= square(settings.petRadius())) {
+                    && body.getLocation().distanceSquared(entity.getLocation()) <= square(settings.petRadius())
+                    && owner.getLocation().distanceSquared(entity.getLocation()) <= square(settings.radius())) {
                 pets.add(entity);
             }
         }
@@ -144,10 +158,12 @@ final class PetRoaming {
         double low = Math.min(settings.choiceMinSeconds(), settings.choiceMaxSeconds());
         double high = Math.max(settings.choiceMinSeconds(), settings.choiceMaxSeconds());
         long until = now + Math.round((low + runtime.random().nextDouble() * (high - low)) * 1000.0);
-        return new Plan(target == null ? null : target.getUniqueId(), point, until);
+        return new Plan(target == null ? null : target.getUniqueId(),
+                target == null ? point : target.getLocation(), until);
     }
 
     void cancel(Pet pet) { plans.remove(pet.id()); cancelAttention(pet); }
+    void cancelPlan(Pet pet) { plans.remove(pet.id()); }
 
     private void cancelAttention(Pet pet) {
         attention.remove(pet.id());
@@ -174,6 +190,8 @@ final class PetRoaming {
         private final Location point;
         private final long until;
         private boolean greeted;
+        private boolean arrived;
+        private long nextMoveAt;
         private Plan(UUID targetId, Location point, long until) {
             this.targetId = targetId; this.point = point; this.until = until;
         }

@@ -60,8 +60,8 @@ public final class PetTicker implements Runnable {
             care(now, elapsed);
         }
         actions.roaming().tickOwners(now);
-        move(now);
         actions.social().tick(now);
+        move(now);
         watchTraining(now);
         lookBars();
     }
@@ -229,6 +229,7 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             if (actions.social().engaged(pet)) {
+                actions.roaming().cancelPlan(pet);
                 actions.markSleep(mob, false);
                 continue;
             }

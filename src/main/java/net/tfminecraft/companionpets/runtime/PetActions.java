@@ -89,8 +89,8 @@ public final class PetActions {
         this.menus = new PetMenus(runtime);
         this.holograms = new PetHolograms(runtime.plugin());
         this.moments = new PetMoments(runtime);
-        this.social = new PetSocial(runtime);
         this.roaming = new PetRoaming(runtime);
+        this.social = new PetSocial(runtime, roaming);
         this.hints = new PlayerHints(runtime.plugin());
     }
 

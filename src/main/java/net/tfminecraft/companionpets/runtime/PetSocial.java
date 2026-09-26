@@ -23,10 +23,11 @@ import net.tfminecraft.companionpets.pet.PetPersonality;
 /** Brief, harmless encounters. Only two territorial pets may bark at one another. */
 final class PetSocial {
     private final PetRuntime runtime;
+    private final PetRoaming roaming;
     private final Map<Pair, Encounter> active = new HashMap<>();
     private final Map<Pair, Long> nextAllowed = new HashMap<>();
 
-    PetSocial(PetRuntime runtime) { this.runtime = runtime; }
+    PetSocial(PetRuntime runtime, PetRoaming roaming) { this.runtime = runtime; this.roaming = roaming; }
 
     void tick(long now) {
         SocialSettings settings = runtime.config().social();
@@ -48,7 +49,8 @@ final class PetSocial {
                         || (pet.personality() == PetPersonality.SHY || other.personality() == PetPersonality.SHY)
                                 && distance > square(Math.min(4, settings.encounterRadius()))) continue;
                 Pair pair = Pair.of(pet, other);
-                if (now < nextAllowed.getOrDefault(pair, 0L) || !ownersNearby(pet, body, other, otherBody)) continue;
+                if (now < nextAllowed.getOrDefault(pair, 0L) || !ownersNearby(pet, body, other, otherBody)
+                        || !ownersStationary(pet, other, now)) continue;
                 if (begin(pair, pet, other, body, otherBody, now, null)) break;
             }
         }
@@ -133,8 +135,10 @@ final class PetSocial {
         if ("bark".equals(choice) && (!territorial
                 || bodyA.getLocation().distanceSquared(bodyB.getLocation()) > square(settings.barkRadius()))) return false;
         Phase phase = "bark".equals(choice) ? Phase.BARK : "chase".equals(choice) ? Phase.CHASE : Phase.SNIFF;
-        Encounter encounter = new Encounter(a, b, phase, now);
+        Encounter encounter = new Encounter(a, b, phase, now, forced == null);
         active.put(pair, encounter);
+        bodyA.getPathfinder().stopPathfinding();
+        bodyB.getPathfinder().stopPathfinding();
         if (phase == Phase.BARK) bark(encounter, bodyA, bodyB);
         else tellOwners(encounter, a.name() + " and " + b.name()
                 + (phase == Phase.CHASE ? " start playing chase" : " approach to sniff each other"));
@@ -147,7 +151,8 @@ final class PetSocial {
         Mob b = body(encounter.b);
         if (a == null || b == null || a.getTarget() != null || b.getTarget() != null
                 || !a.getWorld().equals(b.getWorld()) || !available(encounter.a)
-                || !available(encounter.b) || !ownersNearby(encounter.a, a, encounter.b, b)) {
+                || !available(encounter.b) || !ownersNearby(encounter.a, a, encounter.b, b)
+                || encounter.automatic && !ownersStationary(encounter.a, encounter.b, now)) {
             end(pair, now, settings.encounterCooldownSeconds()); return;
         }
         double distance = a.getLocation().distanceSquared(b.getLocation());
@@ -157,11 +162,17 @@ final class PetSocial {
         long age = now - encounter.startedAt;
         if (encounter.phase == Phase.SNIFF) {
             if (distance > 2.25) {
-                a.getPathfinder().moveTo(b.getLocation(), 1.0);
-                b.getPathfinder().moveTo(a.getLocation(), 1.0);
+                encounter.arrived = false;
+                if (now >= encounter.nextMoveAt) {
+                    a.getPathfinder().moveTo(b.getLocation(), 1.0);
+                    encounter.nextMoveAt = now + 1_500L;
+                }
             } else {
-                a.getPathfinder().stopPathfinding();
-                b.getPathfinder().stopPathfinding();
+                if (!encounter.arrived) {
+                    a.getPathfinder().stopPathfinding();
+                    b.getPathfinder().stopPathfinding();
+                    encounter.arrived = true;
+                }
                 PetFx.look(a, b.getEyeLocation());
                 PetFx.look(b, a.getEyeLocation());
                 if (now >= encounter.nextFxAt) {
@@ -172,10 +183,13 @@ final class PetSocial {
             }
             if (age >= 5_000L) end(pair, now, settings.encounterCooldownSeconds());
         } else if (encounter.phase == Phase.CHASE) {
-            double angle = now / 650.0;
-            a.getPathfinder().moveTo(b.getLocation().clone().add(Math.cos(angle) * 1.5, 0, Math.sin(angle) * 1.5), 1.15);
-            b.getPathfinder().moveTo(a.getLocation().clone().add(Math.cos(angle + Math.PI) * 1.5, 0,
-                    Math.sin(angle + Math.PI) * 1.5), 1.1);
+            if (now >= encounter.nextMoveAt) {
+                double angle = now / 650.0;
+                a.getPathfinder().moveTo(b.getLocation().clone().add(Math.cos(angle) * 1.5, 0, Math.sin(angle) * 1.5), 1.15);
+                b.getPathfinder().moveTo(a.getLocation().clone().add(Math.cos(angle + Math.PI) * 1.5, 0,
+                        Math.sin(angle + Math.PI) * 1.5), 1.1);
+                encounter.nextMoveAt = now + 1_500L;
+            }
             if (now >= encounter.nextFxAt) {
                 PetFx.particle(a, Particle.HAPPY_VILLAGER, 2);
                 PetFx.particle(b, Particle.HAPPY_VILLAGER, 2);
@@ -224,6 +238,13 @@ final class PetSocial {
         boolean bNear = near(ownerB, bodyB, radius);
         return aNear && bNear || aNear && ownerB == null && near(ownerA, bodyB, radius)
                 || bNear && ownerA == null && near(ownerB, bodyA, radius);
+    }
+
+    private boolean ownersStationary(Pet a, Pet b, long now) {
+        Player ownerA = Bukkit.getPlayer(a.ownerId());
+        Player ownerB = Bukkit.getPlayer(b.ownerId());
+        return (ownerA == null || roaming.ownerStationary(ownerA, now))
+                && (ownerB == null || roaming.ownerStationary(ownerB, now));
     }
 
     private static boolean near(Player player, Mob body, double radiusSquared) {
@@ -276,9 +297,13 @@ final class PetSocial {
         private final Pet b;
         private final Phase phase;
         private final long startedAt;
+        private final boolean automatic;
         private long nextFxAt;
-        private Encounter(Pet a, Pet b, Phase phase, long startedAt) {
+        private long nextMoveAt;
+        private boolean arrived;
+        private Encounter(Pet a, Pet b, Phase phase, long startedAt, boolean automatic) {
             this.a = a; this.b = b; this.phase = phase; this.startedAt = startedAt;
+            this.automatic = automatic;
             this.nextFxAt = startedAt + 1_500L;
         }
     }
