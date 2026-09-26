@@ -263,6 +263,10 @@ public final class PetActions {
             return false;
         }
         Player previous = Bukkit.getPlayer(pet.ownerId());
+        RenamePrompt pendingRename = runtime.sessions().rename(pet.ownerId());
+        if (pendingRename != null && pendingRename.petId().equals(pet.id())) {
+            runtime.sessions().clearRename(pet.ownerId());
+        }
         clearInteractions(pet);
         releaseFetch(pet, previous, true);
         pet.ownerId(next);
@@ -794,7 +798,7 @@ public final class PetActions {
             return false;
         }
         Pet pet = runtime.store().get(prompt.petId());
-        if (pet == null || now > prompt.expiresAt()) {
+        if (pet == null || now > prompt.expiresAt() || !pet.ownerId().equals(player.getUniqueId())) {
             runtime.sessions().clearRename(player.getUniqueId());
             return true;
         }
@@ -864,6 +868,10 @@ public final class PetActions {
             if (pet.progress(known) >= training.learnedAt()) {
                 perform(player, pet, looked, known, false);
                 PetFx.bar(player, pet.name() + " already knows " + PetTexts.trickName(known) + ". No practice needed");
+                return;
+            }
+            if (pet.activity() == Activity.SLEEPING && known != Trick.SLEEP && known != Trick.COME) {
+                perform(player, pet, looked, known, false);
                 return;
             }
             if (!spendTrainingEffort(player, pet)) {
