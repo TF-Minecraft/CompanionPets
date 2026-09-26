@@ -118,7 +118,11 @@ class NeedClockTest {
                 care.bondGainPerMinute(),
                 care.bondLossPerMinute(),
                 care.wakeMoodPenalty(),
-                care.criticalSoundSeconds());
+                care.criticalSoundSeconds(),
+                care.overfeedMoodPenalty(),
+                care.overfeedHealthPenalty(),
+                care.struckMoodPenalty(),
+                care.restAgainSeconds());
         List<CareNotice> notices = NeedClock.advance(dying, new CareInput(
                 Presence.NEAR, false, false, false, true, minutes(1), lethal, 0.25));
         assertTrue(dying.dead());
@@ -173,6 +177,15 @@ class NeedClockTest {
         NeedClock.advance(healing, input(Presence.NEAR, false, false, false, true, minutes(3)));
         assertEquals(100.0, healing.need(Need.HEALTH), 0.001);
         assertEquals(Illness.NONE, healing.illness());
+    }
+
+    @Test
+    void sickPetDoesNotLoseMoodWhileItCannotPlay() {
+        Pet pet = pet();
+        pet.illness(Illness.SICK);
+        pet.need(Need.MOOD, 10);
+        NeedClock.advance(pet, input(Presence.NEAR, false, false, false, true, minutes(5)));
+        assertEquals(10.0, pet.need(Need.MOOD), 0.001);
     }
 
     private static Pet criticalPet() {

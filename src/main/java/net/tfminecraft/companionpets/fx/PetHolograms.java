@@ -13,6 +13,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 public final class PetHolograms {
     private static final long FOLLOW_TICKS = 2L;
@@ -25,7 +26,29 @@ public final class PetHolograms {
         this.plugin = plugin;
     }
 
+    public void sleep(Entity pet, boolean asleep) {
+        if (pet == null || !pet.isValid()) {
+            return;
+        }
+        UUID id = pet.getUniqueId();
+        Hologram current = shown.get(id);
+        if (!asleep) {
+            if (current != null && current.held) {
+                remove(id, current);
+            }
+            return;
+        }
+        if (current != null && current.held) {
+            return;
+        }
+        show(pet, Component.text("Sleeping", NamedTextColor.GRAY), 0L, true);
+    }
+
     public void show(Entity pet, Component text, long ticks) {
+        show(pet, text, ticks, false);
+    }
+
+    private void show(Entity pet, Component text, long ticks, boolean held) {
         if (pet == null || !pet.isValid()) {
             return;
         }
@@ -42,7 +65,7 @@ public final class PetHolograms {
             as.setSilent(true);
             as.setPersistent(false);
         });
-        Hologram hologram = new Hologram(stand);
+        Hologram hologram = new Hologram(stand, held);
         shown.put(id, hologram);
         hologram.follow = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (!pet.isValid() || !stand.isValid()) {
@@ -51,7 +74,9 @@ public final class PetHolograms {
             }
             stand.teleport(above(pet));
         }, FOLLOW_TICKS, FOLLOW_TICKS);
-        hologram.expire = Bukkit.getScheduler().runTaskLater(plugin, () -> remove(id, hologram), ticks);
+        if (!held) {
+            hologram.expire = Bukkit.getScheduler().runTaskLater(plugin, () -> remove(id, hologram), ticks);
+        }
     }
 
     public void clear() {
@@ -88,11 +113,13 @@ public final class PetHolograms {
 
     private static final class Hologram {
         private final ArmorStand stand;
+        private final boolean held;
         private BukkitTask follow;
         private BukkitTask expire;
 
-        private Hologram(ArmorStand stand) {
+        private Hologram(ArmorStand stand, boolean held) {
             this.stand = stand;
+            this.held = held;
         }
     }
 }

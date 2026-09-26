@@ -5,15 +5,17 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.entity.Pose;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Fox;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Sittable;
-import org.bukkit.entity.Wolf;
+import org.bukkit.inventory.ItemStack;
 
 import io.papermc.paper.entity.LookAnchor;
 import org.bukkit.util.Vector;
@@ -21,6 +23,7 @@ import org.bukkit.util.Vector;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.tfminecraft.companionpets.pet.Need;
 
 public final class PetFx {
     private static final long REPEAT_AFTER_MILLIS = 1_600L;
@@ -91,6 +94,26 @@ public final class PetFx {
         entity.getWorld().spawnParticle(particle, entity.getLocation().add(0, 0.8, 0), count, 0.25, 0.3, 0.25, 0);
     }
 
+    public static void need(Entity entity, Need need, Material favoriteFood) {
+        if (need == null) {
+            return;
+        }
+        if (need == Need.HUNGER) {
+            Material food = favoriteFood == null ? Material.COOKED_BEEF : favoriteFood;
+            entity.getWorld().spawnParticle(Particle.ITEM, entity.getLocation().add(0, 0.9, 0),
+                    4, 0.2, 0.2, 0.2, 0.02, new ItemStack(food));
+            return;
+        }
+        Particle signal = switch (need) {
+            case MOOD -> Particle.SPLASH;
+            case ENERGY -> Particle.CLOUD;
+            case CLEANLINESS -> Particle.DUST_PLUME;
+            case HEALTH -> Particle.DAMAGE_INDICATOR;
+            default -> Particle.CLOUD;
+        };
+        particle(entity, signal, need == Need.CLEANLINESS ? 4 : 3);
+    }
+
     public static void sit(Entity entity, boolean sitting) {
         if (entity instanceof Sittable sittable) {
             sittable.setSitting(sitting);
@@ -106,23 +129,14 @@ public final class PetFx {
             fox.setSitting(false);
             return;
         }
+        if (entity instanceof LivingEntity living && living.getPose() == Pose.SLEEPING) {
+            living.setPose(Pose.STANDING);
+        }
         sit(entity, lying);
     }
 
-    public static void beg(Entity entity) {
-        if (entity instanceof Wolf wolf) {
-            wolf.setInterested(true);
-        }
-        if (entity instanceof LivingEntity living) {
-            Location above = living.getLocation().add(0, 2, 0);
-            living.lookAt(above.getX(), above.getY(), above.getZ(), LookAnchor.EYES);
-        }
-    }
-
-    public static void stopBeg(Entity entity) {
-        if (entity instanceof Wolf wolf && wolf.isValid()) {
-            wolf.setInterested(false);
-        }
+    public static void hurt(Entity entity) {
+        entity.getWorld().playSound(entity.getLocation(), hurtSound(entity.getType()), 1.0f, 1.0f);
     }
 
     public static void jump(Entity entity, boolean partial) {
@@ -158,6 +172,16 @@ public final class PetFx {
             default -> ambientSound(entity.getType());
         };
         entity.getWorld().playSound(entity.getLocation(), sound, 0.8f, 0.9f);
+    }
+
+    public static Sound hurtSound(EntityType type) {
+        return switch (type) {
+            case WOLF -> Sound.ENTITY_WOLF_HURT;
+            case CAT -> Sound.ENTITY_CAT_HURT;
+            case FOX -> Sound.ENTITY_FOX_HURT;
+            case PARROT -> Sound.ENTITY_PARROT_HURT;
+            default -> Sound.ENTITY_PLAYER_HURT;
+        };
     }
 
     public static Sound ambientSound(EntityType type) {

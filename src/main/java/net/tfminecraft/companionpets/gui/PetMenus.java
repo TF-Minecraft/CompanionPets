@@ -21,7 +21,6 @@ import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.NeedBand;
 import net.tfminecraft.companionpets.pet.Pet;
-import net.tfminecraft.companionpets.pet.PetSex;
 import net.tfminecraft.companionpets.pet.Trick;
 import net.tfminecraft.companionpets.runtime.PetRuntime;
 import net.tfminecraft.companionpets.text.PetTexts;
@@ -29,9 +28,14 @@ import net.tfminecraft.companionpets.training.TrainingMath;
 import net.tfminecraft.companionpets.training.TrainingSettings;
 
 public final class PetMenus {
-    private static final int TRICK_ROW = 10;
-    private static final int WORD_SLOT = 4;
-    public static final int SKIP_SLOT = 22;
+    private static final int TRICK_ROW = 9;
+    public static final int NAME_SLOT = 13;
+    public static final int BACK_SLOT = 36;
+    public static final int TRICKS_BACK_SLOT = 22;
+    public static final int CALL_SLOT = 38;
+    public static final int STORE_SLOT = 40;
+    public static final int TRICKS_SLOT = 42;
+    public static final int RELEASE_SLOT = 44;
     private final PetRuntime runtime;
 
     public PetMenus(PetRuntime runtime) {
@@ -70,29 +74,30 @@ public final class PetMenus {
         frame(inventory);
         PetTypeDef type = runtime.config().type(pet.typeId());
         Material egg = type == null || type.egg() == null ? Material.BONE : type.egg();
-        boolean female = pet.sex() == PetSex.FEMALE;
         Material food = type == null || type.favoriteFood() == null ? Material.COOKED_BEEF : type.favoriteFood();
         boolean sick = pet.illness() != Illness.NONE;
 
-        inventory.setItem(4, named(egg, PetTexts.speciesName(pet.typeId()), NamedTextColor.GOLD,
+        inventory.setItem(37, null);
+        inventory.setItem(39, null);
+        inventory.setItem(41, null);
+        inventory.setItem(43, null);
+
+        inventory.setItem(4, named(egg, PetTexts.speciesName(pet.typeId()), NamedTextColor.WHITE,
                 line("Species", NamedTextColor.GRAY)));
-        inventory.setItem(11, named(
-                female ? Material.PINK_DYE : Material.LIGHT_BLUE_DYE,
-                PetTexts.sexName(pet.sex()),
-                female ? TextColor.color(0xFF8AD4) : TextColor.color(0x55BFFF)));
-        inventory.setItem(13, named(Material.NAME_TAG, pet.name(), NamedTextColor.GOLD,
+        inventory.setItem(11, named(Material.PLAYER_HEAD, PetTexts.sexName(pet.sex()), NamedTextColor.WHITE));
+        inventory.setItem(13, named(Material.NAME_TAG, pet.name(), NamedTextColor.WHITE,
                 condition(pet),
                 Component.empty(),
-                line("Rename " + PetTexts.him(pet.sex()) + " from your kennel", NamedTextColor.DARK_GRAY)));
+                line("Rename " + PetTexts.him(pet.sex()) + " from your shelter", NamedTextColor.DARK_GRAY)));
         inventory.setItem(15, named(Material.CLOCK, "Age", NamedTextColor.WHITE,
                 line(PetTexts.age(pet.bornAt(), System.currentTimeMillis()), NamedTextColor.GRAY)));
 
         Component treat = type == null || type.favoriteFood() == null ? line("treats", NamedTextColor.GRAY) : item(type.favoriteFood());
         inventory.setItem(20, needIcon(food, pet, Need.HUNGER, line("Feed ", NamedTextColor.DARK_GRAY).append(foods(type))));
         inventory.setItem(21, needIcon(Material.SUNFLOWER, pet, Need.MOOD,
-                line("Play fetch or give " + PetTexts.him(pet.sex()) + " ", NamedTextColor.DARK_GRAY).append(treat)));
+                line("Throw a toy, or pet " + PetTexts.him(pet.sex()) + " with an empty hand. Favorite: ", NamedTextColor.DARK_GRAY).append(treat)));
         inventory.setItem(22, needIcon(Material.BLAZE_POWDER, pet, Need.ENERGY,
-                line("Recovers while " + PetTexts.he(pet.sex()) + " sleeps", NamedTextColor.DARK_GRAY)));
+                line("Teach " + PetTexts.him(pet.sex()) + " to rest, or " + PetTexts.he(pet.sex()) + " lies down when exhausted", NamedTextColor.DARK_GRAY)));
         inventory.setItem(23, needIcon(Material.BRUSH, pet, Need.CLEANLINESS,
                 line("Use a brush on " + PetTexts.him(pet.sex()), NamedTextColor.DARK_GRAY)));
         Material medicine = type == null || type.medicine() == null ? Material.HONEY_BOTTLE : type.medicine();
@@ -102,11 +107,30 @@ public final class PetMenus {
                         : line("Keep " + PetTexts.his(pet.sex()) + " needs up to stay healthy", NamedTextColor.DARK_GRAY),
                 sick ? line(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED) : null));
 
-        inventory.setItem(30, named(Material.LEAD, "Bond", StatLook.BOND,
+        boolean stored = pet.stored();
+        inventory.setItem(BACK_SLOT, action(Material.ARROW, "Back",
+                line("Return to the shelter list", NamedTextColor.GRAY)));
+        inventory.setItem(CALL_SLOT, action(stored ? Material.LEAD : Material.COMPASS,
+                stored ? "Bring out" : "Call",
+                line(stored ? "Bring " + PetTexts.him(pet.sex()) + " out beside you" : "Call " + PetTexts.him(pet.sex()) + " to your side",
+                        NamedTextColor.GRAY)));
+        if (!stored) {
+            inventory.setItem(STORE_SLOT, action(Material.BARREL, "Send to shelter",
+                    line("Take " + PetTexts.him(pet.sex()) + " out of the world", NamedTextColor.GRAY)));
+        }
+        inventory.setItem(TRICKS_SLOT, action(Material.BOOK, "Tricks",
+                line("See what " + pet.name() + " has learned", NamedTextColor.GRAY)));
+        inventory.setItem(RELEASE_SLOT, action(Material.BARRIER, "Release forever",
+                line(pet.name() + " leaves for good and cannot come back", NamedTextColor.GRAY)));
+
+        inventory.setItem(30, named(Material.LEAD, "Bond", NamedTextColor.WHITE,
                 StatLook.bar(pet.bond(), StatLook.BOND),
                 line(StatLook.bondState(pet.bond()), StatLook.BOND),
                 Component.empty(),
                 line("Grows while you spend time together", NamedTextColor.DARK_GRAY)));
+        inventory.setItem(31, named(Material.AMETHYST_SHARD, "Personality", NamedTextColor.WHITE,
+                line(pet.personality().label(), NamedTextColor.AQUA),
+                line(pet.personality().description(), NamedTextColor.GRAY)));
         inventory.setItem(32, toyIcon(pet));
     }
 
@@ -150,15 +174,15 @@ public final class PetMenus {
     private static ItemStack toyIcon(Pet pet) {
         Material toy = pet.favoriteToy() == null ? null : Material.matchMaterial(pet.favoriteToy());
         if (toy == null) {
-            return named(Material.BARRIER, "No favorite toy yet", NamedTextColor.DARK_GRAY);
+            return named(Material.BARRIER, "No favorite toy yet", NamedTextColor.WHITE);
         }
-        return named(toy, "Favorite Toy", NamedTextColor.GOLD,
+        return named(toy, "Favorite Toy", NamedTextColor.WHITE,
                 Component.translatable(toy.translationKey()).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
     }
 
     public void openKennel(org.bukkit.entity.Player player) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.KENNEL, null, null);
-        Inventory inventory = Bukkit.createInventory(holder, 27, title("Kennel"));
+        Inventory inventory = Bukkit.createInventory(holder, 27, title("Shelter"));
         holder.inventory(inventory);
         frame(inventory);
         int slot = 0;
@@ -172,13 +196,10 @@ public final class PetMenus {
             ItemStack item = named(icon, pet.name(), NamedTextColor.GOLD,
                     line(PetTexts.sexName(pet.sex()) + " " + PetTexts.speciesName(pet.typeId()).toLowerCase(java.util.Locale.ROOT),
                             NamedTextColor.GRAY),
-                    line(stored ? "Resting in the kennel" : "Out and about", stored ? NamedTextColor.DARK_GRAY : NamedTextColor.GREEN),
+                    line(stored ? "Resting in the shelter" : "Out and about", stored ? NamedTextColor.DARK_GRAY : NamedTextColor.GREEN),
                     line("Energy ", StatLook.theme(Need.ENERGY)).append(StatLook.bar(pet.need(Need.ENERGY))),
                     Component.empty(),
-                    line(stored ? "Left-click to bring " + PetTexts.him(pet.sex()) + " out" : "Left-click to call " + PetTexts.him(pet.sex()),
-                            NamedTextColor.YELLOW),
-                    stored ? null : line("Right-click to send " + PetTexts.him(pet.sex()) + " to the kennel", NamedTextColor.YELLOW),
-                    line("Shift-click to rename", NamedTextColor.YELLOW));
+                    line("Click to open", NamedTextColor.YELLOW));
             ItemMeta meta = item.getItemMeta();
             meta.getPersistentDataContainer().set(runtime.petKey(), PersistentDataType.STRING, pet.id().toString());
             item.setItemMeta(meta);
@@ -187,22 +208,55 @@ public final class PetMenus {
         player.openInventory(inventory);
     }
 
-    public void openTricks(org.bukkit.entity.Player player, Pet pet, String word) {
-        MenuHolder holder = new MenuHolder(MenuHolder.Kind.TRICK, pet.id(), word);
-        Inventory inventory = Bukkit.createInventory(holder, 27, title("What does “" + word + "” mean?"));
+    public void openLearned(org.bukkit.entity.Player player, Pet pet) {
+        MenuHolder holder = new MenuHolder(MenuHolder.Kind.LEARNED, pet.id(), null);
+        Inventory inventory = Bukkit.createInventory(holder, 27, title(pet.name() + "'s tricks"));
         holder.inventory(inventory);
         frame(inventory);
-        inventory.setItem(WORD_SLOT, named(Material.WRITABLE_BOOK, "New word: “" + word + "”", NamedTextColor.GOLD,
-                line(pet.name() + " doesn't know this word yet.", NamedTextColor.GRAY),
-                line("Pick the trick " + PetTexts.he(pet.sex()) + " should do", NamedTextColor.GRAY),
-                line("whenever you say “" + word + "”.", NamedTextColor.GRAY)));
+        TrainingSettings training = runtime.config().training();
+        Trick[] tricks = Trick.values();
+        for (int index = 0; index < tricks.length; index++) {
+            inventory.setItem(TRICK_ROW + index, learnedIcon(pet, tricks[index], training));
+        }
+        inventory.setItem(TRICKS_BACK_SLOT, named(Material.ARROW, "Back", NamedTextColor.YELLOW,
+                line("Return to " + pet.name(), NamedTextColor.GRAY)));
+        player.openInventory(inventory);
+    }
+
+    private static ItemStack learnedIcon(Pet pet, Trick trick, TrainingSettings training) {
+        boolean learned = pet.progress(trick) >= training.learnedAt();
+        List<String> words = new ArrayList<>();
+        for (java.util.Map.Entry<String, Trick> entry : pet.words().entrySet()) {
+            if (entry.getValue() == trick) {
+                words.add("“" + entry.getKey() + "”");
+            }
+        }
+        ItemStack item = named(trickMaterial(trick), PetTexts.trickName(trick), learned ? NamedTextColor.GREEN : NamedTextColor.GRAY,
+                line(PetTexts.trickDescription(trick), NamedTextColor.GRAY),
+                Component.empty(),
+                words.isEmpty()
+                        ? line("Not taught yet", NamedTextColor.DARK_GRAY)
+                        : line("Say " + String.join(", ", words), NamedTextColor.AQUA),
+                learned
+                        ? line("Learned", NamedTextColor.GREEN)
+                        : StatLook.bar(TrainingMath.percentLearned(pet.progress(trick), training), NamedTextColor.AQUA));
+        ItemMeta meta = item.getItemMeta();
+        meta.setEnchantmentGlintOverride(learned);
+        meta.addItemFlags(ItemFlag.HIDE_DYE);
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    public void openTricks(org.bukkit.entity.Player player, Pet pet, String word) {
+        MenuHolder holder = new MenuHolder(MenuHolder.Kind.TRICK, pet.id(), word);
+        Inventory inventory = Bukkit.createInventory(holder, 27, title("Choose a trick"));
+        holder.inventory(inventory);
+        frame(inventory);
         TrainingSettings training = runtime.config().training();
         Trick[] tricks = Trick.values();
         for (int index = 0; index < tricks.length; index++) {
             inventory.setItem(TRICK_ROW + index, trickIcon(pet, tricks[index], word, training));
         }
-        inventory.setItem(SKIP_SLOT, named(Material.BARRIER, "Not now", NamedTextColor.RED,
-                line("Leave “" + word + "” unlinked", NamedTextColor.GRAY)));
         player.openInventory(inventory);
     }
 
@@ -229,7 +283,7 @@ public final class PetMenus {
             case SPEAK -> Material.OAK_SIGN;
             case JUMP -> Material.LEATHER_BOOTS;
             case SPIN -> Material.WIND_CHARGE;
-            case BEG -> Material.COOKIE;
+            case SLEEP -> Material.RED_BED;
             case PAW -> Material.RABBIT_FOOT;
         };
     }
@@ -283,7 +337,15 @@ public final class PetMenus {
         }
         lore.add(Component.empty());
         lore.add(hint);
-        return named(material, PetTexts.needName(need), StatLook.theme(need), lore.toArray(new Component[0]));
+        return named(material, PetTexts.needName(need), NamedTextColor.WHITE, lore.toArray(new Component[0]));
+    }
+
+    private static ItemStack action(Material material, String name, Component... lore) {
+        ItemStack item = named(material, name, NamedTextColor.WHITE, lore);
+        ItemMeta meta = item.getItemMeta();
+        meta.setEnchantmentGlintOverride(true);
+        item.setItemMeta(meta);
+        return item;
     }
 
     private static Component title(String text) {

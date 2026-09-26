@@ -23,6 +23,10 @@ care:
   bond-loss-per-minute: 0.8
   wake-mood-penalty: 8
   critical-sound-seconds: 8
+  overfeed-mood-penalty: 12
+  overfeed-health-penalty: 8
+  struck-mood-penalty: 6
+  rest-again-seconds: 45
 
 play:
   throw-speed-low: 0.6
@@ -52,9 +56,75 @@ presence:
   follow-teleport-blocks: 16
   cry-interval-seconds: 45
 
+moments:
+  enabled: true
+  juvenile-hours: 24
+  initial-delay-min-seconds: 180
+  initial-delay-max-seconds: 420
+  juvenile-interval-min-seconds: 120
+  juvenile-interval-max-seconds: 360
+  adult-interval-min-seconds: 300
+  adult-interval-max-seconds: 720
+  inactive-retry-seconds: 60
+  owner-radius: 8
+  target-radius: 6
+  plant-search-radius: 2
+  low-mood-threshold: 55
+  low-mood-bark-chance: 35
+  mischief-min-energy: 40
+  juvenile-mischief-chance: 40
+  adult-mischief-chance: 8
+  juvenile-bark-chance: 20
+  adult-bark-chance: 47
+  digging-enabled: true
+  juvenile-dig-chance: 15
+  adult-dig-chance: 10
+  dig-min-energy: 40
+  dig-loot:
+    STICK: 45
+    BONE: 30
+    RABBIT: 15
+    LEATHER_BOOTS: 10
+  plant-breaking-enabled: true
+  respect-mob-griefing: true
+  plants:
+    - SHORT_GRASS
+    - FERN
+    - DEAD_BUSH
+    - DANDELION
+    - POPPY
+  affection-particle: SPLASH
+  affection-particle-count: 3
+  bark-particle: ANGRY_VILLAGER
+  bark-particle-count: 2
+  mischief-particle: POOF
+  mischief-particle-count: 5
+
+social:
+  enabled: true
+  encounter-radius: 8
+  bark-radius: 6
+  owner-radius: 16
+  encounter-cooldown-seconds: 18
+  bark-seconds: 8
+  calm-cooldown-seconds: 30
+  territorial-bark-chance: 80
+  same-owner-bark-chance: 10
+  chase-chance: 50
+  calm-clicks: 3
+
+roaming:
+  enabled: true
+  stationary-seconds: 2
+  radius: 4
+  choice-min-seconds: 3
+  choice-max-seconds: 6
+  player-radius: 6
+  pet-radius: 6
+  name-attention-seconds: 4
+
 items:
   kennel: BARREL
-  whistle: GOAT_HORN
 
 pets:
   wolf:

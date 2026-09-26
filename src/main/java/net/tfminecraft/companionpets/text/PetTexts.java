@@ -113,6 +113,10 @@ public final class PetTexts {
         };
     }
 
+    public static String missesOwner(String name, PetSex sex) {
+        return name + " whines and looks around for " + his(sex) + " owner";
+    }
+
     public static String restingCheck(String name, PetSex sex) {
         return name + " leans into your hand, worn out from training. Let " + him(sex) + " rest a while";
     }
@@ -149,45 +153,53 @@ public final class PetTexts {
     public static String trickName(Trick trick) {
         return switch (trick) {
             case SIT -> "Sit";
-            case COME -> "Come";
+            case COME -> "Follow";
             case STAY -> "Stay";
             case SPEAK -> "Speak";
             case JUMP -> "Jump";
             case SPIN -> "Spin";
-            case BEG -> "Beg";
+            case SLEEP -> "Rest";
             case PAW -> "Shake Paw";
         };
     }
 
     public static String trickDescription(Trick trick) {
         return switch (trick) {
-            case SIT -> "Sits down and waits for you";
-            case COME -> "Runs back to your side";
-            case STAY -> "Stays put until you call";
+            case SIT -> "Sits down and stops following";
+            case COME -> "Wakes up and follows you again";
+            case STAY -> "Stands still where it is, until you say follow";
             case SPEAK -> "Barks, meows or yips on cue";
             case JUMP -> "Leaps up into the air";
             case SPIN -> "Twirls around in a circle";
-            case BEG -> "Sits up and begs for a treat";
-            case PAW -> "Offers you a paw to shake";
+            case SLEEP -> "Lies down and rests until recovered";
+            case PAW -> "Gives you a paw";
         };
     }
 
     public static String reaction(String name, PetSex sex, Trick trick) {
         return switch (trick) {
             case SIT -> name + " sits down and looks up at you";
-            case COME -> name + " comes bounding over";
-            case STAY -> name + " stays put, watching you closely";
+            case COME -> name + " gets up and follows you";
+            case STAY -> name + " stands still, watching you";
             case SPEAK -> name + " speaks up proudly";
             case JUMP -> name + " leaps into the air";
             case SPIN -> name + " chases " + his(sex) + " own tail in a circle";
-            case BEG -> name + " sits up and begs";
-            case PAW -> name + " offers you a paw";
+            case SLEEP -> name + " curls up to rest";
+            case PAW -> name + " lifts a paw and gives it to you";
         };
+    }
+
+    public static String overfed(String name, PetSex sex) {
+        return name + " ate too much. " + He(sex) + " feels awful";
+    }
+
+    public static String struck(String name) {
+        return name + " yelps and flinches";
     }
 
     public static String refusal(String name, PetSex sex, String reason) {
         return switch (reason) {
-            case "sick" -> name + " is feeling too poorly to play";
+            case "sick" -> name + " is too ill to play. Pet " + him(sex) + " and give medicine first";
             case "tired" -> name + " is too tired to keep going";
             case "sleepy" -> name + " isn't sleepy right now";
             case "food" -> name + " turns up " + his(sex) + " nose at that";
@@ -195,7 +207,7 @@ public final class PetTexts {
             case "attention" -> name + " is too distracted to listen";
             case "owner" -> "Only " + his(sex) + " owner can do that";
             case "full-out" -> "You already have as many pets out as you can look after";
-            case "full-stored" -> "Your kennel has no room left";
+            case "full-stored" -> "Your shelter has no room left";
             case "bored" -> name + " has had enough training for now";
             default -> reason;
         };
