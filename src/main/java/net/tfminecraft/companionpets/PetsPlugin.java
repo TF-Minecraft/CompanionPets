@@ -32,6 +32,7 @@ public final class PetsPlugin extends JavaPlugin {
     private PetStore store;
     private PetActions actions;
     private BukkitTask ticker;
+    private BukkitTask statusTicker;
     private BukkitTask autosave;
 
     @Override
@@ -47,7 +48,9 @@ public final class PetsPlugin extends JavaPlugin {
         PetRuntime runtime = new PetRuntime(this, config, store, new Sessions(), bodies, visual, petKey, toyKey);
         actions = new PetActions(runtime);
         Bukkit.getPluginManager().registerEvents(new PetListener(runtime, actions), this);
-        ticker = Bukkit.getScheduler().runTaskTimer(this, new PetTicker(runtime, actions), 10L, 10L);
+        PetTicker petTicker = new PetTicker(runtime, actions);
+        ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
+        statusTicker = Bukkit.getScheduler().runTaskTimer(this, petTicker::lookBars, 1L, 1L);
         autosave = Bukkit.getScheduler().runTaskTimer(this, store::save, AUTOSAVE_TICKS, AUTOSAVE_TICKS);
         for (org.bukkit.World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {
@@ -61,6 +64,9 @@ public final class PetsPlugin extends JavaPlugin {
     public void onDisable() {
         if (ticker != null) {
             ticker.cancel();
+        }
+        if (statusTicker != null) {
+            statusTicker.cancel();
         }
         if (autosave != null) {
             autosave.cancel();

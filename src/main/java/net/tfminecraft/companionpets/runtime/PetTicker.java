@@ -63,7 +63,6 @@ public final class PetTicker implements Runnable {
         actions.social().tick(now);
         move(now);
         watchTraining(now);
-        lookBars();
     }
 
     private void care(long now, long elapsed) {
@@ -115,6 +114,9 @@ public final class PetTicker implements Runnable {
                     now,
                     pet.refuseRestUntilMillis())) {
                 pet.activity(Activity.SLEEPING);
+                if (body != null) {
+                    actions.markSleep(body, true);
+                }
                 if (online) {
                     PetFx.bar(owner, pet.name() + " lies down to rest");
                 }
@@ -220,21 +222,18 @@ public final class PetTicker implements Runnable {
                     now < pet.forcedSitUntilMillis(),
                     pet.order(),
                     pet.staying());
+            actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
             if (actions.roaming().tickAttention(pet, mob, now)) {
-                actions.markSleep(mob, false);
                 continue;
             }
             if (mode == Locomotion.Mode.FOLLOW && mob.getTarget() != null) {
-                actions.markSleep(mob, false);
                 continue;
             }
             if (actions.social().engaged(pet)) {
                 actions.roaming().cancelPlan(pet);
-                actions.markSleep(mob, false);
                 continue;
             }
             if (actions.advanceSpin(pet, mob, mode, now)) {
-                actions.markSleep(mob, false);
                 continue;
             }
             if (mode == Locomotion.Mode.FETCH) {
@@ -245,7 +244,6 @@ public final class PetTicker implements Runnable {
             express(pet, mob, owner, mode, now);
             actions.moments().tick(pet, mob, owner, mode, now);
             playVisual(pet, mob, mode);
-            actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
         }
     }
 
@@ -326,6 +324,7 @@ public final class PetTicker implements Runnable {
         if (job == null) {
             return;
         }
+        FetchNavigationGoal.ensure(runtime, pet, mob);
         if (owner == null || !owner.isOnline()) {
             actions.releaseFetch(pet, null, false);
             return;
@@ -461,8 +460,9 @@ public final class PetTicker implements Runnable {
         }
     }
 
-    private void lookBars() {
+    public void lookBars() {
         for (Player player : Bukkit.getOnlinePlayers()) {
+            if (PetFx.refreshHeld(player)) continue;
             Entity looked = PetActions.lookingAt(player, 4.5);
             Pet pet = runtime.byEntity(looked);
             if (pet == null) {

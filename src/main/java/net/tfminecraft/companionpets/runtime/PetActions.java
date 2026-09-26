@@ -1150,6 +1150,7 @@ public final class PetActions {
                 releaseFetch(pet, player, true);
                 pet.activity(Activity.SLEEPING);
                 pet.staying(false);
+                markSleep(entity, true);
             }
             case PAW -> {
                 if (entity != null) {

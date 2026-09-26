@@ -57,6 +57,10 @@ final class PetRoaming {
     boolean tickAttention(Pet pet, Mob body, long now) {
         Attention job = attention.get(pet.id());
         if (job == null) return false;
+        if (pet.activity() != Activity.ATTENDING) {
+            cancelAttention(pet);
+            return false;
+        }
         Player owner = Bukkit.getPlayer(job.ownerId);
         if (owner == null || !owner.isOnline() || now >= job.until || !owner.getWorld().equals(body.getWorld())) {
             cancelAttention(pet);

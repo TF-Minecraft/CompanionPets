@@ -30,7 +30,7 @@ public final class PetFx {
     private static final long REPEAT_AFTER_MILLIS = 1_600L;
     private static final long HOLD_MILLIS = 2_200L;
     private static final Map<UUID, Hold> HOLDS = new HashMap<>();
-    private static final Map<UUID, Long> QUIET = new HashMap<>();
+    private static final Map<UUID, Alert> ALERTS = new HashMap<>();
 
     private PetFx() {
     }
@@ -41,7 +41,7 @@ public final class PetFx {
 
     public static void bar(Player player, Component text) {
         show(player, text);
-        QUIET.put(player.getUniqueId(), System.currentTimeMillis() + HOLD_MILLIS);
+        ALERTS.put(player.getUniqueId(), new Alert(text, System.currentTimeMillis() + HOLD_MILLIS));
     }
 
     public static void tell(Player player, String text) {
@@ -61,11 +61,23 @@ public final class PetFx {
     }
 
     public static void status(Player player, Component text) {
-        Long until = QUIET.get(player.getUniqueId());
-        if (until != null && System.currentTimeMillis() < until) {
-            return;
+        if (!refreshHeld(player)) player.sendActionBar(text);
+    }
+
+    public static boolean refreshHeld(Player player) {
+        Alert alert = ALERTS.get(player.getUniqueId());
+        if (alert == null) return false;
+        if (System.currentTimeMillis() >= alert.until) {
+            ALERTS.remove(player.getUniqueId());
+            return false;
         }
-        show(player, text);
+        player.sendActionBar(alert.text);
+        return true;
+    }
+
+    public static void clearPlayer(UUID playerId) {
+        ALERTS.remove(playerId);
+        HOLDS.remove(playerId);
     }
 
     private static void show(Player player, Component text) {
@@ -169,6 +181,9 @@ public final class PetFx {
     }
 
     private record Hold(String text, long at) {
+    }
+
+    private record Alert(Component text, long until) {
     }
 
     public static void happy(Entity entity, boolean loud) {

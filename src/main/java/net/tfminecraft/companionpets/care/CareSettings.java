@@ -42,7 +42,7 @@ public record CareSettings(
                 false,
                 6,
                 22,
-                10,
+                3,
                 1.5,
                 8,
                 8,

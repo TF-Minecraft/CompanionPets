@@ -11,7 +11,7 @@ care:
   death-on-neglect: false
   play-seconds: 6
   play-mood-gain: 22
-  play-energy-cost: 10
+  play-energy-cost: 3
   favorite-mood-multiplier: 1.5
   favorite-food-mood: 8
   sleep-minutes-to-full: 8

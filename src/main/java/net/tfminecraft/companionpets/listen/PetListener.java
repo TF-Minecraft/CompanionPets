@@ -33,6 +33,7 @@ import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import net.tfminecraft.companionpets.gui.MenuHolder;
+import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.runtime.PetActions;
 import net.tfminecraft.companionpets.runtime.PetRuntime;
@@ -148,6 +149,7 @@ public final class PetListener implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         runtime.sessions().clearPlayer(event.getPlayer().getUniqueId());
+        PetFx.clearPlayer(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
