@@ -25,12 +25,14 @@ public final class CompanionConfig {
     private final PlaySettings play;
     private final TrainingSettings training;
     private final Limits limits;
+    private final MomentSettings moments;
+    private final SocialSettings social;
+    private final RoamSettings roaming;
     private final double ownerNearRadius;
     private final double awayRate;
     private final double followTeleportBlocks;
     private final double cryIntervalSeconds;
     private final Material kennel;
-    private final Material whistle;
     private final Map<String, PetTypeDef> types;
 
     private CompanionConfig(
@@ -38,23 +40,27 @@ public final class CompanionConfig {
             PlaySettings play,
             TrainingSettings training,
             Limits limits,
+            MomentSettings moments,
+            SocialSettings social,
+            RoamSettings roaming,
             double ownerNearRadius,
             double awayRate,
             double followTeleportBlocks,
             double cryIntervalSeconds,
             Material kennel,
-            Material whistle,
             Map<String, PetTypeDef> types) {
         this.care = care;
         this.play = play;
         this.training = training;
         this.limits = limits;
+        this.moments = moments;
+        this.social = social;
+        this.roaming = roaming;
         this.ownerNearRadius = ownerNearRadius;
         this.awayRate = awayRate;
         this.followTeleportBlocks = followTeleportBlocks;
         this.cryIntervalSeconds = cryIntervalSeconds;
         this.kennel = kennel;
-        this.whistle = whistle;
         this.types = types;
     }
 
@@ -86,7 +92,11 @@ public final class CompanionConfig {
                 num(logger, care, "bond-gain-per-minute", defaults.bondGainPerMinute()),
                 num(logger, care, "bond-loss-per-minute", defaults.bondLossPerMinute()),
                 num(logger, care, "wake-mood-penalty", defaults.wakeMoodPenalty()),
-                num(logger, care, "critical-sound-seconds", defaults.criticalSoundSeconds()));
+                num(logger, care, "critical-sound-seconds", defaults.criticalSoundSeconds()),
+                num(logger, care, "overfeed-mood-penalty", defaults.overfeedMoodPenalty()),
+                num(logger, care, "overfeed-health-penalty", defaults.overfeedHealthPenalty()),
+                num(logger, care, "struck-mood-penalty", defaults.struckMoodPenalty()),
+                num(logger, care, "rest-again-seconds", defaults.restAgainSeconds()));
 
         ConfigurationSection play = config.getConfigurationSection("play");
         PlaySettings playSettings = new PlaySettings(
@@ -117,6 +127,10 @@ public final class CompanionConfig {
                 limits != null && limits.contains("max-stored") ? limits.getInt("max-stored") : limitDefaults.maxStored(),
                 limits != null && limits.contains("max-out") ? limits.getInt("max-out") : limitDefaults.maxOut());
 
+        MomentSettings momentSettings = MomentSettings.load(config.getConfigurationSection("moments"), logger);
+        SocialSettings socialSettings = SocialSettings.load(config.getConfigurationSection("social"), logger);
+        RoamSettings roamSettings = RoamSettings.load(config.getConfigurationSection("roaming"), logger);
+
         ConfigurationSection presence = config.getConfigurationSection("presence");
         double near = num(logger, presence, "owner-near-radius", 32);
         double away = num(logger, presence, "away-rate", 0.25);
@@ -125,8 +139,6 @@ public final class CompanionConfig {
 
         ConfigurationSection items = config.getConfigurationSection("items");
         Material kennel = material(items, "kennel", Material.BARREL, plugin.getLogger());
-        Material whistle = material(items, "whistle", Material.GOAT_HORN, plugin.getLogger());
-
         boolean mythic = plugin.getServer().getPluginManager().isPluginEnabled("MythicMobs");
         Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), mythic, plugin.getLogger());
         return new CompanionConfig(
@@ -134,12 +146,14 @@ public final class CompanionConfig {
                 playSettings,
                 trainingSettings,
                 limitSettings,
+                momentSettings,
+                socialSettings,
+                roamSettings,
                 near,
                 away,
                 teleport,
                 cry,
                 kennel,
-                whistle,
                 types);
     }
 
@@ -279,6 +293,18 @@ public final class CompanionConfig {
         return limits;
     }
 
+    public MomentSettings moments() {
+        return moments;
+    }
+
+    public SocialSettings social() {
+        return social;
+    }
+
+    public RoamSettings roaming() {
+        return roaming;
+    }
+
     public double ownerNearRadius() {
         return ownerNearRadius;
     }
@@ -297,10 +323,6 @@ public final class CompanionConfig {
 
     public Material kennel() {
         return kennel;
-    }
-
-    public Material whistle() {
-        return whistle;
     }
 
     public Map<String, PetTypeDef> types() {

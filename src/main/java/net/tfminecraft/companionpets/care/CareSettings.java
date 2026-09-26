@@ -23,7 +23,11 @@ public record CareSettings(
         double bondGainPerMinute,
         double bondLossPerMinute,
         double wakeMoodPenalty,
-        double criticalSoundSeconds) {
+        double criticalSoundSeconds,
+        double overfeedMoodPenalty,
+        double overfeedHealthPenalty,
+        double struckMoodPenalty,
+        double restAgainSeconds) {
 
     public static CareSettings defaults() {
         return new CareSettings(
@@ -38,7 +42,7 @@ public record CareSettings(
                 false,
                 6,
                 22,
-                10,
+                3,
                 1.5,
                 8,
                 8,
@@ -49,6 +53,10 @@ public record CareSettings(
                 0.4,
                 0.8,
                 8,
-                8);
+                8,
+                12,
+                8,
+                6,
+                45);
     }
 }

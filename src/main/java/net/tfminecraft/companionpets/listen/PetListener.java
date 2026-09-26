@@ -16,6 +16,7 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -32,6 +33,7 @@ import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import net.tfminecraft.companionpets.gui.MenuHolder;
+import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.runtime.PetActions;
 import net.tfminecraft.companionpets.runtime.PetRuntime;
@@ -99,7 +101,8 @@ public final class PetListener implements Listener {
         if (event.getClickedInventory() == null || event.getClickedInventory() != event.getView().getTopInventory()) {
             return;
         }
-        actions.clickMenu(player, menu, event.getSlot(), event.getCurrentItem(), event.isRightClick(), event.isShiftClick());
+        boolean lettingGo = event.getClick() == ClickType.DROP || event.getClick() == ClickType.CONTROL_DROP;
+        actions.clickMenu(player, menu, event.getSlot(), event.getCurrentItem(), event.isRightClick(), event.isShiftClick(), lettingGo);
     }
 
     @EventHandler
@@ -131,7 +134,7 @@ public final class PetListener implements Listener {
         if (pet == null) {
             return;
         }
-        pet.clearRuntimeMotion();
+        actions.lostBody(pet);
     }
 
     @EventHandler
@@ -146,6 +149,7 @@ public final class PetListener implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         runtime.sessions().clearPlayer(event.getPlayer().getUniqueId());
+        PetFx.clearPlayer(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
@@ -179,12 +183,18 @@ public final class PetListener implements Listener {
         actions.toyLanded(pet, pet.fetch().itemId());
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onToyDamage(EntityDamageByEntityEvent event) {
         if (event.getDamager() instanceof Projectile projectile
                 && projectile.getPersistentDataContainer().has(runtime.toyKey(), PersistentDataType.STRING)) {
             event.setCancelled(true);
+            return;
         }
+        Pet pet = runtime.byEntity(event.getEntity());
+        if (pet == null) {
+            return;
+        }
+        actions.struck(pet, event.getEntity());
     }
 
     @EventHandler

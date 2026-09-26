@@ -7,6 +7,7 @@ import java.util.UUID;
 public final class Sessions {
     private final Map<UUID, HatchPrompt> hatches = new HashMap<>();
     private final Map<UUID, RenamePrompt> renames = new HashMap<>();
+    private final Map<UUID, ReleasePrompt> releases = new HashMap<>();
     private final Map<UUID, TrainingSession> training = new HashMap<>();
     private final Map<UUID, Long> trainingRest = new HashMap<>();
 
@@ -33,6 +34,10 @@ public final class Sessions {
     public void clearRename(UUID playerId) {
         renames.remove(playerId);
     }
+
+    public ReleasePrompt release(UUID playerId) { return releases.get(playerId); }
+    public void release(UUID playerId, ReleasePrompt prompt) { releases.put(playerId, prompt); }
+    public void clearRelease(UUID playerId) { releases.remove(playerId); }
 
     public TrainingSession training(UUID playerId) {
         return training.get(playerId);
@@ -69,6 +74,7 @@ public final class Sessions {
     public void clearPlayer(UUID playerId) {
         hatches.remove(playerId);
         renames.remove(playerId);
+        releases.remove(playerId);
         training.remove(playerId);
     }
 }

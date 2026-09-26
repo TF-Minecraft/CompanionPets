@@ -9,7 +9,8 @@ public final class MenuHolder implements InventoryHolder {
     public enum Kind {
         CARE,
         KENNEL,
-        TRICK
+        TRICK,
+        LEARNED
     }
 
     private final Kind kind;

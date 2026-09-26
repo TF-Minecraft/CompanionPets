@@ -37,8 +37,7 @@ public final class Bodies {
             return null;
         }
         Entity entity;
-        boolean mythic = type.mythicMob() != null;
-        if (mythic) {
+        if (type.mythicMob() != null) {
             entity = MythicSpawn.spawn(type.mythicMob(), location, plugin.getLogger());
         } else if (type.entity() != null && type.entity().isAlive() && type.entity().getEntityClass() != null) {
             entity = location.getWorld().spawn(location, type.entity().getEntityClass());
@@ -48,7 +47,7 @@ public final class Bodies {
         if (entity == null) {
             return null;
         }
-        prepare(entity, pet, type, owner, !mythic);
+        prepare(entity, pet, type, owner);
         return entity;
     }
 
@@ -58,6 +57,10 @@ public final class Bodies {
         }
         tag(entity, pet.id());
         name(entity, pet.name());
+        if (entity instanceof Tameable tameable) {
+            tameable.setTamed(true);
+            tameable.setOwner(Bukkit.getOfflinePlayer(pet.ownerId()));
+        }
         visual.apply(entity, type);
     }
 
@@ -73,7 +76,7 @@ public final class Bodies {
         }
     }
 
-    private void prepare(Entity entity, Pet pet, PetTypeDef type, Player owner, boolean clearVanillaGoals) {
+    private void prepare(Entity entity, Pet pet, PetTypeDef type, Player owner) {
         tag(entity, pet.id());
         name(entity, pet.name());
         if (!entity.isPersistent()) {
@@ -81,9 +84,6 @@ public final class Bodies {
         }
         if (entity instanceof Mob mob) {
             mob.setRemoveWhenFarAway(false);
-            if (clearVanillaGoals) {
-                Bukkit.getMobGoals().removeAllGoals(mob);
-            }
         }
         if (entity instanceof Ageable ageable) {
             ageable.setAdult();

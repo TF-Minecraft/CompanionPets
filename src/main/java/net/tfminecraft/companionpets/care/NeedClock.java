@@ -28,7 +28,7 @@ public final class NeedClock {
             double minutes = input.elapsedMillis() / 60000.0 * rate;
             double hungerRate = input.sleeping() ? care.sleepingHungerMultiplier() : 1.0;
             pet.need(Need.HUNGER, pet.need(Need.HUNGER) - dropPerMinute(care.hungerMinutesToCritical()) * minutes * hungerRate);
-            if (!input.playing()) {
+            if (!input.playing() && pet.illness() != Illness.SICK && pet.illness() != Illness.WEAKENED) {
                 pet.need(Need.MOOD, pet.need(Need.MOOD) - dropPerMinute(care.moodMinutesToCritical()) * minutes);
             }
             if (input.walking() || (input.presence() == Presence.NEAR && !input.sleeping())) {

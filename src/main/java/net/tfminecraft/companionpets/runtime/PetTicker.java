@@ -9,6 +9,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
@@ -17,6 +18,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 import net.tfminecraft.companionpets.behavior.Locomotion;
+import net.tfminecraft.companionpets.behavior.Rest;
 import net.tfminecraft.companionpets.care.CareInput;
 import net.tfminecraft.companionpets.care.CareNotice;
 import net.tfminecraft.companionpets.care.DominantNeed;
@@ -37,9 +39,11 @@ import net.tfminecraft.companionpets.gui.StatLook;
 import net.tfminecraft.companionpets.text.PetTexts;
 
 public final class PetTicker implements Runnable {
+    private static final long MISSING_BODY_GRACE_MILLIS = 5_000L;
     private final PetRuntime runtime;
     private final PetActions actions;
     private final Map<UUID, String> shown = new HashMap<>();
+    private final Map<UUID, Long> missingBodySince = new HashMap<>();
     private long lastCareAt;
 
     public PetTicker(PetRuntime runtime, PetActions actions) {
@@ -55,19 +59,31 @@ public final class PetTicker implements Runnable {
         if (elapsed > 0L) {
             care(now, elapsed);
         }
+        actions.roaming().tickOwners(now);
+        actions.social().tick(now);
         move(now);
         watchTraining(now);
-        lookBars();
     }
 
     private void care(long now, long elapsed) {
         for (Pet pet : runtime.store().all()) {
             if (pet.dead()) {
+                missingBodySince.remove(pet.id());
                 continue;
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
             boolean online = owner != null && owner.isOnline();
             Entity body = runtime.entity(pet);
+            if (body == null && pet.entityId() != null && bodyChunkEntitiesLoaded(pet)) {
+                long firstMissing = missingBodySince.computeIfAbsent(pet.id(), id -> now);
+                if (now - firstMissing >= MISSING_BODY_GRACE_MILLIS) {
+                    missingBodySince.remove(pet.id());
+                    actions.lostBody(pet);
+                    continue;
+                }
+            } else {
+                missingBodySince.remove(pet.id());
+            }
             if (body != null) {
                 runtime.remember(pet, body);
             }
@@ -91,11 +107,16 @@ public final class PetTicker implements Runnable {
                             pet.order(),
                             pet.staying());
             boolean withOwner = !pet.stored() && online && distance <= runtime.config().ownerNearRadius();
-            if (!pet.stored()
-                    && pet.activity() == Activity.NONE
-                    && pet.fetch() == null
-                    && pet.need(Need.ENERGY) < 25.0) {
+            if (!pet.stored() && Rest.shouldLieDown(
+                    pet.need(Need.ENERGY),
+                    pet.activity(),
+                    pet.fetch() != null,
+                    now,
+                    pet.refuseRestUntilMillis())) {
                 pet.activity(Activity.SLEEPING);
+                if (body != null) {
+                    actions.markSleep(body, true);
+                }
                 if (online) {
                     PetFx.bar(owner, pet.name() + " lies down to rest");
                 }
@@ -110,6 +131,7 @@ public final class PetTicker implements Runnable {
                     runtime.config().care(),
                     runtime.config().awayRate()));
             if (pet.dead()) {
+                actions.clearInteractions(pet);
                 if (body != null) {
                     body.remove();
                 }
@@ -125,7 +147,8 @@ public final class PetTicker implements Runnable {
                         PetFx.bar(owner, PetTexts.lowNeed(pet.name(), pet.sex(), notice.need()));
                         if (body != null) {
                             PetFx.ambient(body);
-                            PetFx.particle(body, Particle.END_ROD, 6);
+                            PetTypeDef petType = runtime.config().type(pet.typeId());
+                            PetFx.need(body, notice.need(), petType == null ? null : petType.favoriteFood());
                         }
                     } else if (notice.kind() != CareNotice.Kind.ENTERED_LOW) {
                         PetFx.bar(owner, PetTexts.illness(pet.name(), pet.sex(), pet.illness()));
@@ -166,6 +189,17 @@ public final class PetTicker implements Runnable {
                 }
             }
         }
+        missingBodySince.keySet().removeIf(id -> runtime.store().get(id) == null);
+    }
+
+    private static boolean bodyChunkEntitiesLoaded(Pet pet) {
+        World world = Bukkit.getWorld(pet.worldName());
+        if (world == null) {
+            return false;
+        }
+        int chunkX = ((int) Math.floor(pet.x())) >> 4;
+        int chunkZ = ((int) Math.floor(pet.z())) >> 4;
+        return world.isChunkLoaded(chunkX, chunkZ) && world.getChunkAt(chunkX, chunkZ).isEntitiesLoaded();
     }
 
     private void move(long now) {
@@ -188,12 +222,28 @@ public final class PetTicker implements Runnable {
                     now < pet.forcedSitUntilMillis(),
                     pet.order(),
                     pet.staying());
+            actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
+            if (actions.roaming().tickAttention(pet, mob, now)) {
+                continue;
+            }
+            if (mode == Locomotion.Mode.FOLLOW && mob.getTarget() != null) {
+                continue;
+            }
+            if (actions.social().engaged(pet)) {
+                actions.roaming().cancelPlan(pet);
+                continue;
+            }
+            if (actions.advanceSpin(pet, mob, mode, now)) {
+                continue;
+            }
             if (mode == Locomotion.Mode.FETCH) {
-                stepFetch(pet, mob, owner, now);
+                FetchNavigationGoal.ensure(runtime, pet, mob,
+                        () -> stepFetch(pet, mob, Bukkit.getPlayer(pet.ownerId()), System.currentTimeMillis()));
             } else {
                 stepMode(pet, mob, owner, mode, now);
             }
             express(pet, mob, owner, mode, now);
+            actions.moments().tick(pet, mob, owner, mode, now);
             playVisual(pet, mob, mode);
         }
     }
@@ -220,6 +270,8 @@ public final class PetTicker implements Runnable {
                 if (distance > runtime.config().followTeleportBlocks()) {
                     mob.teleport(PetRuntime.beside(owner));
                     mob.getPathfinder().stopPathfinding();
+                } else if (actions.roaming().step(pet, mob, owner, speed, now)) {
+                    // The owner is resting, so this pet explores nearby instead of staring at them.
                 } else if (distance > Locomotion.followDistance(pet.bond())) {
                     mob.getPathfinder().moveTo(owner.getLocation(), speed);
                 } else {
@@ -234,9 +286,10 @@ public final class PetTicker implements Runnable {
             }
             case LIE, SLEEP -> {
                 mob.getPathfinder().stopPathfinding();
-                PetFx.lie(mob, true);
-                if (mode == Locomotion.Mode.SLEEP && mob.getTicksLived() % 40 < 10) {
-                    PetFx.particle(mob, Particle.WAX_OFF, 1);
+                if (mode == Locomotion.Mode.SLEEP) {
+                    PetFx.sit(mob, true);
+                } else {
+                    PetFx.lie(mob, true);
                 }
             }
             case PLAY -> {
@@ -334,10 +387,9 @@ public final class PetTicker implements Runnable {
             Need dominant = DominantNeed.select(pet);
             if (pet.illness() == Illness.SICK || pet.illness() == Illness.UNWELL || pet.illness() == Illness.WEAKENED) {
                 PetFx.particle(mob, Particle.SNEEZE, 2);
-            } else if (dominant == Need.HUNGER) {
-                PetFx.particle(mob, Particle.ANGRY_VILLAGER, 2);
-            } else if (dominant == Need.CLEANLINESS) {
-                PetFx.particle(mob, Particle.DUST_PLUME, 4);
+            } else {
+                PetTypeDef type = runtime.config().type(pet.typeId());
+                PetFx.need(mob, dominant, type == null ? null : type.favoriteFood());
             }
         }
         if (pet.need(Need.CLEANLINESS) < 60.0 && mob.getTicksLived() % 40 < 10) {
@@ -348,7 +400,7 @@ public final class PetTicker implements Runnable {
             if (distance > runtime.config().ownerNearRadius() && now >= pet.nextCryAtMillis()) {
                 pet.nextCryAtMillis(now + Math.round(runtime.config().cryIntervalSeconds() * 1000.0));
                 mob.getWorld().playSound(mob.getLocation(), PetFx.ambientSound(mob.getType()), 0.45f, 0.8f);
-                PetFx.particle(mob, Particle.WAX_OFF, 3);
+                PetFx.particle(mob, Particle.SPLASH, 3);
             }
         }
         if (mode == Locomotion.Mode.SLEEP) {
@@ -392,7 +444,7 @@ public final class PetTicker implements Runnable {
                     && body.getWorld().equals(player.getWorld())
                     && body.getLocation().distance(player.getLocation()) <= runtime.config().training().sessionDistance();
             if (pet == null || pet.stored()) {
-                actions.endTraining(player, pet, "your pet went back to the kennel");
+                actions.endTraining(player, pet, "your pet went back to the shelter");
             } else if (!holding) {
                 String treatName = actions.treatName(pet);
                 actions.endTraining(player, pet, player.getInventory().contains(treat)
@@ -408,8 +460,9 @@ public final class PetTicker implements Runnable {
         }
     }
 
-    private void lookBars() {
+    public void lookBars() {
         for (Player player : Bukkit.getOnlinePlayers()) {
+            if (PetFx.refreshHeld(player)) continue;
             Entity looked = PetActions.lookingAt(player, 4.5);
             Pet pet = runtime.byEntity(looked);
             if (pet == null) {
@@ -417,10 +470,17 @@ public final class PetTicker implements Runnable {
             }
             TrainingSession session = runtime.sessions().training(player.getUniqueId());
             boolean training = session != null && session.petId().equals(pet.id());
+            String socialStatus = actions.social().status(pet);
             if (training && (session.pendingWord() != null || session.rewardTrick() != null)) {
                 continue;
             }
-            Component tag = training ? StatLook.tag("Training · say a command", NamedTextColor.AQUA) : null;
+            Component tag = training
+                    ? StatLook.tag("Training · say a command", NamedTextColor.AQUA)
+                    : socialStatus != null
+                            ? StatLook.tag(socialStatus, NamedTextColor.RED)
+                    : pet.illness() == Illness.NONE
+                            ? null
+                            : StatLook.tag(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED);
             PetFx.status(player, StatLook.summary(pet, tag));
         }
     }

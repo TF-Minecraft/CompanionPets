@@ -24,6 +24,7 @@ import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.pet.PetOrder;
+import net.tfminecraft.companionpets.pet.PetPersonality;
 import net.tfminecraft.companionpets.pet.PetSex;
 import net.tfminecraft.companionpets.pet.Trick;
 
@@ -98,6 +99,7 @@ public final class PetStore {
             yaml.set(path + ".type", pet.typeId());
             yaml.set(path + ".name", pet.name());
             yaml.set(path + ".sex", pet.sex().name());
+            yaml.set(path + ".personality", pet.personality().name());
             yaml.set(path + ".born-at", pet.bornAt());
             yaml.set(path + ".order", pet.order().name());
             yaml.set(path + ".staying", pet.staying());
@@ -172,6 +174,7 @@ public final class PetStore {
                 section.getString("name", "Mascota"),
                 enumValue(PetSex.class, section.getString("sex"), PetSex.FEMALE));
         pet.bornAt(section.getLong("born-at", 0L));
+        pet.personality(enumValue(PetPersonality.class, section.getString("personality"), PetPersonality.forId(id)));
         pet.order(enumValue(PetOrder.class, section.getString("order"), PetOrder.FOLLOW));
         pet.staying(section.getBoolean("staying"));
         pet.stored(section.getBoolean("stored"));

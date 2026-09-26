@@ -12,10 +12,11 @@ import net.tfminecraft.companionpets.play.FetchJob;
 
 public final class Pet {
     private final UUID id;
-    private final UUID ownerId;
+    private UUID ownerId;
     private final String typeId;
     private String name;
     private PetSex sex;
+    private PetPersonality personality;
     private PetOrder order = PetOrder.FOLLOW;
     private Activity activity = Activity.NONE;
     private boolean staying;
@@ -45,6 +46,7 @@ public final class Pet {
     private long nextCryAtMillis;
     private long nextCriticalSoundAtMillis;
     private long pauseUntilMillis;
+    private long refuseRestUntilMillis;
 
     public Pet(UUID id, UUID ownerId, String typeId, String name, PetSex sex) {
         this.id = id;
@@ -52,6 +54,7 @@ public final class Pet {
         this.typeId = typeId;
         this.name = name;
         this.sex = sex;
+        this.personality = PetPersonality.forId(id);
         for (Need need : Need.values()) {
             needs.put(need, 100.0);
         }
@@ -65,6 +68,10 @@ public final class Pet {
 
     public UUID ownerId() {
         return ownerId;
+    }
+
+    public void ownerId(UUID ownerId) {
+        this.ownerId = java.util.Objects.requireNonNull(ownerId);
     }
 
     public String typeId() {
@@ -85,6 +92,14 @@ public final class Pet {
 
     public void sex(PetSex sex) {
         this.sex = sex;
+    }
+
+    public PetPersonality personality() {
+        return personality;
+    }
+
+    public void personality(PetPersonality personality) {
+        this.personality = personality == null ? PetPersonality.forId(id) : personality;
     }
 
     public long bornAt() {
@@ -278,7 +293,9 @@ public final class Pet {
         if (word == null) {
             return null;
         }
-        return words.get(SpokenOrder.key(word));
+        String key = SpokenOrder.key(word);
+        Trick direct = words.get(key);
+        return direct != null ? direct : "follow".equals(key) && words.get("come") == Trick.COME ? Trick.COME : null;
     }
 
     public boolean knowsWord(String word) {
@@ -345,6 +362,14 @@ public final class Pet {
         this.pauseUntilMillis = pauseUntilMillis;
     }
 
+    public long refuseRestUntilMillis() {
+        return refuseRestUntilMillis;
+    }
+
+    public void refuseRestUntilMillis(long refuseRestUntilMillis) {
+        this.refuseRestUntilMillis = Math.max(0L, refuseRestUntilMillis);
+    }
+
     public boolean causeCritical() {
         return need(Need.HUNGER) < 25.0
                 || need(Need.MOOD) < 25.0
@@ -367,6 +392,7 @@ public final class Pet {
         playUntilMillis = 0L;
         forcedSitUntilMillis = 0L;
         pauseUntilMillis = 0L;
+        refuseRestUntilMillis = 0L;
     }
 
     private static double clamp(double value) {

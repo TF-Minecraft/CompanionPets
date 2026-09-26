@@ -5,8 +5,10 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.entity.Pose;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Fox;
@@ -14,6 +16,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Sittable;
 import org.bukkit.entity.Wolf;
+import org.bukkit.inventory.ItemStack;
 
 import io.papermc.paper.entity.LookAnchor;
 import org.bukkit.util.Vector;
@@ -21,12 +24,13 @@ import org.bukkit.util.Vector;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.tfminecraft.companionpets.pet.Need;
 
 public final class PetFx {
     private static final long REPEAT_AFTER_MILLIS = 1_600L;
     private static final long HOLD_MILLIS = 2_200L;
     private static final Map<UUID, Hold> HOLDS = new HashMap<>();
-    private static final Map<UUID, Long> QUIET = new HashMap<>();
+    private static final Map<UUID, Alert> ALERTS = new HashMap<>();
 
     private PetFx() {
     }
@@ -37,7 +41,7 @@ public final class PetFx {
 
     public static void bar(Player player, Component text) {
         show(player, text);
-        QUIET.put(player.getUniqueId(), System.currentTimeMillis() + HOLD_MILLIS);
+        ALERTS.put(player.getUniqueId(), new Alert(text, System.currentTimeMillis() + HOLD_MILLIS));
     }
 
     public static void tell(Player player, String text) {
@@ -57,11 +61,23 @@ public final class PetFx {
     }
 
     public static void status(Player player, Component text) {
-        Long until = QUIET.get(player.getUniqueId());
-        if (until != null && System.currentTimeMillis() < until) {
-            return;
+        if (!refreshHeld(player)) player.sendActionBar(text);
+    }
+
+    public static boolean refreshHeld(Player player) {
+        Alert alert = ALERTS.get(player.getUniqueId());
+        if (alert == null) return false;
+        if (System.currentTimeMillis() >= alert.until) {
+            ALERTS.remove(player.getUniqueId());
+            return false;
         }
-        show(player, text);
+        player.sendActionBar(alert.text);
+        return true;
+    }
+
+    public static void clearPlayer(UUID playerId) {
+        ALERTS.remove(playerId);
+        HOLDS.remove(playerId);
     }
 
     private static void show(Player player, Component text) {
@@ -91,6 +107,26 @@ public final class PetFx {
         entity.getWorld().spawnParticle(particle, entity.getLocation().add(0, 0.8, 0), count, 0.25, 0.3, 0.25, 0);
     }
 
+    public static void need(Entity entity, Need need, Material favoriteFood) {
+        if (need == null) {
+            return;
+        }
+        if (need == Need.HUNGER) {
+            Material food = favoriteFood == null ? Material.COOKED_BEEF : favoriteFood;
+            entity.getWorld().spawnParticle(Particle.ITEM, entity.getLocation().add(0, 0.9, 0),
+                    4, 0.2, 0.2, 0.2, 0.02, new ItemStack(food));
+            return;
+        }
+        Particle signal = switch (need) {
+            case MOOD -> Particle.SPLASH;
+            case ENERGY -> Particle.CLOUD;
+            case CLEANLINESS -> Particle.DUST_PLUME;
+            case HEALTH -> Particle.DAMAGE_INDICATOR;
+            default -> Particle.CLOUD;
+        };
+        particle(entity, signal, need == Need.CLEANLINESS ? 4 : 3);
+    }
+
     public static void sit(Entity entity, boolean sitting) {
         if (entity instanceof Sittable sittable) {
             sittable.setSitting(sitting);
@@ -106,7 +142,14 @@ public final class PetFx {
             fox.setSitting(false);
             return;
         }
+        if (entity instanceof LivingEntity living && living.getPose() == Pose.SLEEPING) {
+            living.setPose(Pose.STANDING);
+        }
         sit(entity, lying);
+    }
+
+    public static void hurt(Entity entity) {
+        entity.getWorld().playSound(entity.getLocation(), hurtSound(entity.getType()), 1.0f, 1.0f);
     }
 
     public static void beg(Entity entity) {
@@ -140,6 +183,9 @@ public final class PetFx {
     private record Hold(String text, long at) {
     }
 
+    private record Alert(Component text, long until) {
+    }
+
     public static void happy(Entity entity, boolean loud) {
         Sound sound = switch (entity.getType()) {
             case WOLF -> loud ? Sound.ENTITY_WOLF_AMBIENT : Sound.ENTITY_WOLF_PANT;
@@ -158,6 +204,16 @@ public final class PetFx {
             default -> ambientSound(entity.getType());
         };
         entity.getWorld().playSound(entity.getLocation(), sound, 0.8f, 0.9f);
+    }
+
+    public static Sound hurtSound(EntityType type) {
+        return switch (type) {
+            case WOLF -> Sound.ENTITY_WOLF_HURT;
+            case CAT -> Sound.ENTITY_CAT_HURT;
+            case FOX -> Sound.ENTITY_FOX_HURT;
+            case PARROT -> Sound.ENTITY_PARROT_HURT;
+            default -> Sound.ENTITY_PLAYER_HURT;
+        };
     }
 
     public static Sound ambientSound(EntityType type) {

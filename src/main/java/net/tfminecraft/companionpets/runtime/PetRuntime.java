@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.block.Block;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -119,14 +120,45 @@ public final class PetRuntime {
     }
 
     public static Location beside(Player player) {
-        Location location = player.getLocation().clone();
-        Vector direction = location.getDirection();
-        direction.setY(0);
-        if (direction.lengthSquared() < 1.0E-4) {
-            direction = new Vector(0, 0, 1);
+        Location feet = player.getLocation();
+        Vector forward = feet.getDirection().clone();
+        forward.setY(0);
+        if (forward.lengthSquared() < 1.0E-4) {
+            forward = new Vector(0, 0, 1);
+        } else {
+            forward.normalize();
         }
-        location.add(direction.normalize().multiply(1.4));
-        return location;
+        Vector side = new Vector(-forward.getZ(), 0, forward.getX());
+        Location[] spots = {
+            offset(feet, forward, 1.6),
+            offset(feet, forward, -1.6),
+            offset(feet, side, 1.6),
+            offset(feet, side, -1.6),
+            feet.clone().add(0, 1, 0)
+        };
+        for (Location spot : spots) {
+            spot.setYaw(feet.getYaw());
+            spot.setPitch(0);
+            if (open(spot)) {
+                return spot;
+            }
+        }
+        Location above = feet.clone().add(0, 1, 0);
+        above.setPitch(0);
+        return above;
+    }
+
+    private static Location offset(Location feet, Vector direction, double scale) {
+        return feet.clone().add(direction.clone().multiply(scale));
+    }
+
+    private static boolean open(Location spot) {
+        if (spot.getWorld() == null) {
+            return false;
+        }
+        Block lower = spot.getBlock();
+        Block upper = lower.getRelative(0, 1, 0);
+        return lower.isPassable() && !lower.isLiquid() && upper.isPassable() && !upper.isLiquid();
     }
 
     public static Location inFront(Player player) {
