@@ -573,6 +573,12 @@ public final class PetActions {
         if (handleReleaseChat(player, text, now) || handleHatchChat(player, text, now) || handleRenameChat(player, text, now)) {
             return;
         }
+        Pet looked = runtime.byEntity(lookingAt(player, 6.0));
+        if (looked != null && looked.ownerId().equals(player.getUniqueId()) && !looked.stored()
+                && looked.trickFor(SpokenOrder.key(text)) != null) {
+            handleTrainingChat(player, text, now);
+            return;
+        }
         if (respondToName(player, text, now)) return;
         handleTrainingChat(player, text, now);
     }
