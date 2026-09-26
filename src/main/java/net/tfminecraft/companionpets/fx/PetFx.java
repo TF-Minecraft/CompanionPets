@@ -15,6 +15,7 @@ import org.bukkit.entity.Fox;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Sittable;
+import org.bukkit.entity.Wolf;
 import org.bukkit.inventory.ItemStack;
 
 import io.papermc.paper.entity.LookAnchor;
@@ -137,6 +138,22 @@ public final class PetFx {
 
     public static void hurt(Entity entity) {
         entity.getWorld().playSound(entity.getLocation(), hurtSound(entity.getType()), 1.0f, 1.0f);
+    }
+
+    public static void beg(Entity entity) {
+        if (entity instanceof Wolf wolf) {
+            wolf.setInterested(true);
+        }
+        if (entity instanceof LivingEntity living) {
+            Location above = living.getLocation().add(0, 2, 0);
+            living.lookAt(above.getX(), above.getY(), above.getZ(), LookAnchor.EYES);
+        }
+    }
+
+    public static void stopBeg(Entity entity) {
+        if (entity instanceof Wolf wolf && wolf.isValid()) {
+            wolf.setInterested(false);
+        }
     }
 
     public static void jump(Entity entity, boolean partial) {

@@ -285,6 +285,7 @@ public final class PetMenus {
             case SPIN -> Material.WIND_CHARGE;
             case SLEEP -> Material.RED_BED;
             case PAW -> Material.RABBIT_FOOT;
+            case BEG -> Material.COOKIE;
         };
     }
 

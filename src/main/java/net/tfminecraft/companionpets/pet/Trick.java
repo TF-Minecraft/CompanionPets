@@ -8,5 +8,6 @@ public enum Trick {
     JUMP,
     SPIN,
     SLEEP,
-    PAW
+    PAW,
+    BEG
 }

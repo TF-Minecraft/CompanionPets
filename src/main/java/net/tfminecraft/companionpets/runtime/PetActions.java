@@ -1140,6 +1140,13 @@ public final class PetActions {
                     PetFx.particle(entity, Particle.HEART, 2);
                 }
             }
+            case BEG -> {
+                pet.forcedSitUntilMillis(now + (partial ? 800L : 2_000L));
+                if (entity != null) {
+                    PetFx.beg(entity);
+                    Bukkit.getScheduler().runTaskLater(runtime.plugin(), () -> PetFx.stopBeg(entity), partial ? 16L : 40L);
+                }
+            }
             default -> {
             }
         }

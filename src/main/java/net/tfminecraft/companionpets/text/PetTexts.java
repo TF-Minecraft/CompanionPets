@@ -160,6 +160,7 @@ public final class PetTexts {
             case SPIN -> "Spin";
             case SLEEP -> "Rest";
             case PAW -> "Shake Paw";
+            case BEG -> "Beg";
         };
     }
 
@@ -173,6 +174,7 @@ public final class PetTexts {
             case SPIN -> "Twirls around in a circle";
             case SLEEP -> "Lies down and rests until recovered";
             case PAW -> "Gives you a paw";
+            case BEG -> "Sits up and begs for a treat";
         };
     }
 
@@ -186,6 +188,7 @@ public final class PetTexts {
             case SPIN -> name + " chases " + his(sex) + " own tail in a circle";
             case SLEEP -> name + " curls up to rest";
             case PAW -> name + " lifts a paw and gives it to you";
+            case BEG -> name + " sits up and begs";
         };
     }
 

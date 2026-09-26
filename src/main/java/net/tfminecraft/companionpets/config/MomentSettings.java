@@ -132,7 +132,12 @@ public record MomentSettings(
             return fallback;
         }
         try {
-            return Particle.valueOf(section.getString(key, "").trim().toUpperCase(Locale.ROOT));
+            Particle parsed = Particle.valueOf(section.getString(key, "").trim().toUpperCase(Locale.ROOT));
+            if (parsed.getDataType() != Void.class) {
+                logger.warning("Particle moments." + key + " requires particle data; using " + fallback);
+                return fallback;
+            }
+            return parsed;
         } catch (IllegalArgumentException ex) {
             logger.warning("Unknown particle moments." + key + "; using " + fallback);
             return fallback;

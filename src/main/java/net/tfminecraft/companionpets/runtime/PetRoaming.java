@@ -93,7 +93,10 @@ final class PetRoaming {
         }
         Entity targetEntity = plan.targetId == null ? null : Bukkit.getEntity(plan.targetId);
         Location target = targetEntity == null ? plan.point : targetEntity.getLocation();
-        if (target == null || !target.getWorld().equals(body.getWorld())) return false;
+        if (target == null || !target.getWorld().equals(body.getWorld())) {
+            plans.remove(pet.id());
+            return false;
+        }
         double stopDistance = targetEntity == null ? 0.8 : 2.0;
         if (body.getLocation().distanceSquared(target) > square(stopDistance)) {
             body.getPathfinder().moveTo(target, speed * 0.9);

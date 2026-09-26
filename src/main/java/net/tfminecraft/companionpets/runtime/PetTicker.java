@@ -39,9 +39,11 @@ import net.tfminecraft.companionpets.gui.StatLook;
 import net.tfminecraft.companionpets.text.PetTexts;
 
 public final class PetTicker implements Runnable {
+    private static final long MISSING_BODY_GRACE_MILLIS = 5_000L;
     private final PetRuntime runtime;
     private final PetActions actions;
     private final Map<UUID, String> shown = new HashMap<>();
+    private final Map<UUID, Long> missingBodySince = new HashMap<>();
     private long lastCareAt;
 
     public PetTicker(PetRuntime runtime, PetActions actions) {
@@ -67,14 +69,21 @@ public final class PetTicker implements Runnable {
     private void care(long now, long elapsed) {
         for (Pet pet : runtime.store().all()) {
             if (pet.dead()) {
+                missingBodySince.remove(pet.id());
                 continue;
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
             boolean online = owner != null && owner.isOnline();
             Entity body = runtime.entity(pet);
-            if (body == null && pet.entityId() != null && bodyChunkLoaded(pet)) {
-                actions.lostBody(pet);
-                continue;
+            if (body == null && pet.entityId() != null && bodyChunkEntitiesLoaded(pet)) {
+                long firstMissing = missingBodySince.computeIfAbsent(pet.id(), id -> now);
+                if (now - firstMissing >= MISSING_BODY_GRACE_MILLIS) {
+                    missingBodySince.remove(pet.id());
+                    actions.lostBody(pet);
+                    continue;
+                }
+            } else {
+                missingBodySince.remove(pet.id());
             }
             if (body != null) {
                 runtime.remember(pet, body);
@@ -178,16 +187,17 @@ public final class PetTicker implements Runnable {
                 }
             }
         }
+        missingBodySince.keySet().removeIf(id -> runtime.store().get(id) == null);
     }
 
-    private static boolean bodyChunkLoaded(Pet pet) {
+    private static boolean bodyChunkEntitiesLoaded(Pet pet) {
         World world = Bukkit.getWorld(pet.worldName());
         if (world == null) {
             return false;
         }
         int chunkX = ((int) Math.floor(pet.x())) >> 4;
         int chunkZ = ((int) Math.floor(pet.z())) >> 4;
-        return world.isChunkLoaded(chunkX, chunkZ);
+        return world.isChunkLoaded(chunkX, chunkZ) && world.getChunkAt(chunkX, chunkZ).isEntitiesLoaded();
     }
 
     private void move(long now) {
