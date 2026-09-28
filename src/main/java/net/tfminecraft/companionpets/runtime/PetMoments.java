@@ -63,6 +63,16 @@ final class PetMoments {
         // Rate limit attempts as well as successes, so rapid clicks cannot force a moment.
         nextBellyAt.put(pet, now + Math.round(runtime.config().belly().cooldownSeconds() * 1000));
         if (runtime.random().nextDouble() * 100 >= runtime.config().belly().chance()) return false;
+        return startBelly(pet, body, owner);
+    }
+
+    boolean triggerBelly(Pet pet, Mob body, Player owner) {
+        if (!bellyReady(pet, body, owner)) return false;
+        if (runtime.visual().belly(body)) return runtime.visual().rubBelly(body);
+        return startBelly(pet, body, owner);
+    }
+
+    private boolean startBelly(Pet pet, Mob body, Player owner) {
         if (!runtime.visual().startBelly(body, runtime.config().type(pet.typeId()), Math.round(runtime.config().belly().idleSeconds() * 1000))) return false;
         PetFx.sit(body, false);
         body.getPathfinder().stopPathfinding();

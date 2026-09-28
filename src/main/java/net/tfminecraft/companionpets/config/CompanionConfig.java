@@ -8,7 +8,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.EnumSet;
 import java.util.logging.Logger;
 
 import org.bukkit.Material;
@@ -39,8 +38,8 @@ public final class CompanionConfig {
     private final double cryIntervalSeconds;
     private final Material kennel;
     private final Map<String, PetTypeDef> types;
-    private Map<Trick, CustomTrick> customTricks = Map.of();
-    private BellySettings belly = new BellySettings(true, 25, 5, 60, 70);
+    private final Map<Trick, CustomTrick> customTricks;
+    private final BellySettings belly;
     public BellySettings belly() { return belly; }
     public CustomTrick customTrick(Trick trick) { return customTricks.get(trick); }
     public java.util.List<Trick> tricks() {
@@ -62,7 +61,9 @@ public final class CompanionConfig {
             double followTeleportBlocks,
             double cryIntervalSeconds,
             Material kennel,
-            Map<String, PetTypeDef> types) {
+            Map<String, PetTypeDef> types,
+            Map<Trick, CustomTrick> customTricks,
+            BellySettings belly) {
         this.care = care;
         this.play = play;
         this.training = training;
@@ -76,10 +77,15 @@ public final class CompanionConfig {
         this.cryIntervalSeconds = cryIntervalSeconds;
         this.kennel = kennel;
         this.types = types;
+        this.customTricks = customTricks;
+        this.belly = belly;
     }
 
     public static CompanionConfig load(JavaPlugin plugin) {
-        FileConfiguration config = plugin.getConfig();
+        return load(plugin, plugin.getConfig());
+    }
+
+    public static CompanionConfig load(JavaPlugin plugin, FileConfiguration config) {
         Logger logger = plugin.getLogger();
         CareSettings defaults = CareSettings.defaults();
         ConfigurationSection care = config.getConfigurationSection("care");
@@ -156,7 +162,7 @@ public final class CompanionConfig {
         boolean mythic = plugin.getServer().getPluginManager().isPluginEnabled("MythicMobs");
         Map<Trick, CustomTrick> custom = CustomTrick.read(config.getConfigurationSection("custom-tricks"), logger);
         Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), mythic, plugin.getLogger(), custom);
-        CompanionConfig loaded = new CompanionConfig(
+        return new CompanionConfig(
                 careSettings,
                 playSettings,
                 trainingSettings,
@@ -169,10 +175,9 @@ public final class CompanionConfig {
                 teleport,
                 cry,
                 kennel,
-                types);
-        loaded.customTricks = custom;
-        loaded.belly = BellySettings.read(config.getConfigurationSection("moments.belly-up"), logger);
-        return loaded;
+                types,
+                custom,
+                BellySettings.read(config.getConfigurationSection("moments.belly-up"), logger));
     }
 
     private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom) {

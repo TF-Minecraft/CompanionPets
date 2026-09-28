@@ -77,4 +77,12 @@ public final class Sessions {
         releases.remove(playerId);
         training.remove(playerId);
     }
+
+    public void clear() {
+        hatches.clear();
+        renames.clear();
+        releases.clear();
+        training.clear();
+        trainingRest.clear();
+    }
 }

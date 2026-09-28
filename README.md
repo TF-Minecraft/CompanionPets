@@ -82,6 +82,9 @@ storage interrupt the moment. Setting `enabled: false` disables the experiment.
 
 A zero-length `belly_up` is held by the plugin; an animated one loops.
 Transitions retain their final frame until the next stage to avoid snapping.
+Operators can look at their pet and run `/companionpets moment belly` to
+trigger this moment without the chance roll or cooldown. The pet must still
+meet the health and activity requirements and have all three model clips.
 
 For a frog, the existing `animation.frog.croak` can optionally be mapped to
 `appearance.animations.speak`. Its tongue animation can be explicitly mapped
@@ -255,6 +258,13 @@ trick learned. Look at a pet and use `/companionpets personality
 friendly|playful|shy|territorial|grumpy` to set its personality, or
 `/companionpets moment dig` to show a find. With another pet nearby, use
 `/companionpets social sniff|chase|bark` to preview encounters.
+Use `/companionpets reload` to apply edits to `config.yml` without restarting
+the server. The command checks the YAML and keeps the current settings if a
+saved pet type would disappear. Active ModelEngine appearances are reapplied;
+open pet menus and pending training prompts are closed. Changing a pet's
+underlying entity type takes effect when that pet is summoned again. Existing
+`config.yml` files are not overwritten when the plugin updates, so add new
+sections such as `moments.belly-up` manually when you want to tune them.
 Use `/companionpets owner fake` while looking at a pet to give it a fictional,
 offline owner for solo encounter testing. Use `/companionpets owner self` to
 take it back. An online player name or UUID also works. Command options and

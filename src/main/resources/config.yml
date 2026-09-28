@@ -89,6 +89,8 @@ moments:
     min-mood: 70
   # Right-click again to rub the belly and reset the idle timer. Rewards keep
   # their normal cooldown. Damage, water, orders or leaving interrupt the moment.
+  # Operators can use /companionpets moment belly to trigger it immediately
+  # for testing; the pet still needs to be healthy and have all three clips.
   juvenile-hours: 24
   initial-delay-min-seconds: 180
   initial-delay-max-seconds: 420

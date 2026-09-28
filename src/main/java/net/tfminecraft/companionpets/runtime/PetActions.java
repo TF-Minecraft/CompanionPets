@@ -322,6 +322,14 @@ public final class PetActions {
             case "bark", "anger" -> moments.triggerBark(pet, body, player);
             case "mischief", "naughty" -> moments.triggerMischief(pet, body, player);
             case "dig", "gift" -> moments.triggerDig(pet, body, player);
+            case "belly" -> {
+                boolean started = moments.triggerBelly(pet, body, player);
+                if (started) {
+                    social.cancel(pet);
+                    roaming.cancel(pet);
+                }
+                yield started;
+            }
             default -> false;
         };
         if (!triggered) {
@@ -329,7 +337,8 @@ public final class PetActions {
                 case "mischief", "naughty" -> "No small plant is nearby, or the world has mobGriefing disabled. Place grass, a fern, or a flower beside the pet and try again.";
                 case "bark", "anger" -> "The pet could not find anything nearby to react to.";
                 case "dig", "gift" -> "This pet cannot dig right now. Check that digging is enabled and that it is not carrying a toy.";
-                default -> "Choose affection, bark, mischief, or dig.";
+                case "belly" -> "Belly rub must be enabled and needs a healthy pet on land with lie_back, belly_up, and get_up clips. Finish other actions first.";
+                default -> "Choose affection, bark, mischief, dig, or belly.";
             });
         }
         return triggered;

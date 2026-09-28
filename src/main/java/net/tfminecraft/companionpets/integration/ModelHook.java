@@ -171,6 +171,9 @@ public final class ModelHook implements PetVisual {
     @Override
     public void close() {
         for (Session session : java.util.List.copyOf(sessions.values())) remove(session.attachment.entity);
+        failedTypes.clear();
+        warnedMotion.clear();
+        retryAfter.clear();
     }
 
     private void fail(Entity entity, String type, RuntimeException ex) {
