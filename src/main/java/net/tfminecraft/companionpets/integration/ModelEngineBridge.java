@@ -5,10 +5,17 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.NamespacedKey;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import net.tfminecraft.companionpets.config.PetAppearance;
 import net.tfminecraft.companionpets.config.PetAppearance.Clip;
@@ -34,6 +41,26 @@ final class ModelEngineBridge {
     private final Method forceLoop = method(property, "setForceLoopMode", loop);
     private final Method forceOverride = method(property, "setForceOverride", override);
     private final Method destroyed = method(active, "isDestroyed");
+
+    void registerInteractions(JavaPlugin plugin, BiConsumer<Player, Entity> interaction) {
+        Class<?> eventType = api("events.BaseEntityInteractEvent");
+        Class<?> baseType = api("entity.BaseEntity");
+        Method getAction = method(eventType, "getAction");
+        Method getSlot = method(eventType, "getSlot");
+        Method getPlayer = method(eventType, "getPlayer");
+        Method getBase = method(eventType, "getBaseEntity");
+        Method getUuid = method(baseType, "getUUID");
+        Listener listener = new Listener() { };
+        Bukkit.getPluginManager().registerEvent(eventType.asSubclass(Event.class), listener, EventPriority.NORMAL,
+                (ignored, event) -> {
+                    String action = ((Enum<?>) call(getAction, event)).name();
+                    if (!action.equals("INTERACT") && !action.equals("INTERACT_ON")) return;
+                    if (call(getSlot, event) != org.bukkit.inventory.EquipmentSlot.HAND) return;
+                    UUID uuid = (UUID) call(getUuid, call(getBase, event));
+                    Entity entity = Bukkit.getEntity(uuid);
+                    if (entity != null) interaction.accept((Player) call(getPlayer, event), entity);
+                }, plugin);
+    }
 
     void removeSaved(Entity entity, String desiredModel) {
         String previous = entity.getPersistentDataContainer().get(MODEL_KEY, PersistentDataType.STRING);

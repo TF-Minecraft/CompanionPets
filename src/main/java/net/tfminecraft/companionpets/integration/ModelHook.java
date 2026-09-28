@@ -6,11 +6,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.visual.AnimationController;
@@ -29,6 +32,10 @@ public final class ModelHook implements PetVisual {
 
     public static boolean available() {
         return Bukkit.getPluginManager().isPluginEnabled("ModelEngine");
+    }
+
+    public void registerInteractions(JavaPlugin plugin, BiConsumer<Player, Entity> interaction) {
+        bridge.registerInteractions(plugin, interaction);
     }
 
     @Override

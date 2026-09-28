@@ -12,7 +12,6 @@ import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.Item;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
@@ -212,10 +211,7 @@ final class PetMoments {
 
     void cancel(Pet pet) {
         runtime.visual().cancelAction(runtime.entity(pet));
-        GiftJob gift = gifts.remove(pet);
-        if (gift != null && gift.display != null && gift.display.isValid()) {
-            gift.display.remove();
-        }
+        gifts.remove(pet);
         nextAt.remove(pet);
     }
 
@@ -246,7 +242,7 @@ final class PetMoments {
                 break;
             }
         }
-        gifts.put(pet, new GiftJob(found, now + 2_000L, now + 5_000L, now + 25_000L));
+        gifts.put(pet, new GiftJob(found, now + 5_000L, now + 25_000L));
         PetFx.look(body, body.getLocation().add(0, -0.5, 0));
         PetFx.particle(body, Particle.DUST_PLUME, 8);
         body.getWorld().playSound(body.getLocation(), Sound.BLOCK_GRAVEL_BREAK, 0.7f, 1.0f);
@@ -265,27 +261,12 @@ final class PetMoments {
             cancel(pet);
             return;
         }
-        if (now >= gift.readyAt && !gift.shown) {
-            gift.shown = true;
-            Item display = body.getWorld().dropItem(body.getLocation(), new ItemStack(gift.material));
-            display.setPickupDelay(Integer.MAX_VALUE);
-            display.setGravity(false);
-            display.setPersistent(false);
-            if (body.addPassenger(display)) {
-                gift.display = display;
-            } else {
-                display.remove();
-            }
-        }
         if (now < gift.deliverAt) {
             return;
         }
         if (body.getLocation().distanceSquared(owner.getLocation()) > 9.0) {
             body.getPathfinder().moveTo(owner.getLocation(), 1.1);
             return;
-        }
-        if (gift.display != null && gift.display.isValid()) {
-            gift.display.remove();
         }
         body.getWorld().dropItem(PetRuntime.inFront(owner), new ItemStack(gift.material));
         PetFx.particle(body, Particle.HAPPY_VILLAGER, 5);
@@ -295,15 +276,11 @@ final class PetMoments {
 
     private static final class GiftJob {
         private final Material material;
-        private final long readyAt;
         private final long deliverAt;
         private final long expiresAt;
-        private boolean shown;
-        private Item display;
 
-        private GiftJob(Material material, long readyAt, long deliverAt, long expiresAt) {
+        private GiftJob(Material material, long deliverAt, long expiresAt) {
             this.material = material;
-            this.readyAt = readyAt;
             this.deliverAt = deliverAt;
             this.expiresAt = expiresAt;
         }

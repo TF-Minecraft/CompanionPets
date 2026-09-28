@@ -1,6 +1,8 @@
 package net.tfminecraft.companionpets.listen;
 
 import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -44,6 +46,9 @@ import net.tfminecraft.companionpets.store.PetStore;
 public final class PetListener implements Listener {
     private final PetRuntime runtime;
     private final PetActions actions;
+    private final Map<UUID, Click> lastClicks = new HashMap<>();
+
+    private record Click(UUID entity, int tick) { }
 
     public PetListener(PetRuntime runtime, PetActions actions) {
         this.runtime = runtime;
@@ -56,9 +61,22 @@ public final class PetListener implements Listener {
             return;
         }
         Player player = event.getPlayer();
-        if (actions.useOnPet(player, event.getRightClicked(), player.getInventory().getItemInMainHand())) {
+        if (interact(player, event.getRightClicked())) {
             event.setCancelled(true);
         }
+    }
+
+    public void onModelInteract(Player player, Entity entity) {
+        if (runtime.visual().attached(entity)) interact(player, entity);
+    }
+
+    private boolean interact(Player player, Entity entity) {
+        Click previous = lastClicks.get(player.getUniqueId());
+        int tick = Bukkit.getCurrentTick();
+        if (previous != null && previous.tick() == tick && previous.entity().equals(entity.getUniqueId())) return true;
+        boolean handled = actions.useOnPet(player, entity, player.getInventory().getItemInMainHand());
+        if (handled) lastClicks.put(player.getUniqueId(), new Click(entity.getUniqueId(), tick));
+        return handled;
     }
 
     @EventHandler
@@ -174,6 +192,7 @@ public final class PetListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        lastClicks.remove(event.getPlayer().getUniqueId());
         runtime.sessions().clearPlayer(event.getPlayer().getUniqueId());
         PetFx.clearPlayer(event.getPlayer().getUniqueId());
     }

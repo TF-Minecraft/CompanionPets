@@ -66,7 +66,11 @@ public final class PetsPlugin extends JavaPlugin {
         Bodies bodies = new Bodies(this, petKey, visual);
         runtime = new PetRuntime(this, config, store, new Sessions(), bodies, visual, petKey, toyKey);
         actions = new PetActions(runtime);
-        Bukkit.getPluginManager().registerEvents(new PetListener(runtime, actions), this);
+        PetListener listener = new PetListener(runtime, actions);
+        Bukkit.getPluginManager().registerEvents(listener, this);
+        if (visual instanceof ModelHook models) {
+            models.registerInteractions(this, listener::onModelInteract);
+        }
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
         visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 2L, 2L);
