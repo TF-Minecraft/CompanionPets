@@ -101,7 +101,8 @@ final class ModelEngineBridge {
         try {
             call(method(active, "setScale", double.class), model, appearance.scale());
             call(method(active, "setHitboxScale", double.class), model, appearance.scale());
-            call(method(active, "setHitboxVisible", boolean.class), model, false);
+            // ModelEngine uses this flag to send the interaction hitbox to clients.
+            call(method(active, "setHitboxVisible", boolean.class), model, true);
             call(method(handler, "forceStopAllAnimations"), attachment.animationHandler);
             // We select movement and poses. ModelEngine retains its death renderer itself.
             for (Object value : state.getEnumConstants()) {
