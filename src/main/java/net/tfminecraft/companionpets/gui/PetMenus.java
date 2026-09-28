@@ -209,29 +209,34 @@ public final class PetMenus {
     }
 
     public void openLearned(org.bukkit.entity.Player player, Pet pet) {
+        openLearned(player, pet, 0);
+    }
+
+    public void openLearned(org.bukkit.entity.Player player, Pet pet, int page) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.LEARNED, pet.id(), null);
         Inventory inventory = Bukkit.createInventory(holder, 27, title(pet.name() + "'s tricks"));
         holder.inventory(inventory);
         frame(inventory);
         TrainingSettings training = runtime.config().training();
-        Trick[] tricks = Trick.values();
+        Trick[] tricks = pageTricks(holder, pet, page);
         for (int index = 0; index < tricks.length; index++) {
-            inventory.setItem(TRICK_ROW + index, learnedIcon(pet, tricks[index], training));
+            if (allowsTrick(pet, tricks[index]))
+                inventory.setItem(TRICK_ROW + index, learnedIcon(pet, tricks[index], training));
         }
         inventory.setItem(TRICKS_BACK_SLOT, named(Material.ARROW, "Back", NamedTextColor.YELLOW,
                 line("Return to " + pet.name(), NamedTextColor.GRAY)));
         player.openInventory(inventory);
     }
 
-    private static ItemStack learnedIcon(Pet pet, Trick trick, TrainingSettings training) {
+    private ItemStack learnedIcon(Pet pet, Trick trick, TrainingSettings training) {
         boolean learned = pet.progress(trick) >= training.learnedAt();
         List<String> words = new ArrayList<>();
         for (java.util.Map.Entry<String, Trick> entry : pet.words().entrySet()) {
-            if (entry.getValue() == trick) {
+            if (entry.getValue().equals(trick)) {
                 words.add("“" + entry.getKey() + "”");
             }
         }
-        ItemStack item = named(trickMaterial(trick), PetTexts.trickName(trick), learned ? NamedTextColor.GREEN : NamedTextColor.GRAY,
+        ItemStack item = named(trickMaterial(trick), net.tfminecraft.companionpets.training.TrickAvailability.name(runtime, trick), learned ? NamedTextColor.GREEN : NamedTextColor.GRAY,
                 line(PetTexts.trickDescription(trick), NamedTextColor.GRAY),
                 Component.empty(),
                 words.isEmpty()
@@ -248,21 +253,42 @@ public final class PetMenus {
     }
 
     public void openTricks(org.bukkit.entity.Player player, Pet pet, String word) {
+        openTricks(player, pet, word, 0);
+    }
+
+    public void openTricks(org.bukkit.entity.Player player, Pet pet, String word, int page) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.TRICK, pet.id(), word);
         Inventory inventory = Bukkit.createInventory(holder, 27, title("Choose a trick"));
         holder.inventory(inventory);
         frame(inventory);
         TrainingSettings training = runtime.config().training();
-        Trick[] tricks = Trick.values();
+        Trick[] tricks = pageTricks(holder, pet, page);
         for (int index = 0; index < tricks.length; index++) {
-            inventory.setItem(TRICK_ROW + index, trickIcon(pet, tricks[index], word, training));
+            if (allowsTrick(pet, tricks[index]))
+                inventory.setItem(TRICK_ROW + index, trickIcon(pet, tricks[index], word, training));
         }
         player.openInventory(inventory);
     }
 
-    private static ItemStack trickIcon(Pet pet, Trick trick, String word, TrainingSettings training) {
+    private boolean allowsTrick(Pet pet, Trick trick) {
+        return net.tfminecraft.companionpets.training.TrickAvailability.allows(runtime, pet, trick);
+    }
+
+    private Trick[] pageTricks(MenuHolder holder, Pet pet, int requested) {
+        List<Trick> available = runtime.config().tricks().stream().filter(t -> allowsTrick(pet, t)).toList();
+        int page = Math.max(0, Math.min(requested, Math.max(0, (available.size() - 1) / 9)));
+        holder.page(page);
+        if (page > 0) holder.getInventory().setItem(18, named(Material.ARROW, "Previous page", NamedTextColor.YELLOW));
+        if ((page + 1) * 9 < available.size()) holder.getInventory().setItem(26, named(Material.ARROW, "Next page", NamedTextColor.YELLOW));
+        List<Trick> subset = available.subList(page * 9, Math.min(available.size(), (page + 1) * 9));
+        for (int i = 0; i < subset.size(); i++) holder.trick(TRICK_ROW + i, subset.get(i));
+        if (subset.isEmpty()) holder.getInventory().setItem(13, named(Material.PAPER, "No available tricks", NamedTextColor.GRAY));
+        return subset.toArray(Trick[]::new);
+    }
+
+    private ItemStack trickIcon(Pet pet, Trick trick, String word, TrainingSettings training) {
         boolean learned = pet.progress(trick) >= training.learnedAt();
-        ItemStack item = named(trickMaterial(trick), PetTexts.trickName(trick), learned ? NamedTextColor.GREEN : NamedTextColor.WHITE,
+        ItemStack item = named(trickMaterial(trick), net.tfminecraft.companionpets.training.TrickAvailability.name(runtime, trick), learned ? NamedTextColor.GREEN : NamedTextColor.WHITE,
                 line(PetTexts.trickDescription(trick), NamedTextColor.GRAY),
                 Component.empty(),
                 knownAs(pet, trick, training),
@@ -276,7 +302,8 @@ public final class PetMenus {
     }
 
     private static Material trickMaterial(Trick trick) {
-        return switch (trick) {
+        return switch (trick.kind()) {
+            case CUSTOM -> Material.NETHER_STAR;
             case SIT -> Material.OAK_STAIRS;
             case COME -> Material.COMPASS;
             case STAY -> Material.ARMOR_STAND;
@@ -292,7 +319,7 @@ public final class PetMenus {
     private static Component knownAs(Pet pet, Trick trick, TrainingSettings training) {
         List<String> words = new ArrayList<>();
         for (java.util.Map.Entry<String, Trick> entry : pet.words().entrySet()) {
-            if (entry.getValue() == trick) {
+            if (entry.getValue().equals(trick)) {
                 words.add("“" + entry.getKey() + "”");
             }
         }

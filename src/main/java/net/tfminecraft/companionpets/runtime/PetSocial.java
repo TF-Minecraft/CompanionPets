@@ -207,7 +207,7 @@ final class PetSocial {
         }
     }
 
-    private static void bark(Encounter encounter, Mob a, Mob b) {
+    private void bark(Encounter encounter, Mob a, Mob b) {
         a.getPathfinder().stopPathfinding();
         b.getPathfinder().stopPathfinding();
         PetFx.look(a, b.getEyeLocation());
@@ -220,7 +220,9 @@ final class PetSocial {
                 + " bark at each other. Right-click your pet repeatedly to calm them");
     }
 
-    private static void growl(Mob body) {
+    private void growl(Mob body) {
+        Pet pet = runtime.byEntity(body);
+        if (pet != null) runtime.visual().play(body, runtime.config().type(pet.typeId()), "SPEAK");
         Sound sound = switch (body.getType()) {
             case WOLF -> Sound.ENTITY_WOLF_GROWL;
             case CAT -> Sound.ENTITY_CAT_HISS;
@@ -252,8 +254,8 @@ final class PetSocial {
                 && player.getLocation().distanceSquared(body.getLocation()) <= radiusSquared;
     }
 
-    private static boolean available(Pet pet) {
-        return pet != null && !pet.stored() && !pet.dead() && pet.activity() == Activity.NONE && pet.fetch() == null
+    private boolean available(Pet pet) {
+        return pet != null && !runtime.visual().holdsMovement(runtime.entity(pet)) && !pet.stored() && !pet.dead() && pet.activity() == Activity.NONE && pet.fetch() == null
                 && Locomotion.choose(pet.illness(), pet.need(Need.HEALTH), pet.need(Need.ENERGY),
                         pet.need(Need.HUNGER), pet.activity(), false,
                         System.currentTimeMillis() < pet.forcedSitUntilMillis(), pet.order(), pet.staying())

@@ -133,7 +133,7 @@ public final class PetStore {
                 wordRows.add(row);
             }
             yaml.set(path + ".words", wordRows);
-            for (Trick trick : Trick.values()) {
+            for (Trick trick : pet.progressView().keySet()) {
                 if (pet.progress(trick) > 0.0) {
                     yaml.set(path + ".progress." + trick.name(), pet.progress(trick));
                 }

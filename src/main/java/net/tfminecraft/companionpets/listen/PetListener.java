@@ -9,10 +9,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
@@ -134,7 +136,31 @@ public final class PetListener implements Listener {
         if (pet == null) {
             return;
         }
+        if (pet.dead()) {
+            // Neglect previously removed the body without drops. Keep that behaviour
+            // while allowing a modeled body to finish its death animation.
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+            return;
+        }
         actions.lostBody(pet);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onVisualDamage(EntityDamageEvent event) {
+        if (event.getFinalDamage() <= 0) return;
+        Pet victim = runtime.byEntity(event.getEntity());
+        if (victim != null) {
+            runtime.visual().cancelAction(event.getEntity());
+            runtime.visual().play(event.getEntity(), runtime.config().type(victim.typeId()), "HURT");
+        }
+        if (event instanceof EntityDamageByEntityEvent attack) {
+            Pet attacker = runtime.byEntity(attack.getDamager());
+            if (attacker != null) {
+                runtime.visual().cancelAction(attack.getDamager());
+                runtime.visual().play(attack.getDamager(), runtime.config().type(attacker.typeId()), "ATTACK");
+            }
+        }
     }
 
     @EventHandler

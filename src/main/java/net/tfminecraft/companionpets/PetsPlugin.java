@@ -25,6 +25,7 @@ import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.text.Names;
 import net.tfminecraft.companionpets.visual.IdleVisual;
 import net.tfminecraft.companionpets.visual.PetVisual;
+import net.tfminecraft.companionpets.visual.PetVisualTicker;
 
 public final class PetsPlugin extends JavaPlugin {
     private static final long AUTOSAVE_TICKS = 20L * 300;
@@ -34,6 +35,8 @@ public final class PetsPlugin extends JavaPlugin {
     private BukkitTask ticker;
     private BukkitTask statusTicker;
     private BukkitTask autosave;
+    private BukkitTask visualTicker;
+    private PetVisual visual;
 
     @Override
     public void onEnable() {
@@ -43,13 +46,23 @@ public final class PetsPlugin extends JavaPlugin {
         store.load();
         NamespacedKey petKey = new NamespacedKey(this, "pet");
         NamespacedKey toyKey = new NamespacedKey(this, "toy");
-        PetVisual visual = ModelHook.available() ? new ModelHook(getLogger()) : new IdleVisual();
+        visual = new IdleVisual();
+        if (ModelHook.available()) {
+            try {
+                visual = new ModelHook(getLogger());
+            } catch (RuntimeException | LinkageError ex) {
+                getLogger().log(java.util.logging.Level.WARNING, "ModelEngine 4 integration unavailable; pets use vanilla bodies", ex);
+            }
+        } else if (config.types().values().stream().anyMatch(type -> type.appearance().modeled())) {
+            getLogger().warning("ModelEngine is not enabled; configured model pets will use their vanilla bodies");
+        }
         Bodies bodies = new Bodies(this, petKey, visual);
         PetRuntime runtime = new PetRuntime(this, config, store, new Sessions(), bodies, visual, petKey, toyKey);
         actions = new PetActions(runtime);
         Bukkit.getPluginManager().registerEvents(new PetListener(runtime, actions), this);
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
+        visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 2L, 2L);
         statusTicker = Bukkit.getScheduler().runTaskTimer(this, petTicker::lookBars, 1L, 1L);
         autosave = Bukkit.getScheduler().runTaskTimer(this, store::save, AUTOSAVE_TICKS, AUTOSAVE_TICKS);
         for (org.bukkit.World world : Bukkit.getWorlds()) {
@@ -62,6 +75,8 @@ public final class PetsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (visualTicker != null) visualTicker.cancel();
+        if (visual != null) visual.close();
         if (ticker != null) {
             ticker.cancel();
         }

@@ -6,17 +6,22 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.EnumSet;
 import java.util.logging.Logger;
 
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.EntityType;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import net.tfminecraft.companionpets.care.CareSettings;
 import net.tfminecraft.companionpets.management.Limits;
 import net.tfminecraft.companionpets.pet.SexMode;
+import net.tfminecraft.companionpets.pet.Trick;
 import net.tfminecraft.companionpets.play.PlaySettings;
 import net.tfminecraft.companionpets.training.TrainingSettings;
 
@@ -34,6 +39,15 @@ public final class CompanionConfig {
     private final double cryIntervalSeconds;
     private final Material kennel;
     private final Map<String, PetTypeDef> types;
+    private Map<Trick, CustomTrick> customTricks = Map.of();
+    private BellySettings belly = new BellySettings(true, 25, 5, 60, 70);
+    public BellySettings belly() { return belly; }
+    public CustomTrick customTrick(Trick trick) { return customTricks.get(trick); }
+    public java.util.List<Trick> tricks() {
+        var result = new ArrayList<>(List.of(Trick.values()));
+        result.addAll(customTricks.keySet());
+        return List.copyOf(result);
+    }
 
     private CompanionConfig(
             CareSettings care,
@@ -140,8 +154,9 @@ public final class CompanionConfig {
         ConfigurationSection items = config.getConfigurationSection("items");
         Material kennel = material(items, "kennel", Material.BARREL, plugin.getLogger());
         boolean mythic = plugin.getServer().getPluginManager().isPluginEnabled("MythicMobs");
-        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), mythic, plugin.getLogger());
-        return new CompanionConfig(
+        Map<Trick, CustomTrick> custom = CustomTrick.read(config.getConfigurationSection("custom-tricks"), logger);
+        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), mythic, plugin.getLogger(), custom);
+        CompanionConfig loaded = new CompanionConfig(
                 careSettings,
                 playSettings,
                 trainingSettings,
@@ -155,9 +170,12 @@ public final class CompanionConfig {
                 cry,
                 kennel,
                 types);
+        loaded.customTricks = custom;
+        loaded.belly = BellySettings.read(config.getConfigurationSection("moments.belly-up"), logger);
+        return loaded;
     }
 
-    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, boolean mythic, Logger logger) {
+    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom) {
         Map<String, PetTypeDef> types = new LinkedHashMap<>();
         if (pets == null) {
             return types;
@@ -186,8 +204,40 @@ public final class CompanionConfig {
                 continue;
             }
             Material egg = material(section, "egg", Material.EGG, logger);
+            Integer eggCustomModelData = null;
+            if (section.contains("egg-custom-model-data")) {
+                if (!section.isInt("egg-custom-model-data") || section.getInt("egg-custom-model-data") < 0) {
+                    logger.warning("Skipping pet type " + id + " because egg-custom-model-data must be a nonnegative integer");
+                    continue;
+                }
+                eggCustomModelData = section.getInt("egg-custom-model-data");
+            }
             SexMode sexMode = "choose".equalsIgnoreCase(section.getString("sex", "random")) ? SexMode.CHOOSE : SexMode.RANDOM;
-            String model = blankToNull(section.getString("model"));
+            Set<Trick> tricks = new java.util.LinkedHashSet<>(List.of(Trick.values()));
+            tricks.addAll(custom.keySet());
+            if (section.contains("tricks")) {
+                if (!section.isList("tricks")) {
+                    logger.warning("Pet " + id + ": tricks must be a list; disabling its tricks");
+                }
+                tricks = new java.util.LinkedHashSet<>();
+                for (Object value : section.getList("tricks", List.of())) {
+                    try {
+                        if (!(value instanceof String)) throw new IllegalArgumentException();
+                        Trick parsed = Trick.valueOf(((String) value).trim());
+                        if (parsed.kind() == Trick.Kind.CUSTOM && !custom.containsKey(parsed)) throw new IllegalArgumentException();
+                        tricks.add(parsed);
+                    } catch (IllegalArgumentException ex) {
+                        logger.warning("Pet " + id + ": skipping invalid trick " + value);
+                    }
+                }
+            }
+            PetAppearance appearance;
+            try {
+                appearance = PetAppearance.read(section, id, logger);
+            } catch (IllegalArgumentException ex) {
+                logger.warning("Pet " + id + " will use its vanilla body: " + ex.getMessage());
+                appearance = PetAppearance.VANILLA;
+            }
             ConfigurationSection care = section.getConfigurationSection("care");
             Map<Material, Double> foods = new LinkedHashMap<>();
             ConfigurationSection foodSection = care == null ? null : care.getConfigurationSection("foods");
@@ -211,25 +261,32 @@ public final class CompanionConfig {
                     toys.add(toy);
                 }
             }
-            Map<String, String> animations = new LinkedHashMap<>();
-            ConfigurationSection animationSection = section.getConfigurationSection("animations");
-            if (animationSection != null) {
-                for (String state : animationSection.getKeys(false)) {
-                    animations.put(state.toUpperCase(Locale.ROOT), animationSection.getString(state));
+            if (section.contains("animations") || section.contains("trick-animations")) {
+                logger.warning("Pet " + id + ": move animation mappings to appearance.animations");
+            }
+            boolean duplicateEgg = false;
+            for (PetTypeDef existing : types.values()) {
+                if (existing.egg() == egg && Objects.equals(existing.eggCustomModelData(), eggCustomModelData)) {
+                    logger.warning("Skipping pet type " + id + " because its egg matches " + existing.id());
+                    duplicateEgg = true;
+                    break;
                 }
+            }
+            if (duplicateEgg) {
+                continue;
             }
             types.put(id.toLowerCase(Locale.ROOT), new PetTypeDef(
                     id.toLowerCase(Locale.ROOT),
                     entity,
                     blankToNull(mythicMob),
                     egg,
+                    eggCustomModelData,
                     sexMode,
-                    model,
+                    appearance,
                     Collections.unmodifiableMap(foods),
                     favorite,
                     medicine,
-                    List.copyOf(toys),
-                    Collections.unmodifiableMap(animations)));
+                    List.copyOf(toys), tricks));
         }
         return Collections.unmodifiableMap(types);
     }
@@ -336,12 +393,9 @@ public final class CompanionConfig {
         return types.get(id.toLowerCase(Locale.ROOT));
     }
 
-    public PetTypeDef byEgg(Material material) {
-        if (material == null) {
-            return null;
-        }
+    public PetTypeDef byEgg(ItemStack item) {
         for (PetTypeDef type : types.values()) {
-            if (type.egg() == material) {
+            if (type.matchesEgg(item)) {
                 return type;
             }
         }

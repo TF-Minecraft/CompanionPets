@@ -151,7 +151,8 @@ public final class PetTexts {
     }
 
     public static String trickName(Trick trick) {
-        return switch (trick) {
+        return switch (trick.kind()) {
+            case CUSTOM -> trick.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
             case SIT -> "Sit";
             case COME -> "Follow";
             case STAY -> "Stay";
@@ -165,7 +166,8 @@ public final class PetTexts {
     }
 
     public static String trickDescription(Trick trick) {
-        return switch (trick) {
+        return switch (trick.kind()) {
+            case CUSTOM -> "Performs a learned gesture";
             case SIT -> "Sits down and stops following";
             case COME -> "Wakes up and follows you again";
             case STAY -> "Stands still where it is, until you say follow";
@@ -179,7 +181,8 @@ public final class PetTexts {
     }
 
     public static String reaction(String name, PetSex sex, Trick trick) {
-        return switch (trick) {
+        return switch (trick.kind()) {
+            case CUSTOM -> name + " performs " + trickName(trick);
             case SIT -> name + " sits down and looks up at you";
             case COME -> name + " gets up and follows you";
             case STAY -> name + " stands still, watching you";

@@ -9,7 +9,4 @@ public final class IdleVisual implements PetVisual {
     public void apply(Entity entity, PetTypeDef type) {
     }
 
-    @Override
-    public void play(Entity entity, PetTypeDef type, String state) {
-    }
 }

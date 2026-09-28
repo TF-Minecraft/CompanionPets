@@ -39,7 +39,7 @@ public final class Pet {
     private String favoriteToy;
     private String carriedToy;
     private final Map<String, Trick> words = new LinkedHashMap<>();
-    private final Map<Trick, Double> progress = new EnumMap<>(Trick.class);
+    private final Map<Trick, Double> progress = new java.util.LinkedHashMap<>();
     private long playUntilMillis;
     private long forcedSitUntilMillis;
     private FetchJob fetch;

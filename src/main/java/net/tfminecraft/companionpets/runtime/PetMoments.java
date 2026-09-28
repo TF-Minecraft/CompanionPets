@@ -35,6 +35,50 @@ final class PetMoments {
     private final PetRuntime runtime;
     private final Map<Pet, Long> nextAt = new WeakHashMap<>();
     private final Map<Pet, GiftJob> gifts = new WeakHashMap<>();
+    private final Map<Pet, Long> nextBellyAt = new WeakHashMap<>();
+
+    private boolean bellyReady(Pet pet, Mob body, Player owner) {
+        return runtime.config().moments().enabled() && runtime.config().belly().enabled()
+                && pet.illness() == Illness.NONE && net.tfminecraft.companionpets.care.DominantNeed.select(pet) == null
+                && pet.need(Need.HUNGER) >= 60 && pet.need(Need.ENERGY) >= 40 && pet.need(Need.HEALTH) >= 70
+                && pet.need(Need.MOOD) >= runtime.config().belly().minMood()
+                && pet.activity() == Activity.NONE && pet.fetch() == null && !gifts.containsKey(pet)
+                && body.isValid() && body.isOnGround() && !body.isInWater() && body.getTarget() == null
+                && owner != null && owner.isOnline() && owner.getUniqueId().equals(pet.ownerId())
+                && owner.getWorld().equals(body.getWorld()) && owner.getLocation().distanceSquared(body.getLocation()) <= 36
+                && !runtime.sessions().resting(pet.id(), System.currentTimeMillis())
+                && !(runtime.sessions().training(owner.getUniqueId()) instanceof TrainingSession s && s.petId().equals(pet.id()));
+    }
+
+    boolean petBelly(Pet pet, Mob body, Player owner, long now) {
+        if (!bellyReady(pet, body, owner)) return false;
+        if (runtime.visual().belly(body)) {
+            if (runtime.visual().rubBelly(body)) {
+                PetFx.hearts(body, 2);
+                PetFx.bar(owner, "You scratch " + pet.name() + "'s belly");
+            }
+            return true;
+        }
+        if (now < nextBellyAt.getOrDefault(pet, 0L) || runtime.visual().holdsMovement(body)) return false;
+        // Rate limit attempts as well as successes, so rapid clicks cannot force a moment.
+        nextBellyAt.put(pet, now + Math.round(runtime.config().belly().cooldownSeconds() * 1000));
+        if (runtime.random().nextDouble() * 100 >= runtime.config().belly().chance()) return false;
+        if (!runtime.visual().startBelly(body, runtime.config().type(pet.typeId()), Math.round(runtime.config().belly().idleSeconds() * 1000))) return false;
+        PetFx.sit(body, false);
+        body.getPathfinder().stopPathfinding();
+        PetFx.bar(owner, pet.name() + " rolls onto its back. Right-click to scratch its belly");
+        return true;
+    }
+
+    boolean tickBelly(Pet pet, Mob body, Player owner) {
+        if (!runtime.visual().belly(body)) return false;
+        if (!bellyReady(pet, body, owner)) {
+            runtime.visual().cancelAction(body);
+            return false;
+        }
+        body.getPathfinder().stopPathfinding();
+        return true;
+    }
 
     PetMoments(PetRuntime runtime) {
         this.runtime = runtime;
@@ -157,6 +201,7 @@ final class PetMoments {
     }
 
     void cancel(Pet pet) {
+        runtime.visual().cancelAction(runtime.entity(pet));
         GiftJob gift = gifts.remove(pet);
         if (gift != null && gift.display != null && gift.display.isValid()) {
             gift.display.remove();
@@ -169,6 +214,7 @@ final class PetMoments {
             cancel(pet);
         }
         nextAt.clear();
+        nextBellyAt.clear();
     }
 
     private boolean startGift(Pet pet, Mob body, Player owner, long now) {
@@ -275,6 +321,7 @@ final class PetMoments {
     }
 
     private void barkAt(Pet pet, Mob body, Player owner, LivingEntity target) {
+        runtime.visual().play(body, runtime.config().type(pet.typeId()), "SPEAK");
         PetFx.look(body, target.getEyeLocation());
         Sound sound = switch (body.getType()) {
             case WOLF -> Sound.ENTITY_WOLF_GROWL;
