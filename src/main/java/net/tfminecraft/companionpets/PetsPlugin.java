@@ -44,6 +44,7 @@ public final class PetsPlugin extends JavaPlugin {
     private BukkitTask visualTicker;
     private PetVisual visual;
     private PetRuntime runtime;
+    private PetListener petListener;
 
     @Override
     public void onEnable() {
@@ -56,7 +57,11 @@ public final class PetsPlugin extends JavaPlugin {
         visual = new IdleVisual();
         if (ModelHook.available()) {
             try {
-                visual = new ModelHook(getLogger());
+                ModelHook models = new ModelHook(getLogger());
+                models.registerInteractions(this, (player, entity) -> {
+                    if (petListener != null) petListener.onModelInteract(player, entity);
+                });
+                visual = models;
             } catch (RuntimeException | LinkageError ex) {
                 getLogger().log(java.util.logging.Level.WARNING, "ModelEngine 4 integration unavailable; pets use vanilla bodies", ex);
             }
@@ -66,11 +71,8 @@ public final class PetsPlugin extends JavaPlugin {
         Bodies bodies = new Bodies(this, petKey, visual);
         runtime = new PetRuntime(this, config, store, new Sessions(), bodies, visual, petKey, toyKey);
         actions = new PetActions(runtime);
-        PetListener listener = new PetListener(runtime, actions);
-        Bukkit.getPluginManager().registerEvents(listener, this);
-        if (visual instanceof ModelHook models) {
-            models.registerInteractions(this, listener::onModelInteract);
-        }
+        petListener = new PetListener(runtime, actions);
+        Bukkit.getPluginManager().registerEvents(petListener, this);
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
         visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 2L, 2L);
@@ -213,14 +215,20 @@ public final class PetsPlugin extends JavaPlugin {
                 return;
             }
         }
+        try {
+            reloadConfig();
+        } catch (RuntimeException ex) {
+            getLogger().log(Level.WARNING, "Could not activate CompanionPets config.yml", ex);
+            sender.sendMessage("CompanionPets config.yml could not be activated. The previous settings remain active.");
+            return;
+        }
         for (var player : Bukkit.getOnlinePlayers()) {
             if (player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder) player.closeInventory();
         }
         actions.clearInteractions();
         actions.holograms().clear();
-        runtime.sessions().clear();
+        runtime.sessions().clearForReload();
         visual.close();
-        reloadConfig();
         runtime.config(next);
         for (var world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) actions.reattach(entity);

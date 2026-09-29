@@ -78,11 +78,11 @@ public final class Sessions {
         training.remove(playerId);
     }
 
-    public void clear() {
+    public void clearForReload() {
         hatches.clear();
         renames.clear();
         releases.clear();
         training.clear();
-        trainingRest.clear();
+        trainingRest.values().removeIf(until -> until <= System.currentTimeMillis());
     }
 }

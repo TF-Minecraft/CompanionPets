@@ -1184,6 +1184,7 @@ public final class PetActions {
             PetFx.bar(player, pet.name() + " is resting. Tell " + PetTexts.him(pet.sex()) + " to follow");
             return;
         }
+        if (partial && trick.kind() == Trick.Kind.CUSTOM) return;
         if (trick != Trick.SPIN) cancelSpin(pet);
         runtime.visual().cancelAction(entity);
         if (trick.kind() == Trick.Kind.CUSTOM) {
