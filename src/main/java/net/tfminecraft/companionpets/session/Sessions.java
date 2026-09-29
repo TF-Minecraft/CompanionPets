@@ -77,4 +77,12 @@ public final class Sessions {
         releases.remove(playerId);
         training.remove(playerId);
     }
+
+    public void clearForReload() {
+        hatches.clear();
+        renames.clear();
+        releases.clear();
+        training.clear();
+        trainingRest.values().removeIf(until -> until <= System.currentTimeMillis());
+    }
 }

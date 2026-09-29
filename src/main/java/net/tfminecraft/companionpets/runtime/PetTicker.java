@@ -42,7 +42,6 @@ public final class PetTicker implements Runnable {
     private static final long MISSING_BODY_GRACE_MILLIS = 5_000L;
     private final PetRuntime runtime;
     private final PetActions actions;
-    private final Map<UUID, String> shown = new HashMap<>();
     private final Map<UUID, Long> missingBodySince = new HashMap<>();
     private long lastCareAt;
 
@@ -132,7 +131,10 @@ public final class PetTicker implements Runnable {
                     runtime.config().awayRate()));
             if (pet.dead()) {
                 actions.clearInteractions(pet);
-                if (body != null) {
+                if (body instanceof org.bukkit.entity.LivingEntity living && runtime.visual().attached(body)) {
+                    living.setHealth(0);
+                } else if (body != null) {
+                    runtime.visual().remove(body);
                     body.remove();
                 }
                 runtime.store().remove(pet.id());
@@ -223,6 +225,11 @@ public final class PetTicker implements Runnable {
                     pet.order(),
                     pet.staying());
             actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
+            if (actions.moments().tickBelly(pet, mob, owner)) continue;
+            if (mode != Locomotion.Mode.LIE && mode != Locomotion.Mode.SLEEP && runtime.visual().holdsMovement(mob)) {
+                mob.getPathfinder().stopPathfinding();
+                continue;
+            }
             if (actions.roaming().tickAttention(pet, mob, now)) {
                 continue;
             }
@@ -244,7 +251,6 @@ public final class PetTicker implements Runnable {
             }
             express(pet, mob, owner, mode, now);
             actions.moments().tick(pet, mob, owner, mode, now);
-            playVisual(pet, mob, mode);
         }
     }
 
@@ -406,27 +412,6 @@ public final class PetTicker implements Runnable {
         if (mode == Locomotion.Mode.SLEEP) {
             return;
         }
-    }
-
-    private void playVisual(Pet pet, Mob mob, Locomotion.Mode mode) {
-        PetTypeDef type = runtime.config().type(pet.typeId());
-        if (type == null) {
-            return;
-        }
-        String state = switch (mode) {
-            case SIT, STAY -> "SITTING";
-            case LIE, SLEEP -> "SLEEPING";
-            case PLAY, FETCH -> "PLAYING";
-            default -> "FOLLOWING";
-        };
-        if ((pet.illness() == Illness.SICK || pet.illness() == Illness.WEAKENED) && type.animations().containsKey("SICK")) {
-            state = "SICK";
-        }
-        if (state.equals(shown.get(pet.id()))) {
-            return;
-        }
-        shown.put(pet.id(), state);
-        runtime.visual().play(mob, type, state);
     }
 
     private void watchTraining(long now) {

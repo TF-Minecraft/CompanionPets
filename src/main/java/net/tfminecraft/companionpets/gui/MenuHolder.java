@@ -17,6 +17,12 @@ public final class MenuHolder implements InventoryHolder {
     private final UUID petId;
     private final String word;
     private Inventory inventory;
+    private int page;
+    private final java.util.Map<Integer, net.tfminecraft.companionpets.pet.Trick> tricks = new java.util.HashMap<>();
+    public int page() { return page; }
+    public void page(int page) { this.page = page; }
+    public void trick(int slot, net.tfminecraft.companionpets.pet.Trick trick) { tricks.put(slot, trick); }
+    public net.tfminecraft.companionpets.pet.Trick trick(int slot) { return tricks.get(slot); }
 
     public MenuHolder(Kind kind, UUID petId, String word) {
         this.kind = kind;

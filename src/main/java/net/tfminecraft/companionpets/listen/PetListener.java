@@ -1,6 +1,8 @@
 package net.tfminecraft.companionpets.listen;
 
 import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -9,10 +11,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
@@ -42,6 +46,9 @@ import net.tfminecraft.companionpets.store.PetStore;
 public final class PetListener implements Listener {
     private final PetRuntime runtime;
     private final PetActions actions;
+    private final Map<UUID, Click> lastClicks = new HashMap<>();
+
+    private record Click(UUID entity, int tick) { }
 
     public PetListener(PetRuntime runtime, PetActions actions) {
         this.runtime = runtime;
@@ -54,9 +61,22 @@ public final class PetListener implements Listener {
             return;
         }
         Player player = event.getPlayer();
-        if (actions.useOnPet(player, event.getRightClicked(), player.getInventory().getItemInMainHand())) {
+        if (interact(player, event.getRightClicked())) {
             event.setCancelled(true);
         }
+    }
+
+    public void onModelInteract(Player player, Entity entity) {
+        if (runtime.visual().attached(entity)) interact(player, entity);
+    }
+
+    private boolean interact(Player player, Entity entity) {
+        Click previous = lastClicks.get(player.getUniqueId());
+        int tick = Bukkit.getCurrentTick();
+        if (previous != null && previous.tick() == tick && previous.entity().equals(entity.getUniqueId())) return true;
+        boolean handled = actions.useOnPet(player, entity, player.getInventory().getItemInMainHand());
+        if (handled) lastClicks.put(player.getUniqueId(), new Click(entity.getUniqueId(), tick));
+        return handled;
     }
 
     @EventHandler
@@ -134,7 +154,31 @@ public final class PetListener implements Listener {
         if (pet == null) {
             return;
         }
+        if (pet.dead()) {
+            // Neglect previously removed the body without drops. Keep that behaviour
+            // while allowing a modeled body to finish its death animation.
+            event.getDrops().clear();
+            event.setDroppedExp(0);
+            return;
+        }
         actions.lostBody(pet);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onVisualDamage(EntityDamageEvent event) {
+        if (event.getFinalDamage() <= 0) return;
+        Pet victim = runtime.byEntity(event.getEntity());
+        if (victim != null) {
+            runtime.visual().cancelAction(event.getEntity());
+            runtime.visual().play(event.getEntity(), runtime.config().type(victim.typeId()), "HURT");
+        }
+        if (event instanceof EntityDamageByEntityEvent attack) {
+            Pet attacker = runtime.byEntity(attack.getDamager());
+            if (attacker != null) {
+                runtime.visual().cancelAction(attack.getDamager());
+                runtime.visual().play(attack.getDamager(), runtime.config().type(attacker.typeId()), "ATTACK");
+            }
+        }
     }
 
     @EventHandler
@@ -148,6 +192,7 @@ public final class PetListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        lastClicks.remove(event.getPlayer().getUniqueId());
         runtime.sessions().clearPlayer(event.getPlayer().getUniqueId());
         PetFx.clearPlayer(event.getPlayer().getUniqueId());
     }

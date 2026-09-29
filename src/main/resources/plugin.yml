@@ -7,11 +7,14 @@ description: Pets you hatch, care for, and train. Each one keeps its needs, favo
 commands:
   companionpets:
     description: CompanionPets test utilities
-    usage: /companionpets <order WORD|calm|testdog [name]|moment TYPE|personality TYPE|social TYPE|owner TARGET>
+    usage: /companionpets <order WORD|calm|testdog [name]|moment TYPE|personality TYPE|social TYPE|owner TARGET|reload>
 
 permissions:
   companionpets.test:
     description: CompanionPets test utilities
+    default: op
+  companionpets.reload:
+    description: Reload CompanionPets config.yml without restarting the server
     default: op
 
 softdepend:

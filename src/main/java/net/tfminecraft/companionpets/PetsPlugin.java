@@ -1,13 +1,18 @@
 package net.tfminecraft.companionpets;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.InvalidConfigurationException;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -16,6 +21,7 @@ import org.bukkit.scheduler.BukkitTask;
 import net.tfminecraft.companionpets.body.Bodies;
 import net.tfminecraft.companionpets.config.CompanionConfig;
 import net.tfminecraft.companionpets.integration.ModelHook;
+import net.tfminecraft.companionpets.gui.MenuHolder;
 import net.tfminecraft.companionpets.listen.PetListener;
 import net.tfminecraft.companionpets.runtime.PetActions;
 import net.tfminecraft.companionpets.runtime.PetRuntime;
@@ -25,6 +31,7 @@ import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.text.Names;
 import net.tfminecraft.companionpets.visual.IdleVisual;
 import net.tfminecraft.companionpets.visual.PetVisual;
+import net.tfminecraft.companionpets.visual.PetVisualTicker;
 
 public final class PetsPlugin extends JavaPlugin {
     private static final long AUTOSAVE_TICKS = 20L * 300;
@@ -34,6 +41,10 @@ public final class PetsPlugin extends JavaPlugin {
     private BukkitTask ticker;
     private BukkitTask statusTicker;
     private BukkitTask autosave;
+    private BukkitTask visualTicker;
+    private PetVisual visual;
+    private PetRuntime runtime;
+    private PetListener petListener;
 
     @Override
     public void onEnable() {
@@ -43,13 +54,28 @@ public final class PetsPlugin extends JavaPlugin {
         store.load();
         NamespacedKey petKey = new NamespacedKey(this, "pet");
         NamespacedKey toyKey = new NamespacedKey(this, "toy");
-        PetVisual visual = ModelHook.available() ? new ModelHook(getLogger()) : new IdleVisual();
+        visual = new IdleVisual();
+        if (ModelHook.available()) {
+            try {
+                ModelHook models = new ModelHook(getLogger());
+                models.registerInteractions(this, (player, entity) -> {
+                    if (petListener != null) petListener.onModelInteract(player, entity);
+                });
+                visual = models;
+            } catch (RuntimeException | LinkageError ex) {
+                getLogger().log(java.util.logging.Level.WARNING, "ModelEngine 4 integration unavailable; pets use vanilla bodies", ex);
+            }
+        } else if (config.types().values().stream().anyMatch(type -> type.appearance().modeled())) {
+            getLogger().warning("ModelEngine is not enabled; configured model pets will use their vanilla bodies");
+        }
         Bodies bodies = new Bodies(this, petKey, visual);
-        PetRuntime runtime = new PetRuntime(this, config, store, new Sessions(), bodies, visual, petKey, toyKey);
+        runtime = new PetRuntime(this, config, store, new Sessions(), bodies, visual, petKey, toyKey);
         actions = new PetActions(runtime);
-        Bukkit.getPluginManager().registerEvents(new PetListener(runtime, actions), this);
+        petListener = new PetListener(runtime, actions);
+        Bukkit.getPluginManager().registerEvents(petListener, this);
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
+        visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 2L, 2L);
         statusTicker = Bukkit.getScheduler().runTaskTimer(this, petTicker::lookBars, 1L, 1L);
         autosave = Bukkit.getScheduler().runTaskTimer(this, store::save, AUTOSAVE_TICKS, AUTOSAVE_TICKS);
         for (org.bukkit.World world : Bukkit.getWorlds()) {
@@ -62,6 +88,8 @@ public final class PetsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (visualTicker != null) visualTicker.cancel();
+        if (visual != null) visual.close();
         if (ticker != null) {
             ticker.cancel();
         }
@@ -84,6 +112,14 @@ public final class PetsPlugin extends JavaPlugin {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
+            if (!sender.hasPermission("companionpets.reload")) {
+                sender.sendMessage("You do not have permission to reload CompanionPets.");
+                return true;
+            }
+            reloadSettings(sender);
+            return true;
+        }
         if (args.length >= 2 && args[0].equalsIgnoreCase("order")) {
             if (!(sender instanceof Player player)) {
                 sender.sendMessage("This command can only be used in game.");
@@ -153,8 +189,52 @@ public final class PetsPlugin extends JavaPlugin {
             }
             return true;
         }
-        sender.sendMessage("Usage: /companionpets <order WORD|calm|testdog [name]|moment TYPE|personality TYPE|social TYPE|owner TARGET>");
+        sender.sendMessage("Usage: /companionpets <order WORD|calm|testdog [name]|moment TYPE|personality TYPE|social TYPE|owner TARGET|reload>");
         return true;
+    }
+
+    private void reloadSettings(CommandSender sender) {
+        File file = new File(getDataFolder(), "config.yml");
+        YamlConfiguration yaml = new YamlConfiguration();
+        final CompanionConfig next;
+        try {
+            yaml.load(file);
+            next = CompanionConfig.load(this, yaml);
+        } catch (IOException | InvalidConfigurationException | RuntimeException ex) {
+            getLogger().log(Level.WARNING, "Could not reload CompanionPets config.yml", ex);
+            sender.sendMessage("CompanionPets config.yml could not be loaded. See the server log; the previous settings remain active.");
+            return;
+        }
+        if (next.types().isEmpty()) {
+            sender.sendMessage("No valid pet types found. The previous settings remain active.");
+            return;
+        }
+        for (var pet : store.all()) {
+            if (runtime.config().type(pet.typeId()) != null && next.type(pet.typeId()) == null) {
+                sender.sendMessage("Pet type '" + pet.typeId() + "' is still used by saved pets. The previous settings remain active.");
+                return;
+            }
+        }
+        try {
+            reloadConfig();
+        } catch (RuntimeException ex) {
+            getLogger().log(Level.WARNING, "Could not activate CompanionPets config.yml", ex);
+            sender.sendMessage("CompanionPets config.yml could not be activated. The previous settings remain active.");
+            return;
+        }
+        for (var player : Bukkit.getOnlinePlayers()) {
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder) player.closeInventory();
+        }
+        actions.clearInteractions();
+        actions.holograms().clear();
+        runtime.sessions().clearForReload();
+        visual.close();
+        runtime.config(next);
+        for (var world : Bukkit.getWorlds()) {
+            for (Entity entity : world.getEntities()) actions.reattach(entity);
+        }
+        sender.sendMessage("CompanionPets settings reloaded (" + next.types().size() + " pet types). Active models have been refreshed.");
+        getLogger().info("CompanionPets config reloaded (" + next.types().size() + " pet types)");
     }
 
     @Override
@@ -166,12 +246,13 @@ public final class PetsPlugin extends JavaPlugin {
             choices.add("order");
             choices.add("calm");
             if (test) choices.addAll(List.of("testdog", "moment", "personality", "social", "owner"));
+            if (sender.hasPermission("companionpets.reload")) choices.add("reload");
         } else if (args.length == 2) {
             switch (args[0].toLowerCase(Locale.ROOT)) {
                 case "order" -> {
                     if (sender instanceof Player player) choices.addAll(actions.orderWordsLookingAt(player));
                 }
-                case "moment" -> { if (test) choices.addAll(List.of("affection", "bark", "mischief", "dig")); }
+                case "moment" -> { if (test) choices.addAll(List.of("affection", "bark", "mischief", "dig", "belly")); }
                 case "personality" -> { if (test) choices.addAll(List.of("friendly", "playful", "shy", "territorial", "grumpy")); }
                 case "social" -> { if (test) choices.addAll(List.of("sniff", "chase", "bark")); }
                 case "owner" -> {

@@ -48,6 +48,7 @@ public final class Bodies {
             return null;
         }
         prepare(entity, pet, type, owner);
+        visual.play(entity, type, "SPAWN");
         return entity;
     }
 

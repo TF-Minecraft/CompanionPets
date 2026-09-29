@@ -46,6 +46,25 @@ training:
   treat-hunger-gain: 3
   rest-seconds: 90
 
+# Custom tricks share the normal word binding, learning and rewards.
+# The pet's tricks list can include these IDs alongside the built-in ones.
+# A valid definition needs animation, fallback-text, or both.
+# Without a usable animation OR fallback text, the trick is hidden for that pet.
+# Invalid definitions are logged and skipped; other tricks/pets still load.
+custom-tricks: {}
+# Example: replace the empty map above with this block.
+# custom-tricks:
+#   salute:
+#     display-name: "Saludar"
+#     animation: salute              # Exact clip name inside the model
+#     fallback-text: "{pet} te saluda." # Shown above vanilla pets/missing clips
+#     duration: 2                    # Seconds for text and zero-length poses
+#   roll:
+#     display-name: "Rodar"
+#     animation: roll                # No fallback: only pets with this clip
+# {pet} and {owner} are supported in fallback-text. Text is plain, not commands.
+# Animated clips play once using their own length. duration defaults to 2.
+
 limits:
   max-stored: 20
   max-out: 4
@@ -58,6 +77,20 @@ presence:
 
 moments:
   enabled: true
+  # Empty-hand petting by the owner can start this optional modeled moment.
+  # Requires ALL THREE clips: lie_back, belly_up, get_up (or their mappings).
+  # No illness/low needs, hunger >= 60, energy >= 40, health >= 70 and min-mood.
+  # Owner within 6 blocks; on land; no training, combat, fetch or active play.
+  belly-up:
+    enabled: true
+    chance: 25                       # Percent per eligible attempt
+    idle-seconds: 5                   # Stand up after this long without a rub
+    cooldown-seconds: 60              # Also limits unsuccessful attempts
+    min-mood: 70
+  # Right-click again to rub the belly and reset the idle timer. Rewards keep
+  # their normal cooldown. Damage, water, orders or leaving interrupt the moment.
+  # Operators can use /companionpets moment belly to trigger it immediately
+  # for testing; the pet still needs to be healthy and have all three clips.
   juvenile-hours: 24
   initial-delay-min-seconds: 180
   initial-delay-max-seconds: 420
@@ -127,8 +160,44 @@ items:
   kennel: BARREL
 
 pets:
+  # HOW TO ADD A PET
+  # 1. Copy a complete example below and give it a unique lowercase key.
+  # 2. Choose its entity, appearance and egg, then its food and toys.
+  # 3. Optionally restrict its tricks. Omit tricks to allow all existing tricks.
+  # Use spaces, not tabs. Keep each pet key at the same indentation as wolf.
+  #
+  # COMMON FIELDS (apply to vanilla AND ModelEngine pets)
+  # wolf / beagle: saved pet type ID and label in menus. Both may use WOLF.
+  #   Keep this key stable once pets exist; changing it does not migrate them.
+  # entity: Minecraft entity type in uppercase, e.g. WOLF, CAT, FOX or FROG.
+  #   This supplies the body and AI; it does not select a custom model/skin.
+  # appearance.type: vanilla (default) or modelengine. See the beagle example.
+  # egg: Minecraft item material used to create this pet.
+  # egg-custom-model-data: optional item CustomModelData number. The combination
+  #   of egg material + this number must be unique across pet types.
+  #   If omitted, the egg must have NO CustomModelData. The plugin does not
+  #   create custom egg items; supply them through your item provider/command.
+  # sex: random = assigned automatically; choose = player chooses when naming.
+  # care.foods: accepted item materials and the hunger points each restores.
+  # care.favorite: preferred food, also used as the training treat.
+  # care.medicine: item used to treat the pet.
+  # toys: accepted toy item materials; [] means no toys.
+  #
+  # TRICKS: what this type may learn AND perform, independently of animations.
+  # Omitted = all compatible base/custom tricks. [] = none. A list restricts them.
+  # sit = sit down; come = follow; stay = stay in place; speak = make its sound;
+  # jump = jump; spin = move in a circle; sleep = sleep; paw = give a paw;
+  # beg = ask for a treat using the vanilla sitting/attention behaviour.
+  # Add custom-tricks IDs to the same list, e.g. [sit, come, paw, salute].
+  # IDs are case-insensitive. Unknown IDs are skipped with a warning. A non-list
+  # disables tricks for that type, but the pet still loads. Saved progress/words
+  # are retained even when a custom definition or allowed trick is removed.
+  # Automatic rest/care and responding to the pet's name remain available.
+  # A trick does not need a separate animation with the same name.
   wolf:
     entity: WOLF
+    appearance:
+      type: vanilla
     egg: WOLF_SPAWN_EGG
     sex: random
     care:
@@ -140,14 +209,10 @@ pets:
     toys:
       - STICK
       - FEATHER
-    animations:
-      FOLLOWING: walk
-      SITTING: sit
-      PLAYING: play
-      SLEEPING: sleep
-      SICK: sick
   cat:
     entity: CAT
+    appearance:
+      type: vanilla
     egg: CAT_SPAWN_EGG
     sex: random
     care:
@@ -161,6 +226,8 @@ pets:
       - FEATHER
   fox:
     entity: FOX
+    appearance:
+      type: vanilla
     egg: FOX_SPAWN_EGG
     sex: choose
     care:
@@ -172,3 +239,87 @@ pets:
     toys:
       - STICK
       - FEATHER
+
+  # MODELENGINE EXAMPLE: uncomment this complete beagle block to enable it.
+  # Install/register the beagle blueprint and serve its generated resource pack.
+  # The beagle's body/AI is WOLF; its visible appearance is the ModelEngine model.
+  # Give its egg CustomModelData 12001 through your item provider or command.
+  # ModelEngine 4 is optional; an unavailable model uses the vanilla
+  # body and logs the reason. The default pets above need no ModelEngine plugin.
+  # beagle:
+  #   entity: WOLF
+  #   egg: WOLF_SPAWN_EGG
+  #   egg-custom-model-data: 12001
+  #   appearance:
+  #     type: modelengine
+  #     model: beagle                 # ModelEngine model ID (not an item skin)
+  #     scale: 1.0                    # Model and hitbox scale
+  #   # tricks omitted: this beagle can learn all tricks.
+  #   sex: random
+  #   care:
+  #     foods:
+  #       BEEF: 35
+  #       COOKED_BEEF: 55
+  #     favorite: COOKED_BEEF
+  #     medicine: HONEY_BOTTLE
+  #   toys:
+  #     - STICK
+  #     - FEATHER
+
+  # VANILLA FROG EXAMPLE: no ModelEngine needed; no paw or beg tricks.
+  # frog:
+  #   entity: FROG
+  #   appearance:
+  #     type: vanilla
+  #   egg: FROG_SPAWN_EGG
+  #   sex: random
+  #   tricks: [come, stay, speak, jump]
+  #   care:
+  #     foods:
+  #       SLIME_BALL: 35
+  #     favorite: SLIME_BALL
+  #     medicine: HONEY_BOTTLE
+  #   toys: []
+
+  # OPTIONAL MODELENGINE SETTINGS
+  # Put these inside a pet's appearance block, next to type/model/scale.
+  # You can OMIT animations entirely when clips use the default names.
+  # ALL animations are optional and automatically used IF present:
+  # idle, walk, run, crouch, sit, lie, sleep, jump, fall, swim, head_tilt, shake,
+  # paw, beg, pet, fly, hover, attack, hurt, death, eat, speak, spawn, spin,
+  # lie_back, belly_up, get_up. Missing clips do not prevent model attachment.
+  # idle/walk are recommended to avoid a static model. If lie is absent, the
+  # original lay clip is recognized automatically unless lie was disabled.
+  # Missing run uses walk at 1.5x speed; crouch uses walk; sleep uses lie then
+  # sit; lie uses sit. Without jump/swim, use idle in the air and walk in water.
+  # jump plays once on takeoff, holding its last pose until landing (or fall).
+  # Shake is for a WOLF changing from wet to dry while on the ground.
+  # head_tilt is for training; author only head bones and use a distinct clip.
+  # Without corresponding clips, spinning uses movement and eating/speaking
+  # use effects/sounds. pet is the normal petting reaction; it does not interrupt
+  # belly rubs. belly_up may be a zero-length pose; the plugin holds it itself.
+  # There are no sick, pet1, pet2 or despawn hooks.
+  #
+  # Example overrides (copy only the entries you need into appearance):
+  #     run-speed: 0.22             # Movement threshold in blocks per tick
+  #     animations:
+  #       lie: sleep                # Reuse the sleeping posture for exhaustion
+  #       paw: give_paw             # Left: plugin action; right: model clip name
+  #       head_tilt: {name: head_tilt, speed: 1.0, blend: 0.15}
+  #       # speed: playback multiplier; blend: transition time in seconds.
+  #       # Poses loop; gestures play once. Optional "" disables a clip.
+  #       # Every clip can be disabled, including idle/walk/sit/death.
+  #       # Disable unfinished optional placeholders until you animate them:
+  #       shake: ""
+  #
+  # For a ModelEngine frog using the original blueprint's clip names:
+  #     animations:
+  #       walk: animation.frog.walk
+  #       jump: animation.frog.jump
+  #       swim: animation.frog.swim
+  #       speak: animation.frog.croak
+  # Any other absent clips simply use their fallback or remain unanimated.
+  #
+  # Optional MythicMobs integration: mythic-mob: <internal mob ID> can provide
+  # the body instead of entity. This requires MythicMobs to be installed.
+  # Keep appearance ownership with CompanionPets when using ModelEngine here.

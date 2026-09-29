@@ -12,7 +12,6 @@ import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.Item;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
@@ -35,6 +34,60 @@ final class PetMoments {
     private final PetRuntime runtime;
     private final Map<Pet, Long> nextAt = new WeakHashMap<>();
     private final Map<Pet, GiftJob> gifts = new WeakHashMap<>();
+    private final Map<Pet, Long> nextBellyAt = new WeakHashMap<>();
+
+    private boolean bellyReady(Pet pet, Mob body, Player owner) {
+        return runtime.config().moments().enabled() && runtime.config().belly().enabled()
+                && pet.illness() == Illness.NONE && net.tfminecraft.companionpets.care.DominantNeed.select(pet) == null
+                && pet.need(Need.HUNGER) >= 60 && pet.need(Need.ENERGY) >= 40 && pet.need(Need.HEALTH) >= 70
+                && pet.need(Need.MOOD) >= runtime.config().belly().minMood()
+                && pet.activity() == Activity.NONE && pet.fetch() == null && !gifts.containsKey(pet)
+                && body.isValid() && body.isOnGround() && !body.isInWater() && body.getTarget() == null
+                && owner != null && owner.isOnline() && owner.getUniqueId().equals(pet.ownerId())
+                && owner.getWorld().equals(body.getWorld()) && owner.getLocation().distanceSquared(body.getLocation()) <= 36
+                && !runtime.sessions().resting(pet.id(), System.currentTimeMillis())
+                && !(runtime.sessions().training(owner.getUniqueId()) instanceof TrainingSession s && s.petId().equals(pet.id()));
+    }
+
+    boolean petBelly(Pet pet, Mob body, Player owner, long now) {
+        if (!bellyReady(pet, body, owner)) return false;
+        if (runtime.visual().belly(body)) {
+            if (runtime.visual().rubBelly(body)) {
+                PetFx.hearts(body, 2);
+                PetFx.bar(owner, "You scratch " + pet.name() + "'s belly");
+            }
+            return true;
+        }
+        if (now < nextBellyAt.getOrDefault(pet, 0L) || runtime.visual().holdsMovement(body)) return false;
+        // Rate limit attempts as well as successes, so rapid clicks cannot force a moment.
+        nextBellyAt.put(pet, now + Math.round(runtime.config().belly().cooldownSeconds() * 1000));
+        if (runtime.random().nextDouble() * 100 >= runtime.config().belly().chance()) return false;
+        return startBelly(pet, body, owner);
+    }
+
+    boolean triggerBelly(Pet pet, Mob body, Player owner) {
+        if (!bellyReady(pet, body, owner)) return false;
+        if (runtime.visual().belly(body)) return runtime.visual().rubBelly(body);
+        return startBelly(pet, body, owner);
+    }
+
+    private boolean startBelly(Pet pet, Mob body, Player owner) {
+        if (!runtime.visual().startBelly(body, runtime.config().type(pet.typeId()), Math.round(runtime.config().belly().idleSeconds() * 1000))) return false;
+        PetFx.sit(body, false);
+        body.getPathfinder().stopPathfinding();
+        PetFx.bar(owner, pet.name() + " rolls onto its back. Right-click to scratch its belly");
+        return true;
+    }
+
+    boolean tickBelly(Pet pet, Mob body, Player owner) {
+        if (!runtime.visual().belly(body)) return false;
+        if (!bellyReady(pet, body, owner)) {
+            runtime.visual().cancelAction(body);
+            return false;
+        }
+        body.getPathfinder().stopPathfinding();
+        return true;
+    }
 
     PetMoments(PetRuntime runtime) {
         this.runtime = runtime;
@@ -157,10 +210,8 @@ final class PetMoments {
     }
 
     void cancel(Pet pet) {
-        GiftJob gift = gifts.remove(pet);
-        if (gift != null && gift.display != null && gift.display.isValid()) {
-            gift.display.remove();
-        }
+        runtime.visual().cancelAction(runtime.entity(pet));
+        gifts.remove(pet);
         nextAt.remove(pet);
     }
 
@@ -169,6 +220,7 @@ final class PetMoments {
             cancel(pet);
         }
         nextAt.clear();
+        nextBellyAt.clear();
     }
 
     private boolean startGift(Pet pet, Mob body, Player owner, long now) {
@@ -190,7 +242,7 @@ final class PetMoments {
                 break;
             }
         }
-        gifts.put(pet, new GiftJob(found, now + 2_000L, now + 5_000L, now + 25_000L));
+        gifts.put(pet, new GiftJob(found, now + 5_000L, now + 25_000L));
         PetFx.look(body, body.getLocation().add(0, -0.5, 0));
         PetFx.particle(body, Particle.DUST_PLUME, 8);
         body.getWorld().playSound(body.getLocation(), Sound.BLOCK_GRAVEL_BREAK, 0.7f, 1.0f);
@@ -209,27 +261,12 @@ final class PetMoments {
             cancel(pet);
             return;
         }
-        if (now >= gift.readyAt && !gift.shown) {
-            gift.shown = true;
-            Item display = body.getWorld().dropItem(body.getLocation(), new ItemStack(gift.material));
-            display.setPickupDelay(Integer.MAX_VALUE);
-            display.setGravity(false);
-            display.setPersistent(false);
-            if (body.addPassenger(display)) {
-                gift.display = display;
-            } else {
-                display.remove();
-            }
-        }
         if (now < gift.deliverAt) {
             return;
         }
         if (body.getLocation().distanceSquared(owner.getLocation()) > 9.0) {
             body.getPathfinder().moveTo(owner.getLocation(), 1.1);
             return;
-        }
-        if (gift.display != null && gift.display.isValid()) {
-            gift.display.remove();
         }
         body.getWorld().dropItem(PetRuntime.inFront(owner), new ItemStack(gift.material));
         PetFx.particle(body, Particle.HAPPY_VILLAGER, 5);
@@ -239,15 +276,11 @@ final class PetMoments {
 
     private static final class GiftJob {
         private final Material material;
-        private final long readyAt;
         private final long deliverAt;
         private final long expiresAt;
-        private boolean shown;
-        private Item display;
 
-        private GiftJob(Material material, long readyAt, long deliverAt, long expiresAt) {
+        private GiftJob(Material material, long deliverAt, long expiresAt) {
             this.material = material;
-            this.readyAt = readyAt;
             this.deliverAt = deliverAt;
             this.expiresAt = expiresAt;
         }
@@ -275,6 +308,7 @@ final class PetMoments {
     }
 
     private void barkAt(Pet pet, Mob body, Player owner, LivingEntity target) {
+        runtime.visual().play(body, runtime.config().type(pet.typeId()), "SPEAK");
         PetFx.look(body, target.getEyeLocation());
         Sound sound = switch (body.getType()) {
             case WOLF -> Sound.ENTITY_WOLF_GROWL;

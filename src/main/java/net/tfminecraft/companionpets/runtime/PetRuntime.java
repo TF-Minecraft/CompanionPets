@@ -21,7 +21,7 @@ import net.tfminecraft.companionpets.visual.PetVisual;
 
 public final class PetRuntime {
     private final JavaPlugin plugin;
-    private final CompanionConfig config;
+    private CompanionConfig config;
     private final PetStore store;
     private final Sessions sessions;
     private final Bodies bodies;
@@ -55,6 +55,10 @@ public final class PetRuntime {
 
     public CompanionConfig config() {
         return config;
+    }
+
+    public void config(CompanionConfig config) {
+        this.config = java.util.Objects.requireNonNull(config);
     }
 
     public PetStore store() {
