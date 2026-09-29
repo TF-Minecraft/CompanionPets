@@ -148,6 +148,10 @@ public final class PetActions {
     }
 
     public void clearInteractions() {
+        for (UUID petId : java.util.List.copyOf(spins.keySet())) {
+            Pet pet = runtime.store().get(petId);
+            if (pet != null) cancelSpin(pet);
+        }
         spins.clear();
         roaming.clear();
         calming.clear();
