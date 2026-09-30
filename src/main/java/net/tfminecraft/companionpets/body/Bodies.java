@@ -63,6 +63,7 @@ public final class Bodies {
             tameable.setOwner(Bukkit.getOfflinePlayer(pet.ownerId()));
         }
         visual.apply(entity, type);
+        keepPersistent(entity);
     }
 
     public UUID readId(Entity entity) {
@@ -80,22 +81,20 @@ public final class Bodies {
     private void prepare(Entity entity, Pet pet, PetTypeDef type, Player owner) {
         tag(entity, pet.id());
         name(entity, pet.name());
-        if (!entity.isPersistent()) {
-            entity.setPersistent(true);
-        }
-        if (entity instanceof Mob mob) {
-            mob.setRemoveWhenFarAway(false);
-        }
         if (entity instanceof Ageable ageable) {
             ageable.setAdult();
         }
         if (entity instanceof Tameable tameable) {
             tameable.setTamed(true);
-            if (owner != null) {
-                tameable.setOwner(owner);
-            }
+            tameable.setOwner(owner != null ? owner : Bukkit.getOfflinePlayer(pet.ownerId()));
         }
         visual.apply(entity, type);
+        keepPersistent(entity);
+    }
+
+    private static void keepPersistent(Entity entity) {
+        entity.setPersistent(true);
+        if (entity instanceof Mob mob) mob.setRemoveWhenFarAway(false);
     }
 
     private void tag(Entity entity, UUID petId) {

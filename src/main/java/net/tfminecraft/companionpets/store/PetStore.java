@@ -3,6 +3,7 @@ package net.tfminecraft.companionpets.store;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -13,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
@@ -29,62 +31,83 @@ import net.tfminecraft.companionpets.pet.PetSex;
 import net.tfminecraft.companionpets.pet.Trick;
 
 public final class PetStore {
-    private final JavaPlugin plugin;
+    private final Logger logger;
     private final File file;
+    private final File backup;
     private final Map<UUID, Pet> pets = new LinkedHashMap<>();
     private final Map<String, UUID> kennels = new LinkedHashMap<>();
     private boolean loaded;
+    private boolean recovered;
 
     public PetStore(JavaPlugin plugin) {
-        this.plugin = plugin;
-        this.file = new File(plugin.getDataFolder(), "pets.yml");
+        this(new File(plugin.getDataFolder(), "pets.yml"), plugin.getLogger());
     }
 
-    public void load() {
-        pets.clear();
-        kennels.clear();
+    PetStore(File file, Logger logger) {
+        this.file = file;
+        this.backup = new File(file.getParentFile(), file.getName() + ".bak");
+        this.logger = logger;
+    }
+
+    public boolean load() {
         loaded = false;
-        if (!file.exists()) {
+        recovered = false;
+        if (!file.exists() && !backup.exists()) {
+            pets.clear();
+            kennels.clear();
             loaded = true;
-            return;
+            return true;
         }
+        if (file.exists() && read(file)) return true;
+        if (backup.exists() && read(backup)) {
+            recovered = true;
+            logger.warning("Recovered pet data from pets.yml.bak; the current pets.yml will be replaced on the next save");
+            return true;
+        }
+        logger.severe("Could not load pet data or backup; CompanionPets must not start to avoid overwriting saved pets");
+        return false;
+    }
+
+    private boolean read(File source) {
         YamlConfiguration yaml = new YamlConfiguration();
         try {
-            yaml.load(file);
-        } catch (IOException | InvalidConfigurationException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Could not read pets.yml; saving is disabled so it is not overwritten", ex);
-            return;
-        }
-        loaded = true;
-        ConfigurationSection petSection = yaml.getConfigurationSection("pets");
-        if (petSection != null) {
-            for (String id : petSection.getKeys(false)) {
-                try {
+            yaml.load(source);
+            if (!yaml.contains("pets") && !yaml.contains("kennels")) {
+                throw new IllegalArgumentException("Missing pets and kennels data");
+            }
+            Map<UUID, Pet> nextPets = new LinkedHashMap<>();
+            Map<String, UUID> nextKennels = new LinkedHashMap<>();
+            ConfigurationSection petSection = yaml.getConfigurationSection("pets");
+            if (yaml.contains("pets") && petSection == null) throw new IllegalArgumentException("pets must be a section");
+            if (petSection != null) {
+                for (String id : petSection.getKeys(false)) {
                     Pet pet = readPet(UUID.fromString(id), petSection.getConfigurationSection(id));
-                    if (pet != null) {
-                        pets.put(pet.id(), pet);
-                    }
-                } catch (IllegalArgumentException ex) {
-                    plugin.getLogger().warning("Skipping pet with invalid id " + id);
+                    if (pet == null) throw new IllegalArgumentException("Invalid pet record " + id);
+                    nextPets.put(pet.id(), pet);
                 }
             }
-        }
-        for (java.util.Map<?, ?> row : yaml.getMapList("kennels")) {
-            Object world = row.get("world");
-            Object owner = row.get("owner");
-            if (world == null || owner == null) {
-                continue;
-            }
-            try {
+            if (yaml.contains("kennels") && !yaml.isList("kennels")) throw new IllegalArgumentException("kennels must be a list");
+            for (Object entry : yaml.getList("kennels", List.of())) {
+                if (!(entry instanceof Map<?, ?> row)) throw new IllegalArgumentException("Invalid kennel record");
+                Object world = row.get("world");
+                Object owner = row.get("owner");
+                if (world == null || owner == null) throw new IllegalArgumentException("Invalid kennel owner or world");
                 String key = kennelKey(
                         String.valueOf(world),
                         ((Number) row.get("x")).intValue(),
                         ((Number) row.get("y")).intValue(),
                         ((Number) row.get("z")).intValue());
-                kennels.put(key, UUID.fromString(String.valueOf(owner)));
-            } catch (RuntimeException ex) {
-                plugin.getLogger().warning("Skipping kennel " + world);
+                nextKennels.put(key, UUID.fromString(String.valueOf(owner)));
             }
+            pets.clear();
+            pets.putAll(nextPets);
+            kennels.clear();
+            kennels.putAll(nextKennels);
+            loaded = true;
+            return true;
+        } catch (IOException | InvalidConfigurationException | RuntimeException ex) {
+            logger.log(Level.SEVERE, "Could not read " + source.getName(), ex);
+            return false;
         }
     }
 
@@ -93,6 +116,7 @@ public final class PetStore {
             return;
         }
         YamlConfiguration yaml = new YamlConfiguration();
+        yaml.set("version", 1);
         for (Pet pet : pets.values()) {
             String path = "pets." + pet.id();
             yaml.set(path + ".owner", pet.ownerId().toString());
@@ -157,9 +181,28 @@ public final class PetStore {
         File temp = new File(file.getParentFile(), file.getName() + ".tmp");
         try {
             yaml.save(temp);
-            Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            if (file.exists() && !recovered) {
+                File backupTemp = new File(file.getParentFile(), backup.getName() + ".tmp");
+                Files.copy(file.toPath(), backupTemp.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                replace(backupTemp, backup);
+            }
+            replace(temp, file);
+            if (!backup.exists()) {
+                File backupTemp = new File(file.getParentFile(), backup.getName() + ".tmp");
+                Files.copy(file.toPath(), backupTemp.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                replace(backupTemp, backup);
+            }
+            recovered = false;
         } catch (IOException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Could not save pets.yml", ex);
+            logger.log(Level.SEVERE, "Could not save pets.yml", ex);
+        }
+    }
+
+    private static void replace(File source, File target) throws IOException {
+        try {
+            Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ex) {
+            Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -319,8 +362,8 @@ public final class PetStore {
         kennels.put(key, ownerId);
     }
 
-    public void removeKennel(String key) {
-        kennels.remove(key);
+    public boolean removeKennel(String key) {
+        return kennels.remove(key) != null;
     }
 
     public UUID kennelOwner(String key) {

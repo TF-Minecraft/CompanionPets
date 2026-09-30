@@ -691,7 +691,7 @@ public final class PetActions {
             entity.remove();
             return;
         }
-        if (pet.entityId() != null && !pet.entityId().equals(entity.getUniqueId())) {
+        if (pet.entityId() != null && !pet.entityId().equals(entity.getUniqueId()) && runtime.entity(pet) != null) {
             runtime.visual().remove(entity);
             entity.remove();
             return;
@@ -700,6 +700,37 @@ public final class PetActions {
         runtime.remember(pet, entity);
         PetTypeDef type = runtime.config().type(pet.typeId());
         runtime.bodies().reattach(entity, pet, type);
+    }
+
+    public Entity restoreBody(Pet pet) {
+        if (pet.stored() || pet.dead()) return null;
+        Entity body = runtime.entity(pet);
+        if (body != null) return body;
+        World world = Bukkit.getWorld(pet.worldName());
+        if (world == null) return null;
+        int chunkX = ((int) Math.floor(pet.x())) >> 4;
+        int chunkZ = ((int) Math.floor(pet.z())) >> 4;
+        if (!world.isChunkLoaded(chunkX, chunkZ)) return null;
+        Chunk chunk = world.getChunkAt(chunkX, chunkZ);
+        if (!chunk.isEntitiesLoaded()) return null;
+        // Adopt an existing tagged body before spawning, even if its saved entity
+        // UUID is stale. Late-loading duplicates are removed by reattach().
+        for (Entity candidate : chunk.getEntities()) {
+            if (candidate.isValid() && !candidate.isDead() && pet.id().equals(runtime.bodies().readId(candidate))) {
+                reattach(candidate);
+                runtime.store().save();
+                return candidate;
+            }
+        }
+        Location location = new Location(world, pet.x(), pet.y(), pet.z(), pet.yaw(), 0);
+        body = runtime.bodies().spawn(pet, runtime.config().type(pet.typeId()), location, Bukkit.getPlayer(pet.ownerId()));
+        if (body != null) {
+            pet.clearRuntimeMotion();
+            runtime.remember(pet, body);
+            runtime.store().save();
+            runtime.plugin().getLogger().info("Restored missing body for pet " + pet.id() + " (" + pet.name() + ")");
+        }
+        return body;
     }
 
     public void stashLooseToys() {
@@ -1552,6 +1583,7 @@ public final class PetActions {
         }
         pet.stored(false);
         runtime.remember(pet, entity);
+        runtime.store().save();
     }
 
     private void releasePet(Player player, Pet pet) {
@@ -1669,6 +1701,7 @@ public final class PetActions {
         pet.entityId(null);
         pet.stored(true);
         pet.clearRuntimeMotion();
+        runtime.store().save();
     }
 
     private void call(Player player, Pet pet) {
@@ -1684,11 +1717,8 @@ public final class PetActions {
             chunk.load(true);
             chunk.getEntities();
         }
-        Entity entity = runtime.entity(pet);
-        if (entity == null && pet.entityId() != null) {
-            entity = Bukkit.getEntity(pet.entityId());
-        }
-        if (entity == null || !entity.isValid() || entity.isDead()) {
+        Entity entity = restoreBody(pet);
+        if (entity == null) {
             PetFx.bar(player, pet.name() + " can't be found. Send " + PetTexts.him(pet.sex()) + " to the shelter to bring "
                     + PetTexts.him(pet.sex()) + " back");
             return;
@@ -1698,6 +1728,7 @@ public final class PetActions {
         pet.order(PetOrder.FOLLOW);
         pet.staying(false);
         runtime.remember(pet, entity);
+        runtime.store().save();
         PetFx.bar(player, pet.name() + " comes running to your side");
     }
 
@@ -1712,6 +1743,7 @@ public final class PetActions {
         }
         place.setType(runtime.config().kennel());
         runtime.store().kennel(PetStore.kennelKey(place.getWorld().getName(), place.getX(), place.getY(), place.getZ()), player.getUniqueId());
+        runtime.store().save();
         PetFx.bar(player, "Shelter placed. Right-click it to look after your pets");
     }
 

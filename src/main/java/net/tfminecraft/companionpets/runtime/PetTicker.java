@@ -73,16 +73,22 @@ public final class PetTicker implements Runnable {
             Player owner = Bukkit.getPlayer(pet.ownerId());
             boolean online = owner != null && owner.isOnline();
             Entity body = runtime.entity(pet);
-            if (body == null && pet.entityId() != null && bodyChunkEntitiesLoaded(pet)) {
+            if (!pet.stored() && body == null && bodyChunkEntitiesLoaded(pet)) {
                 long firstMissing = missingBodySince.computeIfAbsent(pet.id(), id -> now);
                 if (now - firstMissing >= MISSING_BODY_GRACE_MILLIS) {
-                    missingBodySince.remove(pet.id());
-                    actions.lostBody(pet);
-                    continue;
+                    body = actions.restoreBody(pet);
+                    if (body != null) {
+                        missingBodySince.remove(pet.id());
+                    } else {
+                        missingBodySince.put(pet.id(), now);
+                    }
                 }
             } else {
                 missingBodySince.remove(pet.id());
             }
+            // An unloaded or missing body is not evidence of death. Keep its record
+            // and freeze care until the saved chunk and body are available again.
+            if (!pet.stored() && body == null) continue;
             if (body != null) {
                 runtime.remember(pet, body);
             }
