@@ -3,11 +3,13 @@ package net.tfminecraft.companionpets.store;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.EnumSet;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -124,7 +126,7 @@ class PetStoreTest {
     }
 
     @Test
-    void recoversBackupAndDoesNotReplaceItWithCorruptPrimary() throws Exception {
+    void requiresOperatorRestoreAndPreservesBothFilesOnLoadFailure() throws Exception {
         UUID id = UUID.randomUUID();
         PetStore first = store();
         assertTrue(first.load());
@@ -133,14 +135,65 @@ class PetStoreTest {
         Path primary = directory.resolve("pets.yml");
         Path backup = directory.resolve("pets.yml.bak");
         assertTrue(Files.exists(backup));
-        Files.writeString(primary, "pets: [broken");
+        String corrupt = "pets: [broken";
+        Files.writeString(primary, corrupt);
+        String savedBackup = Files.readString(backup);
 
         PetStore recovered = store();
-        assertTrue(recovered.load());
-        assertNotNull(recovered.get(id));
+        assertFalse(recovered.load());
+        assertNull(recovered.get(id));
         recovered.save();
+        assertEquals(corrupt, Files.readString(primary));
+        assertEquals(savedBackup, Files.readString(backup));
+
+        // An operator restores this snapshot after checking transfers and deletions.
+        Files.copy(backup, primary, StandardCopyOption.REPLACE_EXISTING);
         assertNotNull(storePet(id));
         assertTrue(Files.readString(backup).contains("Rex"));
+    }
+
+    @Test
+    void damagedPrimaryDoesNotRevertOwnershipFromAnOlderBackup() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID previousOwner = UUID.randomUUID();
+        UUID newOwner = UUID.randomUUID();
+        PetStore current = store();
+        assertTrue(current.load());
+        Pet pet = new Pet(id, previousOwner, "wolf", "Rex", PetSex.MALE);
+        current.add(pet);
+        current.save();
+        pet.ownerId(newOwner);
+        current.save();
+        assertTrue(Files.readString(directory.resolve("pets.yml.bak")).contains(previousOwner.toString()));
+        Files.writeString(directory.resolve("pets.yml"), "pets: [broken");
+
+        PetStore restarted = store();
+        assertFalse(restarted.load());
+        assertTrue(restarted.of(previousOwner).isEmpty());
+        assertNull(restarted.get(id));
+    }
+
+    @Test
+    void missingPrimaryDoesNotResurrectDeletedPetsOrStartWithEmptyData() throws Exception {
+        UUID id = UUID.randomUUID();
+        PetStore current = store();
+        assertTrue(current.load());
+        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        current.save();
+        current.remove(id);
+        current.save();
+        Path primary = directory.resolve("pets.yml");
+        Path backup = directory.resolve("pets.yml.bak");
+        String savedBackup = Files.readString(backup);
+        assertTrue(savedBackup.contains(id.toString()));
+        Files.delete(primary);
+
+        PetStore restarted = store();
+        assertFalse(restarted.load());
+        assertNull(restarted.get(id));
+        restarted.save();
+        assertFalse(Files.exists(primary));
+        assertEquals(savedBackup, Files.readString(backup));
     }
 
     @Test

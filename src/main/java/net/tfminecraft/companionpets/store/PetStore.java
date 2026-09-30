@@ -37,7 +37,6 @@ public final class PetStore {
     private final Map<UUID, Pet> pets = new LinkedHashMap<>();
     private final Map<String, UUID> kennels = new LinkedHashMap<>();
     private boolean loaded;
-    private boolean recovered;
 
     public PetStore(JavaPlugin plugin) {
         this(new File(plugin.getDataFolder(), "pets.yml"), plugin.getLogger());
@@ -51,7 +50,6 @@ public final class PetStore {
 
     public boolean load() {
         loaded = false;
-        recovered = false;
         if (!file.exists() && !backup.exists()) {
             pets.clear();
             kennels.clear();
@@ -59,12 +57,8 @@ public final class PetStore {
             return true;
         }
         if (file.exists() && read(file)) return true;
-        if (backup.exists() && read(backup)) {
-            recovered = true;
-            logger.warning("Recovered pet data from pets.yml.bak; the current pets.yml will be replaced on the next save");
-            return true;
-        }
-        logger.severe("Could not load pet data or backup; CompanionPets must not start to avoid overwriting saved pets");
+        logger.severe("Could not load pets.yml; saving is disabled. Restore pets.yml.bak manually with the server stopped, "
+                + "after reconciling ownership changes and deleted pets in that older snapshot");
         return false;
     }
 
@@ -181,7 +175,7 @@ public final class PetStore {
         File temp = new File(file.getParentFile(), file.getName() + ".tmp");
         try {
             yaml.save(temp);
-            if (file.exists() && !recovered) {
+            if (file.exists()) {
                 File backupTemp = new File(file.getParentFile(), backup.getName() + ".tmp");
                 Files.copy(file.toPath(), backupTemp.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 replace(backupTemp, backup);
@@ -192,7 +186,6 @@ public final class PetStore {
                 Files.copy(file.toPath(), backupTemp.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 replace(backupTemp, backup);
             }
-            recovered = false;
         } catch (IOException ex) {
             logger.log(Level.SEVERE, "Could not save pets.yml", ex);
         }

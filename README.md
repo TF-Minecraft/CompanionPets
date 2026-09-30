@@ -279,10 +279,13 @@ owner is online but far.
 The plugin stores pets and shelter ownership in `plugins/CompanionPets/pets.yml`.
 It saves immediately after important changes, every five minutes, and when the
 plugin stops. Each save writes a temporary file and replaces the main file;
-`pets.yml.bak` holds the previous valid save. On startup, a damaged or missing
-main file is recovered from that backup. If neither file can be read, the plugin
-disables itself and leaves both files untouched so an operator can restore them.
-Back up both files before manually editing saved data.
+`pets.yml.bak` holds the previous valid save. If the main file is damaged or
+missing while a backup exists, the plugin disables itself and leaves both files
+untouched. To recover, stop the server, preserve both files, and copy the backup
+to `pets.yml`. Reconcile ownership changes and deleted pets before starting:
+the older snapshot may revert a transfer or restore a pet that was released or
+died after that save. Backups are never activated automatically. Back up both
+files before manually editing saved data.
 
 Pets left outside retain their last position and identity across restarts. When
 their chunk's entities have loaded, the plugin reconnects to the tagged body or
