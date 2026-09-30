@@ -51,7 +51,10 @@ public final class PetsPlugin extends JavaPlugin {
         saveDefaultConfig();
         CompanionConfig config = CompanionConfig.load(this);
         store = new PetStore(this);
-        store.load();
+        if (!store.load() || !store.beginSession()) {
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         NamespacedKey petKey = new NamespacedKey(this, "pet");
         NamespacedKey toyKey = new NamespacedKey(this, "toy");
         visual = new IdleVisual();
@@ -89,7 +92,6 @@ public final class PetsPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         if (visualTicker != null) visualTicker.cancel();
-        if (visual != null) visual.close();
         if (ticker != null) {
             ticker.cancel();
         }
@@ -100,13 +102,18 @@ public final class PetsPlugin extends JavaPlugin {
             autosave.cancel();
         }
         if (actions != null) {
+            for (var pet : store.all()) {
+                Entity body = runtime.entity(pet);
+                if (body != null) runtime.remember(pet, body);
+            }
             actions.clearInteractions();
             actions.holograms().clear();
             actions.stashLooseToys();
         }
         if (store != null) {
-            store.save();
+            store.close();
         }
+        if (visual != null) visual.close();
         getLogger().info("CompanionPets disabled");
     }
 

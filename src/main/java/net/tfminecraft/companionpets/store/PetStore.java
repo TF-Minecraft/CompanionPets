@@ -2,8 +2,13 @@ package net.tfminecraft.companionpets.store;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -11,8 +16,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
@@ -29,70 +37,120 @@ import net.tfminecraft.companionpets.pet.PetSex;
 import net.tfminecraft.companionpets.pet.Trick;
 
 public final class PetStore {
-    private final JavaPlugin plugin;
+    private final Logger logger;
     private final File file;
+    private final File backup;
+    private final File deletions;
+    private final File session;
+    private final Set<UUID> deleted = new LinkedHashSet<>();
     private final Map<UUID, Pet> pets = new LinkedHashMap<>();
     private final Map<String, UUID> kennels = new LinkedHashMap<>();
     private boolean loaded;
+    private boolean deletionLogHealthy;
+    private boolean sessionStarted;
 
     public PetStore(JavaPlugin plugin) {
-        this.plugin = plugin;
-        this.file = new File(plugin.getDataFolder(), "pets.yml");
+        this(new File(plugin.getDataFolder(), "pets.yml"), plugin.getLogger());
     }
 
-    public void load() {
-        pets.clear();
-        kennels.clear();
+    PetStore(File file, Logger logger) {
+        this.file = file;
+        this.backup = new File(file.getParentFile(), file.getName() + ".bak");
+        this.deletions = new File(file.getParentFile(), "pet-deletions.log");
+        this.session = new File(file.getParentFile(), "pets-recovery-required");
+        this.logger = logger;
+    }
+
+    public boolean load() {
         loaded = false;
-        if (!file.exists()) {
-            loaded = true;
-            return;
+        deletionLogHealthy = false;
+        if (session.exists()) {
+            logger.severe("Previous pet session did not commit a clean shutdown. Stop the server and reconcile pets.yml "
+                    + "with pet-deletions.log and actual deaths before removing pets-recovery-required; saving is disabled");
+            return false;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
         try {
-            yaml.load(file);
-        } catch (IOException | InvalidConfigurationException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Could not read pets.yml; saving is disabled so it is not overwritten", ex);
-            return;
-        }
-        loaded = true;
-        ConfigurationSection petSection = yaml.getConfigurationSection("pets");
-        if (petSection != null) {
-            for (String id : petSection.getKeys(false)) {
-                try {
-                    Pet pet = readPet(UUID.fromString(id), petSection.getConfigurationSection(id));
-                    if (pet != null) {
-                        pets.put(pet.id(), pet);
-                    }
-                } catch (IllegalArgumentException ex) {
-                    plugin.getLogger().warning("Skipping pet with invalid id " + id);
+            Set<UUID> nextDeleted = new LinkedHashSet<>();
+            if (deletions.exists()) {
+                String contents = Files.readString(deletions.toPath(), StandardCharsets.UTF_8);
+                if (!contents.isEmpty() && !contents.endsWith("\n")) {
+                    throw new IllegalArgumentException("Incomplete deletion log entry");
+                }
+                for (String line : Files.readAllLines(deletions.toPath(), StandardCharsets.UTF_8)) {
+                    // A partial write must fail closed instead of forgetting a deletion.
+                    if (!line.equals(UUID.fromString(line).toString())) throw new IllegalArgumentException("Invalid deletion ID");
+                    nextDeleted.add(UUID.fromString(line));
                 }
             }
+            deleted.clear();
+            deleted.addAll(nextDeleted);
+            deletionLogHealthy = true;
+        } catch (IOException | RuntimeException ex) {
+            logger.log(Level.SEVERE, "Could not read pet-deletions.log; saving is disabled", ex);
+            return false;
         }
-        for (java.util.Map<?, ?> row : yaml.getMapList("kennels")) {
-            Object world = row.get("world");
-            Object owner = row.get("owner");
-            if (world == null || owner == null) {
-                continue;
+        if (!file.exists() && !backup.exists() && !deletions.exists()) {
+            pets.clear();
+            kennels.clear();
+            loaded = true;
+            return true;
+        }
+        if (file.exists() && read(file)) return true;
+        logger.severe("Could not load pets.yml; saving is disabled. Restore pets.yml.bak manually with the server stopped, "
+                + "after reconciling ownership changes and deleted pets in that older snapshot");
+        return false;
+    }
+
+    private boolean read(File source) {
+        YamlConfiguration yaml = new YamlConfiguration();
+        try {
+            yaml.load(source);
+            if (!yaml.contains("pets") && !yaml.contains("kennels")) {
+                throw new IllegalArgumentException("Missing pets and kennels data");
             }
-            try {
+            Map<UUID, Pet> nextPets = new LinkedHashMap<>();
+            Map<String, UUID> nextKennels = new LinkedHashMap<>();
+            ConfigurationSection petSection = yaml.getConfigurationSection("pets");
+            if (yaml.contains("pets") && petSection == null) throw new IllegalArgumentException("pets must be a section");
+            if (petSection != null) {
+                for (String id : petSection.getKeys(false)) {
+                    Pet pet = readPet(UUID.fromString(id), petSection.getConfigurationSection(id));
+                    if (pet == null) throw new IllegalArgumentException("Invalid pet record " + id);
+                    nextPets.put(pet.id(), pet);
+                }
+            }
+            if (yaml.contains("kennels") && !yaml.isList("kennels")) throw new IllegalArgumentException("kennels must be a list");
+            for (Object entry : yaml.getList("kennels", List.of())) {
+                if (!(entry instanceof Map<?, ?> row)) throw new IllegalArgumentException("Invalid kennel record");
+                Object world = row.get("world");
+                Object owner = row.get("owner");
+                if (world == null || owner == null) throw new IllegalArgumentException("Invalid kennel owner or world");
                 String key = kennelKey(
                         String.valueOf(world),
                         ((Number) row.get("x")).intValue(),
                         ((Number) row.get("y")).intValue(),
                         ((Number) row.get("z")).intValue());
-                kennels.put(key, UUID.fromString(String.valueOf(owner)));
-            } catch (RuntimeException ex) {
-                plugin.getLogger().warning("Skipping kennel " + world);
+                nextKennels.put(key, UUID.fromString(String.valueOf(owner)));
             }
+            pets.clear();
+            pets.putAll(nextPets);
+            deleted.forEach(pets::remove);
+            kennels.clear();
+            kennels.putAll(nextKennels);
+            loaded = true;
+            return true;
+        } catch (IOException | InvalidConfigurationException | RuntimeException ex) {
+            logger.log(Level.SEVERE, "Could not read " + source.getName(), ex);
+            return false;
         }
     }
 
-    public void save() {
-        if (!loaded) {
-            return;
+    public boolean save() {
+        if (!loaded || !deletionLogHealthy) {
+            return false;
         }
         YamlConfiguration yaml = new YamlConfiguration();
+        yaml.set("version", 1);
         for (Pet pet : pets.values()) {
             String path = "pets." + pet.id();
             yaml.set(path + ".owner", pet.ownerId().toString());
@@ -157,9 +215,74 @@ public final class PetStore {
         File temp = new File(file.getParentFile(), file.getName() + ".tmp");
         try {
             yaml.save(temp);
-            Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            if (file.exists()) {
+                File backupTemp = new File(file.getParentFile(), backup.getName() + ".tmp");
+                Files.copy(file.toPath(), backupTemp.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                replace(backupTemp, backup);
+            }
+            replace(temp, file);
+            if (!backup.exists()) {
+                File backupTemp = new File(file.getParentFile(), backup.getName() + ".tmp");
+                Files.copy(file.toPath(), backupTemp.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                replace(backupTemp, backup);
+            }
         } catch (IOException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Could not save pets.yml", ex);
+            logger.log(Level.SEVERE, "Could not save pets.yml", ex);
+            return false;
+        }
+        return true;
+    }
+
+    /** Arm recovery protection before enabling any pet actions or observing deaths. */
+    public boolean beginSession() {
+        if (!loaded || !deletionLogHealthy || sessionStarted) return false;
+        try {
+            Files.createDirectories(session.toPath().getParent());
+            try (FileChannel channel = FileChannel.open(session.toPath(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+                writeAndForce(channel, "Pet session active; reconcile terminal transitions if shutdown does not complete.\n");
+            }
+            sessionStarted = true;
+            return true;
+        } catch (IOException ex) {
+            loaded = false;
+            logger.log(Level.SEVERE, "Could not arm pet recovery protection; saving is disabled", ex);
+            return false;
+        }
+    }
+
+    public boolean close() {
+        if (!save()) return false;
+        if (sessionStarted) {
+            try {
+                Files.delete(session.toPath());
+                sessionStarted = false;
+            } catch (IOException ex) {
+                logger.log(Level.SEVERE, "Could not confirm clean pet shutdown", ex);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void writeAndForce(FileChannel channel, String value) throws IOException {
+        ByteBuffer bytes = StandardCharsets.UTF_8.encode(value);
+        while (bytes.hasRemaining()) channel.write(bytes);
+        channel.force(true);
+    }
+
+    public boolean canRestoreBodies() {
+        return loaded && deletionLogHealthy;
+    }
+
+    public boolean isDeleted(UUID id) {
+        return deleted.contains(id);
+    }
+
+    private static void replace(File source, File target) throws IOException {
+        try {
+            Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ex) {
+            Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -266,11 +389,29 @@ public final class PetStore {
     }
 
     public void add(Pet pet) {
+        if (deleted.contains(pet.id())) throw new IllegalArgumentException("Cannot reuse a deleted pet ID");
         pets.put(pet.id(), pet);
     }
 
-    public void remove(UUID id) {
+    /** Persist a terminal transition before a caller removes its body. */
+    public boolean remove(UUID id) {
+        if (!loaded || !deletionLogHealthy) return false;
+        if (!pets.containsKey(id)) return true;
+        try {
+            Files.createDirectories(deletions.toPath().getParent());
+            try (FileChannel channel = FileChannel.open(deletions.toPath(), StandardOpenOption.CREATE,
+                    StandardOpenOption.WRITE, StandardOpenOption.APPEND)) {
+                writeAndForce(channel, id + "\n");
+            }
+        } catch (IOException ex) {
+            deletionLogHealthy = false;
+            logger.log(Level.SEVERE, "Could not commit deletion for pet " + id
+                    + "; body recovery and saving are disabled. The session guard requires operator reconciliation", ex);
+            return false;
+        }
+        deleted.add(id);
         pets.remove(id);
+        return true;
     }
 
     public List<Pet> of(UUID ownerId) {
@@ -319,8 +460,8 @@ public final class PetStore {
         kennels.put(key, ownerId);
     }
 
-    public void removeKennel(String key) {
-        kennels.remove(key);
+    public boolean removeKennel(String key) {
+        return kennels.remove(key) != null;
     }
 
     public UUID kennelOwner(String key) {

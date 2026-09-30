@@ -29,6 +29,7 @@ import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.event.world.EntitiesUnloadEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.persistence.PersistentDataType;
@@ -148,10 +149,27 @@ public final class PetListener implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onUnload(EntitiesUnloadEvent event) {
+        for (Entity entity : event.getEntities()) {
+            Pet pet = runtime.byEntity(entity);
+            if (pet != null && entity.getUniqueId().equals(pet.entityId())) {
+                runtime.remember(pet, entity);
+            }
+        }
+    }
+
     @EventHandler
     public void onDeath(EntityDeathEvent event) {
         Pet pet = runtime.byEntity(event.getEntity());
         if (pet == null) {
+            // A neglect death commits its deletion before starting the model's
+            // death animation, so its record is already absent here.
+            UUID id = runtime.bodies().readId(event.getEntity());
+            if (id != null && runtime.store().isDeleted(id)) {
+                event.getDrops().clear();
+                event.setDroppedExp(0);
+            }
             return;
         }
         if (pet.dead()) {
@@ -181,13 +199,15 @@ public final class PetListener implements Listener {
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
-        runtime.store().removeKennel(PetStore.kennelKey(
+        if (runtime.store().removeKennel(PetStore.kennelKey(
                 event.getBlock().getWorld().getName(),
                 event.getBlock().getX(),
                 event.getBlock().getY(),
-                event.getBlock().getZ()));
+                event.getBlock().getZ()))) {
+            runtime.store().save();
+        }
     }
 
     @EventHandler
