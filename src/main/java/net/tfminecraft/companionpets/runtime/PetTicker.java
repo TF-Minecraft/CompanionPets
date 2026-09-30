@@ -136,6 +136,8 @@ public final class PetTicker implements Runnable {
                     runtime.config().care(),
                     runtime.config().awayRate()));
             if (pet.dead()) {
+                if (!runtime.store().remove(pet.id())) continue;
+                runtime.store().save();
                 actions.clearInteractions(pet);
                 if (body instanceof org.bukkit.entity.LivingEntity living && runtime.visual().attached(body)) {
                     living.setHealth(0);
@@ -143,7 +145,6 @@ public final class PetTicker implements Runnable {
                     runtime.visual().remove(body);
                     body.remove();
                 }
-                runtime.store().remove(pet.id());
                 if (online) {
                     PetFx.tell(owner, pet.name() + " grew too weak without care and has passed away.");
                 }

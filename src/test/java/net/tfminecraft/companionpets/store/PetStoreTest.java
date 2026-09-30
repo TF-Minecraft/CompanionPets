@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -209,6 +210,141 @@ class PetStoreTest {
 
         assertTrue(Files.readString(directory.resolve("pets.yml")).contains("New name"));
         assertTrue(Files.readString(directory.resolve("pets.yml.bak")).contains("Old name"));
+    }
+
+    @Test
+    void deletionSurvivesInterruptionBeforeSnapshotSaveAndOlderBackupRestore() throws Exception {
+        UUID id = UUID.randomUUID();
+        PetStore current = store();
+        assertTrue(current.load());
+        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        assertTrue(current.save());
+        String stalePrimary = Files.readString(directory.resolve("pets.yml"));
+
+        assertTrue(current.remove(id));
+        // Simulate interruption before the snapshot can commit the deletion.
+        assertEquals(stalePrimary, Files.readString(directory.resolve("pets.yml")));
+        PetStore restarted = store();
+        assertTrue(restarted.load());
+        assertNull(restarted.get(id));
+        assertTrue(restarted.isDeleted(id));
+        Files.copy(directory.resolve("pets.yml.bak"), directory.resolve("pets.yml"), StandardCopyOption.REPLACE_EXISTING);
+        assertNull(storePet(id));
+        assertThrows(IllegalArgumentException.class,
+                () -> restarted.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE)));
+    }
+
+    @Test
+    void snapshotBackupFailureKeepsDurableDeletionAndShutdownGuard() throws Exception {
+        UUID id = UUID.randomUUID();
+        PetStore current = store();
+        assertTrue(current.load());
+        assertTrue(current.beginSession());
+        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        assertTrue(current.save());
+        String stalePrimary = Files.readString(directory.resolve("pets.yml"));
+        Path blockedBackup = directory.resolve("pets.yml.bak.tmp");
+        Files.createDirectory(blockedBackup);
+        Files.writeString(blockedBackup.resolve("block"), "prevent replacement");
+
+        assertTrue(current.remove(id));
+        assertFalse(current.save());
+        assertFalse(current.close());
+        assertEquals(stalePrimary, Files.readString(directory.resolve("pets.yml")));
+        assertTrue(Files.exists(directory.resolve("pets-recovery-required")));
+        assertFalse(store().load());
+        // After reconciliation, even the stale primary respects the durable log.
+        Files.delete(directory.resolve("pets-recovery-required"));
+        assertNull(storePet(id));
+    }
+
+    @Test
+    void deletionLogFailureRefusesReleaseAndBlocksRecoveryAfterRestart() throws Exception {
+        UUID id = UUID.randomUUID();
+        PetStore current = store();
+        assertTrue(current.load());
+        assertTrue(current.beginSession());
+        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        assertTrue(current.save());
+        Files.createDirectory(directory.resolve("pet-deletions.log"));
+
+        assertFalse(current.remove(id));
+        assertNotNull(current.get(id));
+        assertFalse(current.canRestoreBodies());
+        assertFalse(current.save());
+        assertFalse(current.close());
+        PetStore restarted = store();
+        assertFalse(restarted.load());
+        assertNull(restarted.get(id));
+        assertTrue(Files.exists(directory.resolve("pets-recovery-required")));
+    }
+
+    @Test
+    void interruptedSessionRequiresReconciliationEvenIfSaveDataIsValid() throws Exception {
+        PetStore current = store();
+        assertTrue(current.load());
+        assertTrue(current.beginSession());
+        assertTrue(current.save());
+        String primary = Files.readString(directory.resolve("pets.yml"));
+
+        PetStore restarted = store();
+        assertFalse(restarted.load());
+        assertFalse(restarted.save());
+        assertFalse(restarted.close());
+        assertEquals(primary, Files.readString(directory.resolve("pets.yml")));
+        assertTrue(Files.exists(directory.resolve("pets-recovery-required")));
+    }
+
+    @Test
+    void cleanSessionShutdownAllowsRepeatedRestarts() {
+        UUID id = UUID.randomUUID();
+        PetStore current = store();
+        assertTrue(current.load());
+        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        for (int restart = 0; restart < 3; restart++) {
+            assertTrue(current.beginSession());
+            assertTrue(current.close());
+            assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+            current = store();
+            assertTrue(current.load());
+            assertNotNull(current.get(id));
+        }
+    }
+
+    @Test
+    void partialDeletionRecordFailsClosedWithoutOverwritingFiles() throws Exception {
+        PetStore current = store();
+        assertTrue(current.load());
+        assertTrue(current.save());
+        Path log = directory.resolve("pet-deletions.log");
+        Files.writeString(log, UUID.randomUUID() + "\npartial-uuid");
+        String primary = Files.readString(directory.resolve("pets.yml"));
+        PetStore restarted = store();
+        assertFalse(restarted.load());
+        assertFalse(restarted.save());
+        assertEquals(primary, Files.readString(directory.resolve("pets.yml")));
+        assertTrue(Files.readString(log).endsWith("partial-uuid"));
+    }
+
+    @Test
+    void cannotEnableRuntimeUnlessSessionGuardIsDurable() throws Exception {
+        PetStore current = store();
+        assertTrue(current.load());
+        Files.createDirectory(directory.resolve("pets-recovery-required"));
+        assertFalse(current.beginSession());
+        assertFalse(current.save());
+        assertFalse(current.canRestoreBodies());
+        assertFalse(current.close());
+        assertTrue(Files.exists(directory.resolve("pets-recovery-required")));
+    }
+
+    @Test
+    void deletionWithoutFinalNewlineIsNotAcceptedForFurtherAppends() throws Exception {
+        PetStore current = store();
+        assertTrue(current.load());
+        assertTrue(current.save());
+        Files.writeString(directory.resolve("pet-deletions.log"), UUID.randomUUID().toString());
+        assertFalse(store().load());
     }
 
     private Pet storePet(UUID id) {

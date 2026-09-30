@@ -684,6 +684,10 @@ public final class PetActions {
         }
         Pet pet = runtime.store().get(id);
         if (pet == null) {
+            if (runtime.store().isDeleted(id)) {
+                runtime.visual().remove(entity);
+                entity.remove();
+            }
             return;
         }
         if (pet.stored()) {
@@ -703,7 +707,7 @@ public final class PetActions {
     }
 
     public Entity restoreBody(Pet pet) {
-        if (pet.stored() || pet.dead()) return null;
+        if (pet.stored() || pet.dead() || !runtime.store().canRestoreBodies()) return null;
         Entity body = runtime.entity(pet);
         if (body != null) return body;
         World world = Bukkit.getWorld(pet.worldName());
@@ -1407,12 +1411,14 @@ public final class PetActions {
     }
 
     public void lostBody(Pet pet) {
+        // An observed death cannot be rolled back if disk writes fail. Freeze the
+        // record and retain the session guard so a stale save cannot revive it.
+        if (!runtime.store().remove(pet.id())) pet.dead(true);
         clearInteractions(pet);
         Entity body = pet.entityId() == null ? null : Bukkit.getEntity(pet.entityId());
         if (body != null) {
             markSleep(body, false);
         }
-        runtime.store().remove(pet.id());
         runtime.store().save();
         Player owner = Bukkit.getPlayer(pet.ownerId());
         if (owner != null && owner.isOnline()) {
@@ -1587,6 +1593,10 @@ public final class PetActions {
     }
 
     private void releasePet(Player player, Pet pet) {
+        if (!runtime.store().remove(pet.id())) {
+            PetFx.tell(player, "Could not save the release. Your pet is still with you; contact an administrator.");
+            return;
+        }
         clearInteractions(pet);
         releaseFetch(pet, player, false);
         if (pet.carriedToy() != null) {
@@ -1602,7 +1612,6 @@ public final class PetActions {
             runtime.visual().remove(entity);
             entity.remove();
         }
-        runtime.store().remove(pet.id());
         runtime.store().save();
         PetFx.tell(player, pet.name() + " is gone. " + PetTexts.He(pet.sex()) + " is no longer with you");
     }

@@ -163,6 +163,13 @@ public final class PetListener implements Listener {
     public void onDeath(EntityDeathEvent event) {
         Pet pet = runtime.byEntity(event.getEntity());
         if (pet == null) {
+            // A neglect death commits its deletion before starting the model's
+            // death animation, so its record is already absent here.
+            UUID id = runtime.bodies().readId(event.getEntity());
+            if (id != null && runtime.store().isDeleted(id)) {
+                event.getDrops().clear();
+                event.setDroppedExp(0);
+            }
             return;
         }
         if (pet.dead()) {

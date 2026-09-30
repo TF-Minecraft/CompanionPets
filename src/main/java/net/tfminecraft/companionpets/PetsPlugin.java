@@ -51,7 +51,7 @@ public final class PetsPlugin extends JavaPlugin {
         saveDefaultConfig();
         CompanionConfig config = CompanionConfig.load(this);
         store = new PetStore(this);
-        if (!store.load()) {
+        if (!store.load() || !store.beginSession()) {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
@@ -111,7 +111,7 @@ public final class PetsPlugin extends JavaPlugin {
             actions.stashLooseToys();
         }
         if (store != null) {
-            store.save();
+            store.close();
         }
         if (visual != null) visual.close();
         getLogger().info("CompanionPets disabled");
