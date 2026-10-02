@@ -18,7 +18,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Wolf;
-import org.bukkit.entity.Tameable;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.RayTraceResult;
@@ -385,10 +384,20 @@ public final class PetActions {
     }
 
     public void clickMenu(Player player, MenuHolder holder, int slot, ItemStack current, boolean rightClick, boolean shift, boolean lettingGo) {
-        if ((holder.kind() == MenuHolder.Kind.TRICK || holder.kind() == MenuHolder.Kind.LEARNED) && (slot == 18 || slot == 26)) {
+        if (holder.kind() == MenuHolder.Kind.KENNEL) {
+            if (slot == 53) {
+                if (net.tfminecraft.companionpets.gui.MenuNavigation.turn(player, holder.page(), holder.pages(), rightClick))
+                    menus.openKennel(player, holder.page() + (rightClick ? -1 : 1));
+                return;
+            }
+        }
+        if ((holder.kind() == MenuHolder.Kind.TRICK || holder.kind() == MenuHolder.Kind.LEARNED)
+                && slot == PetMenus.TRICKS_NEXT_SLOT) {
             Pet pet = runtime.store().get(holder.petId());
             if (pet != null && pet.ownerId().equals(player.getUniqueId())) {
-                int page = holder.page() + (slot == 18 ? -1 : 1);
+                if (!net.tfminecraft.companionpets.gui.MenuNavigation.turn(player, holder.page(), holder.pages(), rightClick)) return;
+                int page = holder.page() + (rightClick ? -1 : 1);
+                holder.navigating(true);
                 if (holder.kind() == MenuHolder.Kind.TRICK) menus.openTricks(player, pet, holder.word(), page);
                 else menus.openLearned(player, pet, page);
             }
@@ -402,16 +411,19 @@ public final class PetActions {
             if (slot == PetMenus.TRICKS_BACK_SLOT) {
                 Pet pet = runtime.store().get(holder.petId());
                 if (pet != null && pet.ownerId().equals(player.getUniqueId())) {
-                    menus.openCare(player, pet);
+                    menus.openCare(player, pet, holder.shelterBack(), holder.shelterPage());
                 }
             }
             return;
         }
         if (holder.kind() == MenuHolder.Kind.TRICK) {
-            clickTrick(player, holder, slot);
+            if (slot == PetMenus.TRICKS_BACK_SLOT) {
+                Pet pet = runtime.store().get(holder.petId());
+                if (pet != null && pet.ownerId().equals(player.getUniqueId())) menus.openCare(player, pet, holder.shelterBack(), holder.shelterPage());
+            } else clickTrick(player, holder, slot);
             return;
         }
-        if (current == null || slot >= 27) {
+        if (current == null || slot >= 45) {
             return;
         }
         String raw = current.getItemMeta() == null
@@ -430,7 +442,7 @@ public final class PetActions {
         if (pet == null || !pet.ownerId().equals(player.getUniqueId())) {
             return;
         }
-        menus.openCare(player, pet);
+        menus.openCare(player, pet, true, holder.page());
     }
 
     private void clickCare(Player player, MenuHolder holder, int slot) {
@@ -444,7 +456,7 @@ public final class PetActions {
             return;
         }
         if (slot == PetMenus.BACK_SLOT) {
-            menus.openKennel(player);
+            if (holder.shelterBack()) menus.openKennel(player, holder.shelterPage());
             return;
         }
         if (slot == PetMenus.TRICKS_SLOT) {
@@ -461,13 +473,14 @@ public final class PetActions {
             } else {
                 call(player, pet);
             }
-            menus.openCare(player, pet);
+            menus.openCare(player, pet, holder.shelterBack(), holder.shelterPage());
             return;
         }
         if (slot == PetMenus.STORE_SLOT && !pet.stored()) {
             storePet(player, pet);
             player.closeInventory();
         }
+
     }
 
     public void onChat(Player player, String text) {
@@ -1121,142 +1134,4 @@ public final class PetActions {
             }
         }
     }
-
-    public void orderLookingAt(Player player, String word) {
-        Pet target = runtime.byEntity(lookingAt(player, 6.0));
-        if (target == null || target.stored() || !target.ownerId().equals(player.getUniqueId())) {
-            PetFx.tell(player, "Look at one of your own pets to give it an order.");
-            return;
-        }
-        TrainingSession session = runtime.sessions().training(player.getUniqueId());
-        if (target.trickFor(SpokenOrder.key(word)) == null
-                && (session == null || !session.petId().equals(target.id()))) {
-            PetFx.tell(player, target.name() + " has not learned that word. Check the Tricks page in the pet profile.");
-            return;
-        }
-        training.handleTrainingChat(player, word, System.currentTimeMillis());
-    }
-
-    public java.util.List<String> orderWordsLookingAt(Player player) {
-        Pet pet = runtime.byEntity(lookingAt(player, 6.0));
-        if (pet == null || !pet.ownerId().equals(player.getUniqueId())) return java.util.List.of();
-        java.util.List<String> words = new java.util.ArrayList<>(pet.words().keySet());
-        words.removeIf(word -> !training.allowsTrick(pet, pet.trickFor(word)));
-        if (training.allowsTrick(pet, Trick.COME) && pet.trickFor("follow") == Trick.COME && !words.contains("follow")) words.add("follow");
-        return words;
-    }
-
-    public boolean calmLookingAt(Player player) {
-        Entity target = lookingAt(player, 6.0);
-        Pet pet = runtime.byEntity(target);
-        if (pet == null || !(pet.ownerId().equals(player.getUniqueId())
-                || vanillaTarget(pet) == player || player.hasPermission("companionpets.test"))) {
-            PetFx.tell(player, "Look at the pet you want to calm.");
-            return false;
-        }
-        if (!calmInteraction(player, pet)) {
-            PetFx.tell(player, pet.name() + " is already calm.");
-            return false;
-        }
-        return true;
-    }
-
-    public boolean setTestPersonality(Player player, String name) {
-        Entity target = lookingAt(player, 6.0);
-        Pet pet = runtime.byEntity(target);
-        if (pet == null) {
-            PetFx.tell(player, "Look at a pet first.");
-            return false;
-        }
-        PetPersonality personality;
-        try {
-            personality = PetPersonality.valueOf(name.toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            PetFx.tell(player, "Choose friendly, playful, shy, territorial, or grumpy.");
-            return false;
-        }
-        pet.personality(personality);
-        runtime.store().save();
-        PetFx.tell(player, pet.name() + " now has a " + personality.label().toLowerCase(Locale.ROOT) + " personality.");
-        return true;
-    }
-
-    public boolean setTestOwner(Player player, String name) {
-        Pet pet = runtime.byEntity(lookingAt(player, 6.0));
-        if (pet == null) {
-            PetFx.tell(player, "Look at a pet before changing its owner.");
-            return false;
-        }
-        UUID next;
-        String label;
-        if (name.equalsIgnoreCase("self")) {
-            next = player.getUniqueId();
-            label = player.getName();
-        } else if (name.equalsIgnoreCase("fake")) {
-            next = UUID.nameUUIDFromBytes(("CompanionPets:test-owner:" + pet.id())
-                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            label = "a fictional test owner";
-        } else {
-            Player online = Bukkit.getPlayerExact(name);
-            if (online != null) {
-                next = online.getUniqueId();
-                label = online.getName();
-            } else {
-                try {
-                    next = UUID.fromString(name);
-                    label = next.toString();
-                } catch (IllegalArgumentException ex) {
-                    PetFx.tell(player, "Use self, fake, an online player name, or a UUID.");
-                    return false;
-                }
-            }
-        }
-        if (next.equals(pet.ownerId())) {
-            PetFx.tell(player, pet.name() + " already belongs to " + label + ".");
-            return true;
-        }
-        if (!Quota.canBringOut(runtime.store().countOut(next), runtime.config().limits().maxOut())) {
-            PetFx.tell(player, "That owner already has the maximum number of pets outside.");
-            return false;
-        }
-        Player previous = Bukkit.getPlayer(pet.ownerId());
-        RenamePrompt pendingRename = runtime.sessions().rename(pet.ownerId());
-        if (pendingRename != null && pendingRename.petId().equals(pet.id())) {
-            runtime.sessions().clearRename(pet.ownerId());
-        }
-        clearInteractions(pet);
-        releaseFetch(pet, previous, true);
-        pet.ownerId(next);
-        pet.order(PetOrder.FOLLOW);
-        pet.staying(false);
-        Entity body = runtime.entity(pet);
-        if (body instanceof Tameable tameable) {
-            tameable.setTamed(true);
-            tameable.setOwner(Bukkit.getOfflinePlayer(next));
-        }
-        runtime.store().save();
-        PetFx.tell(player, pet.name() + " now belongs to " + label + ".");
-        return true;
-    }
-
-    public boolean triggerTestSocial(Player player, String kind) {
-        Entity target = lookingAt(player, 6.0);
-        Pet pet = runtime.byEntity(target);
-        if (pet == null || !pet.ownerId().equals(player.getUniqueId())) {
-            PetFx.tell(player, "Look at one of your own pets first.");
-            return false;
-        }
-        String mode = kind.toLowerCase(Locale.ROOT);
-        if (!java.util.Set.of("sniff", "chase", "bark").contains(mode)) {
-            PetFx.tell(player, "Choose sniff, chase, or bark.");
-            return false;
-        }
-        if (!social.trigger(player, pet, mode)) {
-            PetFx.tell(player, "No eligible pet is nearby. Barking needs two territorial pets close together.");
-            return false;
-        }
-        return true;
-    }
-
-    public boolean spawnTestDog(Player player, String name) { return spawnTestPet(player, "wolf", name); }
 }

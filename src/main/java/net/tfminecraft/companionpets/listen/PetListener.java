@@ -152,6 +152,7 @@ public final class PetListener implements Listener {
     public void onClose(InventoryCloseEvent event) {
         if (event.getInventory().getHolder() instanceof MenuHolder menu
                 && menu.kind() == MenuHolder.Kind.TRICK
+                && !menu.navigating()
                 && event.getPlayer() instanceof Player player) {
             actions.clearPendingWord(player, menu.word());
         }
