@@ -373,7 +373,7 @@ public final class PetActions {
             menus.openKennel(player);
             return;
         }
-        if (sneaking && runtime.config().kennel() != null && runtime.config().kennel().matches(hand) && clicked != null && face != null) {
+        if (sneaking && runtime.config().kennelFurniture() == null && runtime.config().kennel() != null && runtime.config().kennel().matches(hand) && clicked != null && face != null) {
             placeKennel(player, hand, clicked, face);
             return;
         }
@@ -391,7 +391,7 @@ public final class PetActions {
         if (clicked != null && isKennel(clicked) && !sneaking) {
             return true;
         }
-        if (sneaking && runtime.config().kennel() != null && runtime.config().kennel().matches(hand) && clicked != null && face != null) {
+        if (sneaking && runtime.config().kennelFurniture() == null && runtime.config().kennel() != null && runtime.config().kennel().matches(hand) && clicked != null && face != null) {
             return true;
         }
         if (runtime.config().byEgg(hand) != null) {

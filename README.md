@@ -97,8 +97,22 @@ priority. Confirmation rechecks the held item before consuming it.
 
 Pet House placement stays global: `items.kennel` selects the consumed held item;
 `items.kennel-block` selects the actual vanilla block (BARREL for custom tokens).
-This places a regular Pet House, not ItemsAdder furniture. Plant/block settings
-continue to use vanilla materials.
+Without `items.kennel-furniture`, this places a regular Pet House. For ItemsAdder
+furniture, configure the held item and matching placed furniture ID:
+
+```yaml
+items:
+  kennel: "itemsadder:tfmc:pet_house"
+  kennel-furniture: "tfmc:pet_house"
+  kennel-block: BARREL
+```
+
+ItemsAdder handles normal placement, protection checks, consumption and drops.
+CompanionPets records the owner after successful placement. Right-clicking opens
+the owner's Pet House menu; other players cannot open it. Breaking the furniture
+removes its ownership record without deleting pets. Registered barrel Pet Houses
+remain usable, and vanilla-only configurations retain sneak/right-click placement.
+Plant/block settings continue to use vanilla materials.
 
 ## Learnable tricks per pet type
 

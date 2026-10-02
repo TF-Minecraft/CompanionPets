@@ -92,6 +92,7 @@ public class PetsPlugin extends JavaPlugin {
         Bukkit.getScheduler().runTaskLater(this, this::validateProviders, 200L);
         petListener = new PetListener(runtime, actions);
         Bukkit.getPluginManager().registerEvents(petListener, this);
+        new net.tfminecraft.companionpets.listen.FurniturePetHouses(runtime).register();
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
         visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 2L, 2L);

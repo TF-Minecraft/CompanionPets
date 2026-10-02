@@ -195,6 +195,9 @@ items:
   # Pet House placement is global; eggs belong to each pet type, not these lists.
   kennel: BARREL
   kennel-block: BARREL
+  # Optional ItemsAdder furniture: set kennel to "itemsadder:tfmc:pet_house"
+  # and uncomment the matching ID. ItemsAdder handles placement and drops.
+  # kennel-furniture: "tfmc:pet_house"
   # Both treats work for ALL species. Hold either to train; rewards consume one.
   # Switching between accepted treats keeps the training session active.
   # As before, a hungry pet can eat a treat for 30 hunger points and a mood bonus.
