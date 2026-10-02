@@ -115,8 +115,10 @@ public final class PetMenus {
         ItemRef medicine = medicines.isEmpty() ? ItemRef.vanilla(Material.HONEY_BOTTLE) : medicines.getFirst();
         inventory.setItem(24, needIcon(sick ? medicine.icon(Material.HONEY_BOTTLE) : new ItemStack(Material.GOLDEN_APPLE), pet, Need.HEALTH,
                 sick
-                        ? line("Cure with ", NamedTextColor.DARK_GRAY).append(itemList(medicines, "medicine"))
-                        : line("Keep " + PetTexts.his(pet.sex()) + " needs up to stay healthy", NamedTextColor.DARK_GRAY),
+                        ? line("Medicine gives a health boost: ", NamedTextColor.DARK_GRAY).append(itemList(medicines, "medicine"))
+                        : line("Food, brushing and rest restore health", NamedTextColor.DARK_GRAY),
+                line("Food and cleanliness >= 25 to recover", NamedTextColor.DARK_GRAY),
+                line("Energy >= 25 or rest; low mood is OK", NamedTextColor.DARK_GRAY),
                 sick ? line(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED) : null));
 
         if (back) MenuNavigation.back(inventory, management ? "Return to the shelter list" : "Return to this player's pets");

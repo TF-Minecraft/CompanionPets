@@ -59,6 +59,7 @@ public final class PetTicker implements Runnable {
             care(now, elapsed);
         }
         actions.roaming().tickOwners(now);
+        actions.fetchActions().tick(now);
         actions.social().tick(now);
         move(now);
         watchTraining(now);
@@ -261,7 +262,7 @@ public final class PetTicker implements Runnable {
             }
             if (mode == Locomotion.Mode.FETCH) {
                 FetchNavigationGoal.ensure(runtime, pet, mob,
-                        () -> stepFetch(pet, mob, Bukkit.getPlayer(pet.ownerId()), System.currentTimeMillis()));
+                        () -> stepFetch(pet, mob));
             } else {
                 stepMode(pet, mob, owner, mode, now);
             }
@@ -343,29 +344,28 @@ public final class PetTicker implements Runnable {
         }
     }
 
-    private void stepFetch(Pet pet, Mob mob, Player owner, long now) {
+    private void stepFetch(Pet pet, Mob mob) {
         FetchJob job = pet.fetch();
         if (job == null) {
             return;
         }
+        Player owner = Bukkit.getPlayer(job.throwerId());
         if (owner == null || !owner.isOnline()) {
             actions.releaseFetch(pet, null, false);
             return;
         }
-        double speed = Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), job.favorite());
+        if (!actions.fetchActions().canChase(pet)) {
+            actions.releaseFetch(pet, owner, true);
+            return;
+        }
+        boolean favorite = job.favorite(pet.id());
+        double speed = Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), favorite);
         PetFx.sit(mob, false);
         PetFx.lie(mob, false);
         if (job.phase() == FetchPhase.AIR) {
             Entity projectile = job.projectileId() == null ? null : Bukkit.getEntity(job.projectileId());
-            if (projectile == null) {
-                if (job.missingSince() == 0L) {
-                    job.missingSince(now);
-                } else if (now - job.missingSince() > 1_000L) {
-                    actions.releaseFetch(pet, owner, true);
-                }
-                return;
-            }
-            job.missingSince(0L);
+            if (projectile == null) return;
+            if (!mob.getWorld().equals(projectile.getWorld())) { actions.releaseFetch(pet, owner, true); return; }
             mob.getPathfinder().moveTo(projectile.getLocation(), speed);
             return;
         }
@@ -375,9 +375,8 @@ public final class PetTicker implements Runnable {
                 actions.releaseFetch(pet, owner, true);
                 return;
             }
-            if (mob.getLocation().distance(item.getLocation()) < 1.7) {
-                item.remove();
-                job.phase(FetchPhase.CARRY);
+            if (!mob.getWorld().equals(item.getWorld())) { actions.releaseFetch(pet, owner, true); return; }
+            if (actions.fetchActions().claim(pet)) {
                 mob.getPathfinder().stopPathfinding();
             } else {
                 mob.getPathfinder().moveTo(item.getLocation(), speed);
@@ -389,13 +388,11 @@ public final class PetTicker implements Runnable {
             return;
         }
         if (mob.getLocation().distance(owner.getLocation()) < 2.2) {
-            actions.dropPlain(PetRuntime.inFront(owner), job.toy());
-            pet.fetch(null);
-            pet.activity(Activity.NONE);
-            double mood = runtime.config().care().playMoodGain() * (job.favorite() ? runtime.config().care().favoriteMoodMultiplier() : 1.0);
+            actions.fetchActions().returned(pet, owner);
+            double mood = runtime.config().care().playMoodGain() * (favorite ? runtime.config().care().favoriteMoodMultiplier() : 1.0);
             pet.need(Need.MOOD, pet.need(Need.MOOD) + mood);
             pet.need(Need.ENERGY, pet.need(Need.ENERGY) - runtime.config().care().playEnergyCost());
-            PetFx.hearts(mob, job.favorite() ? 6 : 3);
+            PetFx.hearts(mob, favorite ? 6 : 3);
             mob.getPathfinder().stopPathfinding();
         } else {
             mob.getPathfinder().moveTo(owner.getLocation(), speed);

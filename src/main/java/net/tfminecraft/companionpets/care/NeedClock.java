@@ -55,7 +55,7 @@ public final class NeedClock {
             pet.addCriticalMillis(input.elapsedMillis());
         } else if (!causeCritical) {
             pet.criticalMillis(0);
-            if (pet.illness() == Illness.UNWELL) {
+            if (!frozen && pet.illness() == Illness.UNWELL) {
                 pet.illness(Illness.NONE);
                 pet.need(Need.HEALTH, 100);
             }
@@ -72,7 +72,8 @@ public final class NeedClock {
             notices.add(CareNotice.of(CareNotice.Kind.SICK));
         }
 
-        if (!frozen && causeCritical && (pet.illness() == Illness.UNWELL || pet.illness() == Illness.SICK)) {
+        if (!frozen && HealthRecovery.physicalNeedsCritical(pet)
+                && (pet.illness() == Illness.UNWELL || pet.illness() == Illness.SICK)) {
             double minutes = input.elapsedMillis() / 60000.0;
             pet.need(Need.HEALTH, pet.need(Need.HEALTH) - care.healthLossPerMinute() * minutes);
         }
@@ -90,24 +91,10 @@ public final class NeedClock {
             }
         }
 
-        if (!frozen && pet.treated() && !pet.dead()) {
-            boolean othersClear = !pet.causeCritical();
-            boolean rested = input.sleeping() || input.resting() || pet.need(Need.ENERGY) >= 25.0;
-            boolean fed = pet.need(Need.HUNGER) >= 25.0;
-            boolean canRegen = switch (pet.illness()) {
-                case WEAKENED -> othersClear && rested && fed;
-                case SICK, UNWELL -> othersClear;
-                case NONE -> false;
-            };
-            if (canRegen) {
-                double minutes = input.elapsedMillis() / 60000.0;
-                pet.need(Need.HEALTH, pet.need(Need.HEALTH) + care.healthRegenPerMinute() * minutes);
-                if (pet.need(Need.HEALTH) >= 100.0) {
-                    pet.need(Need.HEALTH, 100);
-                    pet.illness(Illness.NONE);
-                    pet.treated(false);
-                }
-            }
+        if (!frozen && (pet.need(Need.HEALTH) < 100 || pet.illness() != Illness.NONE)
+                && HealthRecovery.canRecover(pet, input.sleeping() || input.resting())) {
+            double minutes = input.elapsedMillis() / 60000.0;
+            HealthRecovery.recover(pet, care.healthRegenPerMinute() * minutes);
         }
 
         if (!frozen && input.withOwner() && input.presence() == Presence.NEAR && pet.needsStable()) {

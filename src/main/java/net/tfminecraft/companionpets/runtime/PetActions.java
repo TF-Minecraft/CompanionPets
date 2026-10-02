@@ -44,7 +44,6 @@ import net.tfminecraft.companionpets.pet.PetPersonality;
 import net.tfminecraft.companionpets.pet.PetSex;
 import net.tfminecraft.companionpets.pet.Trick;
 import net.tfminecraft.companionpets.play.FavoriteToy;
-import net.tfminecraft.companionpets.play.FetchJob;
 import net.tfminecraft.companionpets.session.PlayerHints;
 import net.tfminecraft.companionpets.session.RenamePrompt;
 import net.tfminecraft.companionpets.session.ReleasePrompt;
@@ -84,7 +83,7 @@ public final class PetActions {
         this.hints = new PlayerHints(runtime.plugin());
         hatching = new PetHatching(runtime);
         careActions = new PetCareActions(runtime);
-        fetchActions = new PetFetchActions(runtime);
+        fetchActions = new PetFetchActions(runtime, this);
         training = new PetTraining(runtime, menus, holograms, hints, this::perform);
     }
 
@@ -93,10 +92,10 @@ public final class PetActions {
     public void missedReward(Player player, Pet pet, TrainingSession session) { training.missedReward(player, pet, session); }
     public void endForRest(Player player, Pet pet) { training.endForRest(player, pet); }
     public String treatName(Pet pet) { return training.treatName(pet); }
-    public void toyLanded(Pet pet, UUID itemId) { fetchActions.toyLanded(pet, itemId); }
-    public void releaseFetch(Pet pet, Player owner, boolean toOwner) { fetchActions.releaseFetch(pet, owner, toOwner); }
+    public void toyLanded(org.bukkit.entity.Snowball ball) { fetchActions.toyLanded(ball); }
+    PetFetchActions fetchActions() { return fetchActions; }
+    public void releaseFetch(Pet pet, Player owner, boolean toOwner) { fetchActions.releaseFetch(pet, toOwner); }
     public void dropPlain(Location location, String toy) { fetchActions.dropPlain(location, toy); }
-    public void dropToy(Location location, Pet pet, String toy) { fetchActions.dropToy(location, pet, toy); }
 
     public PetMenus menus() {
         return menus;
@@ -277,7 +276,7 @@ public final class PetActions {
             return true;
         }
         if (type.acceptsToy(hand)) {
-            PetFx.bar(player, "Throw it into the air and " + pet.name() + " will fetch it");
+            PetFx.bar(player, "Throw it into the air for nearby pets to chase");
             return true;
         }
         return false;
@@ -602,17 +601,7 @@ public final class PetActions {
     }
 
     public void stashLooseToys() {
-        for (Pet pet : runtime.store().all()) {
-            FetchJob job = pet.fetch();
-            if (job == null) {
-                continue;
-            }
-            remove(job.projectileId());
-            remove(job.itemId());
-            pet.carriedToy(job.toy());
-            pet.fetch(null);
-            pet.activity(Activity.NONE);
-        }
+        fetchActions.stashLooseToys();
     }
 
     private void clickTrick(Player player, MenuHolder holder, int slot) {

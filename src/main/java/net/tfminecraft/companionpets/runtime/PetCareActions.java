@@ -8,6 +8,7 @@ import org.bukkit.inventory.ItemStack;
 
 
 import net.tfminecraft.companionpets.care.Feeding;
+import net.tfminecraft.companionpets.care.HealthRecovery;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.pet.Illness;
@@ -32,7 +33,7 @@ final class PetCareActions {
             return true;
         }
         if (type.items().isBrush(hand)) {
-            pet.need(Need.CLEANLINESS, 100);
+            HealthRecovery.improve(pet, Need.CLEANLINESS, 100);
             comfort(pet, now);
             PetFx.hearts(entity, 2);
             PetFx.bar(player, pet.name() + "'s coat is clean and shiny again");
@@ -56,7 +57,7 @@ final class PetCareActions {
             PetFx.bar(player, PetTexts.overfed(pet.name(), pet.sex()));
             return true;
         }
-        pet.need(Need.HUNGER, pet.need(Need.HUNGER) + gain);
+        HealthRecovery.improve(pet, Need.HUNGER, pet.need(Need.HUNGER) + gain);
         if (favorite) {
             pet.need(Need.MOOD, pet.need(Need.MOOD) + runtime.config().care().favoriteFoodMood());
         }

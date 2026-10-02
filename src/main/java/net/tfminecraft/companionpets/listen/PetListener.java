@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -242,26 +241,7 @@ public final class PetListener implements Listener {
         if (data == null) {
             return;
         }
-        String[] parts = data.split("\\|", 2);
-        if (parts.length != 2) {
-            ball.remove();
-            return;
-        }
-        Pet pet;
-        try {
-            pet = runtime.store().get(UUID.fromString(parts[0]));
-        } catch (IllegalArgumentException ex) {
-            ball.remove();
-            return;
-        }
-        Location at = ball.getLocation().clone();
-        ball.remove();
-        if (pet == null || pet.fetch() == null || !ball.getUniqueId().equals(pet.fetch().projectileId())) {
-            // A returned or superseded projectile must not create a second toy.
-            return;
-        }
-        actions.dropToy(at, pet, parts[1]);
-        actions.toyLanded(pet, pet.fetch().itemId());
+        actions.toyLanded(ball);
     }
 
     @EventHandler(ignoreCancelled = true)

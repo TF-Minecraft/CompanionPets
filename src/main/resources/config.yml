@@ -19,6 +19,9 @@ care:
   # Only sleep slows hunger; sitting uses the normal hunger rate.
   sleeping-hunger-multiplier: 0.5
   health-loss-per-minute: 12
+  # Natural recovery, including healthy pets with missing health. Requires food,
+  # cleanliness and energy >= 25 (or resting); mood and medicine do not gate it.
+  # Feeding/brushing also heal 25% of the hunger/cleanliness points restored.
   health-regen-per-minute: 20
   medicine-health-bump: 20
   bond-gain-per-minute: 0.4

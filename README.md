@@ -361,7 +361,7 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   pet lies down on its own when exhausted, and the learned Lay trick puts it to rest sooner. Food past a
   full stomach makes it feel worse. A hit makes it yelp and flinch. Food, a
   brush, and medicine act immediately. Anyone nearby can feed, clean, and heal. Play
-  and tricks belong to the owner.
+  directly with a pet and tricks belong to the owner. Thrown toys can attract anyone's pets.
 - Sneak and right-click with a barrel to place a shelter. Right-click it to
   open the list. Click a pet to open its sheet, the same
   one as sneak-right-clicking it in the world. From the sheet you bring it
@@ -380,8 +380,15 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   words on the Tricks page. Say `follow` while looking or `<name> follow`.
   Come is a separate trick; saved Come words and progress stay with Come.
   Existing custom word bindings are never overwritten.
-- Right-click the air with a listed toy to throw it. The summoned pet fetches
-  that item and drops it in front of the owner.
+- Right-click the air with a listed toy to throw it, even if nearby pets are
+  unwell or there are no pets nearby. All nearby, available pets that accept
+  that toy can chase it, regardless of ownership. Sick, weakened, hungry,
+  exhausted, resting or training pets stay out. The first pet to reach it
+  collects it and returns it to the player who threw it; the others stop chasing.
+  Each subsequent throw gives chasing pets a 35% chance to switch targets;
+  pets already carrying a toy finish their return. Each throw remains a separate
+  physical toy. Unclaimed toys can be picked up normally. Ground toys also
+  become pickable after a minute if the pets cannot reach them.
 - Several pets can be outside at once. Look at one and say its learned word,
   or say its name and word nearby.
 - Say a following pet's exact name in chat to call it close. It then waits quietly
@@ -420,6 +427,18 @@ Staff can browse players and pets with /companionpets list and locate them by pl
 Needs stay still in the shelter and while the owner is offline. Outside, they
 fall at the normal rate when the owner is nearby and at the away rate when the
 owner is online but far.
+
+Missing health regenerates naturally, including when the pet has no illness
+and when health is zero. Recovery requires hunger and cleanliness at least 25,
+and energy at least 25 or resting. Low mood does not block recovery or keep
+draining an otherwise cared-for pet's health. The default rate is 20 health
+points per minute (`care.health-regen-per-minute`); shelter/offline care stays
+frozen. Feeding and brushing also immediately restore health equal to 25% of
+the hunger/cleanliness points actually restored, capped at 100. Overfeeding
+still hurts, and brushing an already clean pet grants no extra health.
+Medicine remains an immediate boost (`care.medicine-health-bump`), but is no
+longer required for regeneration. Sick/weakened pets resume play once fully
+recovered; healthy pets with missing health can play once health is above zero.
 
 ## Saved data
 
