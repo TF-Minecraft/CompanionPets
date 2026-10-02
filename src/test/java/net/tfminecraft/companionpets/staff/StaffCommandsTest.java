@@ -30,9 +30,15 @@ class StaffCommandsTest {
     private StaffCommands commands;
     private TestCommands tests;
     private Pet pet;
+    private boolean forbidOfflineScan;
 
     @BeforeEach void setup() throws Exception {
-        server = MockBukkit.mock(); server.addSimpleWorld("world");
+        server = MockBukkit.mock(new ServerMock() {
+            @Override public org.bukkit.OfflinePlayer[] getOfflinePlayers() {
+                if (forbidOfflineScan) throw new AssertionError("Staff commands must not enumerate all offline players");
+                return super.getOfflinePlayers();
+            }
+        }); server.addSimpleWorld("world");
         plugin = MockBukkit.createMockPlugin();
         staff = server.addPlayer("Staff"); staff.setOp(true); staff.openInventory(server.createInventory(null, 9));
         owner = server.addPlayer("Owner");
@@ -227,6 +233,28 @@ class StaffCommandsTest {
             assertEquals(List.of("Toby", "Toby Junior"), commands.complete(staff, new String[]{action, "Owner", ""}));
             assertEquals(List.of("Junior"), commands.complete(staff, new String[]{action, "Owner", "Toby", "J"}));
             assertTrue(commands.complete(staff, new String[]{action, "Staff", "Toby"}).isEmpty());
+        }
+    }
+
+    @Test void offlineOwnerResolutionAndCompletionUseKnownPlayersWithoutScanningHistory() {
+        var unrelated = server.addPlayer("Historical"); unrelated.disconnect();
+        owner.disconnect();
+        forbidOfflineScan = true;
+        try {
+            assertEquals(owner.getUniqueId(), commands.resolveOwner("Owner"));
+            assertEquals(unrelated.getUniqueId(), commands.resolveOwner("Historical"));
+            UUID unknown = UUID.randomUUID();
+            assertEquals(unknown, commands.resolveOwner(unknown.toString()));
+            assertThrows(IllegalArgumentException.class, () -> commands.resolveOwner("NotCached"));
+            assertEquals(List.of("Owner", "Staff"), commands.complete(staff, new String[]{"create", ""}));
+            for (String action : List.of("list", "find")) {
+                assertEquals(List.of("Owner"), commands.complete(staff, new String[]{action, ""}));
+                assertEquals(List.of("Toby"), commands.complete(staff, new String[]{action, "Owner", ""}));
+            }
+            command("list", "Owner");
+            assertEquals(owner.getUniqueId(), menu().subject());
+        } finally {
+            forbidOfflineScan = false;
         }
     }
 

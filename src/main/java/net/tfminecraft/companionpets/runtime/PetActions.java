@@ -411,7 +411,7 @@ public final class PetActions {
             if (slot == PetMenus.TRICKS_BACK_SLOT) {
                 Pet pet = runtime.store().get(holder.petId());
                 if (pet != null && pet.ownerId().equals(player.getUniqueId())) {
-                    menus.openCare(player, pet, holder.shelterBack());
+                    menus.openCare(player, pet, holder.shelterBack(), holder.shelterPage());
                 }
             }
             return;
@@ -419,7 +419,7 @@ public final class PetActions {
         if (holder.kind() == MenuHolder.Kind.TRICK) {
             if (slot == PetMenus.TRICKS_BACK_SLOT) {
                 Pet pet = runtime.store().get(holder.petId());
-                if (pet != null && pet.ownerId().equals(player.getUniqueId())) menus.openCare(player, pet, holder.shelterBack());
+                if (pet != null && pet.ownerId().equals(player.getUniqueId())) menus.openCare(player, pet, holder.shelterBack(), holder.shelterPage());
             } else clickTrick(player, holder, slot);
             return;
         }
@@ -442,7 +442,7 @@ public final class PetActions {
         if (pet == null || !pet.ownerId().equals(player.getUniqueId())) {
             return;
         }
-        menus.openCare(player, pet, true);
+        menus.openCare(player, pet, true, holder.page());
     }
 
     private void clickCare(Player player, MenuHolder holder, int slot) {
@@ -456,7 +456,7 @@ public final class PetActions {
             return;
         }
         if (slot == PetMenus.BACK_SLOT) {
-            if (holder.shelterBack()) menus.openKennel(player);
+            if (holder.shelterBack()) menus.openKennel(player, holder.shelterPage());
             return;
         }
         if (slot == PetMenus.TRICKS_SLOT) {
@@ -473,7 +473,7 @@ public final class PetActions {
             } else {
                 call(player, pet);
             }
-            menus.openCare(player, pet, holder.shelterBack());
+            menus.openCare(player, pet, holder.shelterBack(), holder.shelterPage());
             return;
         }
         if (slot == PetMenus.STORE_SLOT && !pet.stored()) {

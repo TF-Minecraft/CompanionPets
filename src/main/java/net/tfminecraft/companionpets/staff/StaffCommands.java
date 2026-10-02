@@ -60,8 +60,8 @@ public final class StaffCommands {
     public UUID resolveOwner(String token) {
         Player online = Bukkit.getPlayerExact(token);
         if (online != null) return online.getUniqueId();
-        for (OfflinePlayer player : Bukkit.getOfflinePlayers())
-            if (token.equalsIgnoreCase(player.getName())) return player.getUniqueId();
+        OfflinePlayer cached = Bukkit.getOfflinePlayerIfCached(token);
+        if (cached != null) return cached.getUniqueId();
         // Explicit UUIDs remain available only for restoring unknown/offline owners with create.
         try { return UUID.fromString(token); } catch (IllegalArgumentException ignored) { }
         throw new IllegalArgumentException("Unknown player '" + token + "'. Use Tab to select a player.");
@@ -200,7 +200,6 @@ public final class StaffCommands {
                 owners().forEach(id -> { if (!ownerName(id).equals("Unknown player")) choices.add(ownerName(id)); });
                 if (action.equals("create")) {
                     Bukkit.getOnlinePlayers().forEach(p -> choices.add(p.getName()));
-                    Arrays.stream(Bukkit.getOfflinePlayers()).filter(p -> p.getName() != null).forEach(p -> choices.add(p.getName()));
                 }
             }
         } else if (action.equals("egg")) {

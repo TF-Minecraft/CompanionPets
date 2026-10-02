@@ -74,9 +74,14 @@ public final class CompanionPetsSmoke extends JavaPlugin {
             var held = new ArrayList<Held>();
             for (var type : config.types().values()) {
                 var oldIds = new HashSet<UUID>(); store.all().forEach(p -> oldIds.add(p.id()));
-                staff.execute(Bukkit.getConsoleSender(), "create", owner.toString(), "type=" + type.id(), "name=Replacement", "tricks=follow", "hunger=61", "energy=83", "bond=66", "sex=female");
-                var replacement = store.all().stream().filter(p -> !oldIds.contains(p.id())).findFirst().orElseThrow();
-                trackedPets.add(replacement.id());
+                try {
+                    staff.execute(Bukkit.getConsoleSender(), "create", owner.toString(), "type=" + type.id(), "name=Replacement", "tricks=follow", "hunger=61", "energy=83", "bond=66", "sex=female");
+                } finally {
+                    store.all().stream().filter(p -> !oldIds.contains(p.id())).forEach(p -> trackedPets.add(p.id()));
+                }
+                var created = store.all().stream().filter(p -> !oldIds.contains(p.id())).toList();
+                check(created.size() == 1, type.id() + " create adds exactly one pet");
+                var replacement = created.getFirst();
                 check(replacement.ownerId().equals(owner) && replacement.typeId().equals(type.id()) && replacement.stored(), type.id() + " manual replacement ownership and shelter");
                 check(replacement.need(Need.HUNGER) == 61 && replacement.need(Need.ENERGY) == 83 && replacement.bond() == 66, type.id() + " replacement stats");
                 check(replacement.progress(Trick.FOLLOW) == 100 && replacement.trickFor("follow") == Trick.FOLLOW, type.id() + " replacement learning");

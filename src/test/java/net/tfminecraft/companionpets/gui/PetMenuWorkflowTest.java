@@ -275,6 +275,29 @@ class PetMenuWorkflowTest {
         assertEquals(MenuHolder.Kind.KENNEL, holder().kind());
     }
 
+    @Test void shelterPageSurvivesProfileAndBothTrickMenuRoundTrips() {
+        for (int i = 0; i < 50; i++) pet("wolf", player.getUniqueId());
+        menus.openKennel(player, 1);
+        actions.clickMenu(player, holder(), 0, holder().getInventory().getItem(0), false, false, false);
+        var selected = runtime.store().get(holder().petId());
+        assertEquals(1, holder().shelterPage());
+        menus.refreshCare(player, selected);
+        assertEquals(1, holder().shelterPage());
+        for (boolean training : java.util.List.of(false, true)) {
+            if (training) menus.openTricks(player, selected, "saludar");
+            else actions.clickMenu(player, holder(), PetMenus.TRICKS_SLOT, null, false, false, false);
+            actions.clickMenu(player, holder(), PetMenus.TRICKS_NEXT_SLOT, null, false, false, false);
+            assertEquals(1, holder().page());
+            assertEquals(1, holder().shelterPage());
+            actions.clickMenu(player, holder(), PetMenus.TRICKS_BACK_SLOT, null, false, false, false);
+            assertEquals(MenuHolder.Kind.CARE, holder().kind());
+            assertEquals(1, holder().shelterPage());
+        }
+        actions.clickMenu(player, holder(), PetMenus.BACK_SLOT, null, false, false, false);
+        assertEquals(MenuHolder.Kind.KENNEL, holder().kind());
+        assertEquals(1, holder().page());
+    }
+
     @Test void menusCancelItemTransfersAndRejectManagementOfSomeoneElsesPet() {
         Pet pet = pet("wolf", UUID.randomUUID()); menus.openCare(player, pet);
         var view = player.getOpenInventory();

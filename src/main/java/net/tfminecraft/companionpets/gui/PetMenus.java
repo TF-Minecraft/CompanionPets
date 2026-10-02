@@ -49,8 +49,13 @@ public final class PetMenus {
     }
 
     public void openCare(org.bukkit.entity.Player player, Pet pet, boolean shelterBack) {
+        openCare(player, pet, shelterBack, 0);
+    }
+
+    public void openCare(org.bukkit.entity.Player player, Pet pet, boolean shelterBack, int shelterPage) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.CARE, pet.id(), null);
         holder.shelterBack(shelterBack);
+        holder.shelterPage(shelterPage);
         Inventory inventory = Bukkit.createInventory(holder, 45, title(pet.name()));
         holder.inventory(inventory);
         fillCare(inventory, pet);
@@ -227,8 +232,7 @@ public final class PetMenus {
 
     public void openLearned(org.bukkit.entity.Player player, Pet pet, int page) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.LEARNED, pet.id(), null);
-        holder.shelterBack(player.getOpenInventory().getTopInventory() != null
-                && player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder previous && previous.shelterBack());
+        inheritShelterNavigation(player, holder);
         Inventory inventory = Bukkit.createInventory(holder, 27, title(pet.name() + "'s tricks"));
         holder.inventory(inventory);
         frame(inventory);
@@ -280,8 +284,7 @@ public final class PetMenus {
 
     public void openTricks(org.bukkit.entity.Player player, Pet pet, String word, int page) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.TRICK, pet.id(), word);
-        holder.shelterBack(player.getOpenInventory().getTopInventory() != null
-                && player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder previous && previous.shelterBack());
+        inheritShelterNavigation(player, holder);
         Inventory inventory = Bukkit.createInventory(holder, 27, title("Choose a trick"));
         holder.inventory(inventory);
         frame(inventory);
@@ -292,6 +295,15 @@ public final class PetMenus {
                 inventory.setItem(index, trickIcon(pet, tricks[index], word, training));
         }
         player.openInventory(inventory);
+    }
+
+    private void inheritShelterNavigation(org.bukkit.entity.Player player, MenuHolder holder) {
+        Inventory previousInventory = player.getOpenInventory().getTopInventory();
+        if (previousInventory != null && previousInventory.getHolder() instanceof MenuHolder previous
+                && holder.petId().equals(previous.petId())) {
+            holder.shelterBack(previous.shelterBack());
+            holder.shelterPage(previous.shelterPage());
+        }
     }
 
     private boolean allowsTrick(Pet pet, Trick trick) {

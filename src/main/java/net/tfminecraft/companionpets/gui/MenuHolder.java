@@ -20,8 +20,11 @@ public final class MenuHolder implements InventoryHolder {
     private int page;
     private int pages = 1;
     private boolean shelterBack;
+    private int shelterPage;
     public boolean shelterBack() { return shelterBack; }
     public void shelterBack(boolean value) { shelterBack = value; }
+    public int shelterPage() { return shelterPage; }
+    public void shelterPage(int value) { shelterPage = Math.max(0, value); }
     public int pages() { return pages; }
     public void pages(int pages) { this.pages = Math.max(1, pages); }
     private boolean navigating;
