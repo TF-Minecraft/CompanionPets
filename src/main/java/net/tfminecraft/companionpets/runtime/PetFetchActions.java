@@ -18,7 +18,9 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
 import net.tfminecraft.companionpets.behavior.Locomotion;
+import net.tfminecraft.companionpets.behavior.WaterEscape;
 import net.tfminecraft.companionpets.config.PetTypeDef;
+import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.item.HandItems;
 import net.tfminecraft.companionpets.item.ItemRef;
 import net.tfminecraft.companionpets.item.ToyItems;
@@ -26,6 +28,7 @@ import net.tfminecraft.companionpets.pet.Activity;
 import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.Pet;
+import net.tfminecraft.companionpets.pet.PetOrder;
 import net.tfminecraft.companionpets.play.FetchJob;
 import net.tfminecraft.companionpets.play.FetchPhase;
 import net.tfminecraft.companionpets.play.ThrowSpeed;
@@ -70,7 +73,7 @@ final class PetFetchActions {
         for (Pet pet : runtime.store().all()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             Entity body = runtime.entity(pet);
-            if (type == null || !type.acceptsToy(thrown) || !(body instanceof Mob)
+            if (type == null || !type.acceptsToy(thrown) || !(body instanceof Mob mob)
                     || !body.getWorld().equals(player.getWorld())
                     || body.getLocation().distance(player.getLocation()) > runtime.config().ownerNearRadius()
                     || !canChase(pet)) continue;
@@ -85,6 +88,7 @@ final class PetFetchActions {
             pet.fetch(job);
             pet.activity(Activity.PLAYING);
             pet.playUntilMillis(0L);
+            navigate(pet, mob);
         }
     }
 
@@ -99,9 +103,75 @@ final class PetFetchActions {
         return !pet.stored() && !pet.dead() && pet.illness() != Illness.SICK && pet.illness() != Illness.WEAKENED
                 && pet.need(Need.HEALTH) > 0 && pet.need(Need.ENERGY) >= 25 && pet.need(Need.HUNGER) >= 25
                 && !training(pet)
-                && (pet.fetch() != null || Locomotion.choose(pet.illness(), pet.need(Need.HEALTH),
-                        pet.need(Need.ENERGY), pet.need(Need.HUNGER), pet.activity(), false,
-                        System.currentTimeMillis() < pet.forcedSitUntilMillis(), pet.order(), pet.staying()) == Locomotion.Mode.FOLLOW);
+                && pet.activity() != Activity.SLEEPING && pet.order() != PetOrder.LAY
+                && System.currentTimeMillis() >= pet.forcedSitUntilMillis();
+    }
+
+    void navigate(Pet pet, Mob mob) {
+        // Release the physical pose before the native goal selector runs. Otherwise
+        // a sitting goal can prevent the fetch callback that would make it stand.
+        actions.markSleep(mob, false);
+        PetFx.sit(mob, false);
+        PetFx.lie(mob, false);
+        mob.setAware(true);
+        FetchNavigationGoal.ensure(runtime, pet, mob, () -> step(pet, mob));
+        step(pet, mob);
+    }
+
+    void step(Pet pet, Mob mob) {
+        if (WaterEscape.needed(mob)) return;
+        FetchJob job = pet.fetch();
+        if (job == null) {
+            return;
+        }
+        Player owner = Bukkit.getPlayer(job.throwerId());
+        if (owner == null || !owner.isOnline()) {
+            actions.releaseFetch(pet, null, false);
+            return;
+        }
+        if (!canChase(pet)) {
+            actions.releaseFetch(pet, owner, true);
+            return;
+        }
+        boolean favorite = job.favorite(pet.id());
+        double speed = Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), favorite);
+        PetFx.sit(mob, false);
+        PetFx.lie(mob, false);
+        if (job.phase() == FetchPhase.AIR) {
+            Entity projectile = job.projectileId() == null ? null : Bukkit.getEntity(job.projectileId());
+            if (projectile == null) return;
+            if (!mob.getWorld().equals(projectile.getWorld())) { actions.releaseFetch(pet, owner, true); return; }
+            mob.getPathfinder().moveTo(projectile.getLocation(), speed);
+            return;
+        }
+        if (job.phase() == FetchPhase.GROUND) {
+            Entity item = job.itemId() == null ? null : Bukkit.getEntity(job.itemId());
+            if (item == null) {
+                actions.releaseFetch(pet, owner, true);
+                return;
+            }
+            if (!mob.getWorld().equals(item.getWorld())) { actions.releaseFetch(pet, owner, true); return; }
+            if (claim(pet)) {
+                mob.getPathfinder().stopPathfinding();
+            } else {
+                mob.getPathfinder().moveTo(item.getLocation(), speed);
+            }
+            return;
+        }
+        if (!mob.getWorld().equals(owner.getWorld())) {
+            actions.releaseFetch(pet, owner, false);
+            return;
+        }
+        if (mob.getLocation().distance(owner.getLocation()) < 2.2) {
+            returned(pet, owner);
+            double mood = runtime.config().care().playMoodGain() * (favorite ? runtime.config().care().favoriteMoodMultiplier() : 1.0);
+            pet.need(Need.MOOD, pet.need(Need.MOOD) + mood);
+            pet.need(Need.ENERGY, pet.need(Need.ENERGY) - runtime.config().care().playEnergyCost());
+            PetFx.hearts(mob, favorite ? 6 : 3);
+            mob.getPathfinder().stopPathfinding();
+        } else {
+            mob.getPathfinder().moveTo(owner.getLocation(), speed);
+        }
     }
 
     private boolean training(Pet pet) {

@@ -386,7 +386,9 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
 - Right-click the air with a listed toy to throw it, even if nearby pets are
   unwell or there are no pets nearby. All nearby, available pets that accept
   that toy can chase it, regardless of ownership. Sick, weakened, hungry,
-  exhausted, resting or training pets stay out. The first pet to reach it
+  exhausted, sleeping or training pets stay out. Awake pets can join even when
+  sitting or staying; they resume their saved order after the race. Every
+  participant gets its own navigation to the shared toy. The first pet to reach it
   collects it and returns it to the player who threw it; the others stop chasing.
   Each subsequent throw gives chasing pets a 35% chance to switch targets;
   pets already carrying a toy finish their return. Each throw remains a separate

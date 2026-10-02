@@ -38,9 +38,23 @@ class PetFetchWorkflowTest {
     private Pet pet;
     private WorldMock world;
     private ItemStack toy;
+    private final java.util.Map<UUID, Location> navigationTargets = new java.util.HashMap<>();
 
     @BeforeEach void setup() throws Exception {
-        server = MockBukkit.mock(); var plugin = MockBukkit.createMockPlugin();
+        var goals = new java.util.HashMap<String, com.destroystokyo.paper.entity.ai.Goal<?>>();
+        server = MockBukkit.mock(new ServerMock() {
+            @Override public com.destroystokyo.paper.entity.ai.MobGoals getMobGoals() {
+                return (com.destroystokyo.paper.entity.ai.MobGoals) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
+                        new Class<?>[]{com.destroystokyo.paper.entity.ai.MobGoals.class}, (proxy, method, args) -> {
+                            var id = ((org.bukkit.entity.Mob) args[0]).getUniqueId();
+                            return switch (method.getName()) {
+                                case "getGoal" -> goals.get(id + ":" + args[1]);
+                                case "addGoal" -> { goals.put(id + ":" + ((com.destroystokyo.paper.entity.ai.Goal<?>) args[2]).getKey(), (com.destroystokyo.paper.entity.ai.Goal<?>) args[2]); yield null; }
+                                default -> throw new AssertionError("Unexpected goals call: " + method.getName());
+                            };
+                        });
+            }
+        }); var plugin = MockBukkit.createMockPlugin();
         world = new WorldMock() {
             @Override public void spawnParticle(org.bukkit.Particle particle, Location at, int count,
                     double x, double y, double z, double extra) { }
@@ -69,8 +83,15 @@ class PetFetchWorkflowTest {
             private final com.destroystokyo.paper.entity.Pathfinder pathfinder =
                     (com.destroystokyo.paper.entity.Pathfinder) java.lang.reflect.Proxy.newProxyInstance(
                             getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class},
-                            (proxy, method, args) -> method.getReturnType() == boolean.class ? false : null);
+                            (proxy, method, args) -> switch (method.getName()) {
+                                case "moveTo" -> { navigationTargets.put(getUniqueId(), ((Location) args[0]).clone()); yield true; }
+                                case "stopPathfinding" -> { navigationTargets.remove(getUniqueId()); yield null; }
+                                case "hasPath" -> navigationTargets.containsKey(getUniqueId());
+                                case "getEntity" -> this;
+                                default -> throw new AssertionError("Unexpected navigation call: " + method.getName());
+                            });
             @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() { return pathfinder; }
+            @Override public boolean isInWater() { return false; }
         }; server.registerEntity(body);
         body.teleport(new Location(world, x, 64, 0)); result.stored(false); runtime.remember(result, body);
         return result;
@@ -137,19 +158,66 @@ class PetFetchWorkflowTest {
         assertEquals(1, items().size()); assertTrue(unknown.isDead());
     }
 
+    @Test void everyParticipantStandsUpAndNavigatesToTheSameAirAndGroundToy() {
+        Pet other = outsidePet(UUID.randomUUID(), "Luna", -2);
+        var firstBody = (WolfMock) runtime.entity(pet);
+        var otherBody = (WolfMock) runtime.entity(other);
+        // A stale native posture must not block the callback that clears it.
+        firstBody.setSitting(true); firstBody.setAware(false);
+        otherBody.setSitting(true); otherBody.setAware(false);
+        Snowball ball = throwToy();
+        for (var body : java.util.List.of(firstBody, otherBody)) {
+            assertFalse(body.isSitting()); assertTrue(body.isAware());
+            assertEquals(ball.getLocation(), navigationTargets.get(body.getUniqueId()));
+            var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                    org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "fetch_navigation")));
+            assertNotNull(goal); assertTrue(goal.shouldActivate());
+        }
+        land(ball);
+        for (var body : java.util.List.of(firstBody, otherBody)) {
+            var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                    org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "fetch_navigation")));
+            goal.tick();
+            assertEquals(items().getFirst().getLocation(), navigationTargets.get(body.getUniqueId()));
+        }
+        new PetTicker(runtime, actions).run();
+        Location target = items().getFirst().getLocation();
+        assertEquals(target, navigationTargets.get(firstBody.getUniqueId()));
+        assertEquals(target, navigationTargets.get(otherBody.getUniqueId()));
+        assertSame(pet.fetch(), other.fetch());
+        otherBody.teleport(target);
+        actions.fetchActions().step(other, otherBody);
+        assertEquals(FetchPhase.CARRY, other.fetch().phase());
+        assertNull(pet.fetch()); assertFalse(navigationTargets.containsKey(firstBody.getUniqueId()));
+    }
+
+    @Test void awakeSittingAndStayingPetsJoinTheRaceAndKeepTheirSavedOrders() {
+        pet.order(PetOrder.SIT);
+        Pet other = outsidePet(UUID.randomUUID(), "Luna", -2);
+        other.order(PetOrder.STAY); other.staying(true);
+        ((WolfMock) runtime.entity(pet)).setSitting(true);
+        Snowball ball = throwToy();
+        assertNotNull(pet.fetch()); assertSame(pet.fetch(), other.fetch());
+        land(ball); new PetTicker(runtime, actions).run();
+        assertEquals(2, navigationTargets.size());
+        actions.releaseFetch(pet, owner, false); actions.releaseFetch(other, null, false);
+        assertEquals(PetOrder.SIT, pet.order());
+        assertEquals(PetOrder.STAY, other.order()); assertTrue(other.staying());
+        new PetTicker(runtime, actions).run();
+        assertTrue(((WolfMock) runtime.entity(pet)).isSitting());
+        assertFalse(((WolfMock) runtime.entity(other)).isAware());
+    }
+
     @Test void normalTickerReturnGoesToThrowerAndRewardsOnlyWinningPet() throws Exception {
         Pet other = outsidePet(UUID.randomUUID(), "Luna", 2);
         pet.need(Need.MOOD, 10); other.need(Need.MOOD, 10); other.favoriteToy("STICK");
         land(throwToy()); var job = other.fetch();
         assertFalse(job.favorite(pet.id())); assertTrue(job.favorite(other.id()));
         runtime.entity(other).teleport(new Location(world, 5, 64, 0));
-        var step = PetTicker.class.getDeclaredMethod("stepFetch", Pet.class, org.bukkit.entity.Mob.class);
-        step.setAccessible(true);
-        var ticker = new PetTicker(runtime, actions);
-        step.invoke(ticker, other, runtime.entity(other));
+        actions.fetchActions().step(other, (org.bukkit.entity.Mob) runtime.entity(other));
         assertEquals(FetchPhase.CARRY, job.phase()); assertNull(pet.fetch());
         runtime.entity(other).teleport(owner.getLocation());
-        step.invoke(ticker, other, runtime.entity(other));
+        actions.fetchActions().step(other, (org.bukkit.entity.Mob) runtime.entity(other));
         assertNull(other.fetch()); assertEquals(1, items().size());
         assertEquals(10, pet.need(Need.MOOD)); assertEquals(43, other.need(Need.MOOD));
         assertTrue(items().getFirst().getLocation().distance(owner.getLocation()) < 3);
@@ -225,7 +293,7 @@ class PetFetchWorkflowTest {
 
     @Test void distantStoredRestingAndIncompatiblePetsDoNotChase() throws Exception {
         Pet distant = outsidePet(UUID.randomUUID(), "Far", 100);
-        Pet resting = outsidePet(UUID.randomUUID(), "Rest", 2); resting.order(PetOrder.SIT);
+        Pet resting = outsidePet(UUID.randomUUID(), "Rest", 2); resting.order(PetOrder.LAY);
         Pet stored = outsidePet(UUID.randomUUID(), "Stored", 2); stored.stored(true);
         var yaml = new YamlConfiguration();
         yaml.loadFromString("items: {toys: [STICK]}\npets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}, cat: {entity: CAT, egg: CAT_SPAWN_EGG, items: {toys: []}}}\n");

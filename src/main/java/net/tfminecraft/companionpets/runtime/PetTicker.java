@@ -33,8 +33,6 @@ import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.pet.Presence;
 import net.tfminecraft.companionpets.play.FavoriteToy;
-import net.tfminecraft.companionpets.play.FetchJob;
-import net.tfminecraft.companionpets.play.FetchPhase;
 import net.tfminecraft.companionpets.session.TrainingSession;
 import net.tfminecraft.companionpets.gui.StatLook;
 import net.tfminecraft.companionpets.text.PetTexts;
@@ -245,6 +243,11 @@ public final class PetTicker implements Runnable {
                     pet.staying());
             if (mode == Locomotion.Mode.FOLLOW && pet.activity() != Activity.ATTENDING
                     && !runtime.followingAllowed(pet, owner)) mode = Locomotion.Mode.STAY;
+            if (mode == Locomotion.Mode.FETCH) {
+                actions.fetchActions().navigate(pet, mob);
+                express(pet, mob, owner, mode, now);
+                continue;
+            }
             actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
             if (mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP) PetFx.stopLooking(mob);
             if (actions.moments().tickBelly(pet, mob, owner)) {
@@ -273,12 +276,7 @@ public final class PetTicker implements Runnable {
                 actions.roaming().cancelPlan(pet);
                 continue;
             }
-            if (mode == Locomotion.Mode.FETCH) {
-                FetchNavigationGoal.ensure(runtime, pet, mob,
-                        () -> stepFetch(pet, mob));
-            } else {
-                stepMode(pet, mob, owner, mode, now);
-            }
+            stepMode(pet, mob, owner, mode, now);
             express(pet, mob, owner, mode, now);
             actions.moments().tick(pet, mob, owner, mode, now);
         }
@@ -358,61 +356,6 @@ public final class PetTicker implements Runnable {
         }
         if (pet.bond() >= 70.0 && runtime.random().nextInt(40) == 0) {
             PetFx.hearts(mob, 1);
-        }
-    }
-
-    private void stepFetch(Pet pet, Mob mob) {
-        FetchJob job = pet.fetch();
-        if (job == null) {
-            return;
-        }
-        Player owner = Bukkit.getPlayer(job.throwerId());
-        if (owner == null || !owner.isOnline()) {
-            actions.releaseFetch(pet, null, false);
-            return;
-        }
-        if (!actions.fetchActions().canChase(pet)) {
-            actions.releaseFetch(pet, owner, true);
-            return;
-        }
-        boolean favorite = job.favorite(pet.id());
-        double speed = Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), favorite);
-        PetFx.sit(mob, false);
-        PetFx.lie(mob, false);
-        if (job.phase() == FetchPhase.AIR) {
-            Entity projectile = job.projectileId() == null ? null : Bukkit.getEntity(job.projectileId());
-            if (projectile == null) return;
-            if (!mob.getWorld().equals(projectile.getWorld())) { actions.releaseFetch(pet, owner, true); return; }
-            mob.getPathfinder().moveTo(projectile.getLocation(), speed);
-            return;
-        }
-        if (job.phase() == FetchPhase.GROUND) {
-            Entity item = job.itemId() == null ? null : Bukkit.getEntity(job.itemId());
-            if (item == null) {
-                actions.releaseFetch(pet, owner, true);
-                return;
-            }
-            if (!mob.getWorld().equals(item.getWorld())) { actions.releaseFetch(pet, owner, true); return; }
-            if (actions.fetchActions().claim(pet)) {
-                mob.getPathfinder().stopPathfinding();
-            } else {
-                mob.getPathfinder().moveTo(item.getLocation(), speed);
-            }
-            return;
-        }
-        if (!mob.getWorld().equals(owner.getWorld())) {
-            actions.releaseFetch(pet, owner, false);
-            return;
-        }
-        if (mob.getLocation().distance(owner.getLocation()) < 2.2) {
-            actions.fetchActions().returned(pet, owner);
-            double mood = runtime.config().care().playMoodGain() * (favorite ? runtime.config().care().favoriteMoodMultiplier() : 1.0);
-            pet.need(Need.MOOD, pet.need(Need.MOOD) + mood);
-            pet.need(Need.ENERGY, pet.need(Need.ENERGY) - runtime.config().care().playEnergyCost());
-            PetFx.hearts(mob, favorite ? 6 : 3);
-            mob.getPathfinder().stopPathfinding();
-        } else {
-            mob.getPathfinder().moveTo(owner.getLocation(), speed);
         }
     }
 
