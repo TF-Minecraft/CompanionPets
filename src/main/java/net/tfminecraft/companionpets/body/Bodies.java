@@ -64,6 +64,7 @@ public final class Bodies {
         }
         visual.apply(entity, type);
         keepPersistent(entity);
+        if (entity instanceof Mob mob) mob.setAware(aware(pet));
     }
 
     public UUID readId(Entity entity) {
@@ -90,6 +91,15 @@ public final class Bodies {
         }
         visual.apply(entity, type);
         keepPersistent(entity);
+        if (entity instanceof Mob mob) mob.setAware(aware(pet));
+    }
+
+    private static boolean aware(Pet pet) {
+        var mode = net.tfminecraft.companionpets.behavior.Locomotion.choose(pet.illness(), pet.need(net.tfminecraft.companionpets.pet.Need.HEALTH),
+                pet.need(net.tfminecraft.companionpets.pet.Need.ENERGY), pet.need(net.tfminecraft.companionpets.pet.Need.HUNGER), pet.activity(),
+                pet.fetch() != null, System.currentTimeMillis() < pet.forcedSitUntilMillis(), pet.order(), pet.staying());
+        return (mode == net.tfminecraft.companionpets.behavior.Locomotion.Mode.FOLLOW
+                || mode == net.tfminecraft.companionpets.behavior.Locomotion.Mode.PLAY || mode == net.tfminecraft.companionpets.behavior.Locomotion.Mode.FETCH);
     }
 
     private static void keepPersistent(Entity entity) {

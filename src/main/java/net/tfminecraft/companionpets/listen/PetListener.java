@@ -18,6 +18,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityTeleportEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.inventory.ClickType;
@@ -34,8 +35,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.persistence.PersistentDataType;
 
-import io.papermc.paper.event.player.AsyncChatEvent;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.event.player.AsyncPlayerChatEvent;
 
 import net.tfminecraft.companionpets.gui.MenuHolder;
 import net.tfminecraft.companionpets.fx.PetFx;
@@ -54,6 +54,15 @@ public final class PetListener implements Listener {
     public PetListener(PetRuntime runtime, PetActions actions) {
         this.runtime = runtime;
         this.actions = actions;
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onTeleport(EntityTeleportEvent event) {
+        Pet pet = runtime.byEntity(event.getEntity());
+        if (pet == null || pet.stored() || pet.dead()) return;
+        if (pet.staying() || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW
+                || pet.activity() == net.tfminecraft.companionpets.pet.Activity.SLEEPING
+                || System.currentTimeMillis() < pet.forcedSitUntilMillis()) event.setCancelled(true);
     }
 
     @EventHandler
@@ -97,16 +106,22 @@ public final class PetListener implements Listener {
         actions.useWorld(event.getPlayer(), event.getItem(), event.getClickedBlock(), event.getBlockFace(), event.getPlayer().isSneaking(), air);
     }
 
-    @EventHandler
-    public void onChat(AsyncChatEvent event) {
-        if (!(event.getPlayer() instanceof Player player)) {
-            return;
-        }
-        String text = PlainTextComponentSerializer.plainText().serialize(event.message());
+    // RPCharacters dispatches this event at MONITOR. Consume private dialogue first.
+    // Paper fires the legacy event while this listener is registered; using one
+    // event path also avoids processing the legacy and Adventure events twice.
+    @SuppressWarnings("deprecation")
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onChat(AsyncPlayerChatEvent event) {
+        Player player = event.getPlayer();
+        String text = event.getMessage();
         UUID playerId = player.getUniqueId();
+        Object prompt = runtime.sessions().privatePrompt(playerId);
+        if (prompt != null) event.setCancelled(true);
         Bukkit.getScheduler().runTask(runtime.plugin(), () -> {
             Player online = Bukkit.getPlayer(playerId);
-            if (online != null) {
+            if (online != null && (prompt == null
+                    ? runtime.sessions().privatePrompt(playerId) == null
+                    : runtime.sessions().privatePrompt(playerId) == prompt)) {
                 actions.onChat(online, text);
             }
         });

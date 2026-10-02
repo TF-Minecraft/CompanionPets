@@ -19,6 +19,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import net.tfminecraft.companionpets.body.Bodies;
+import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.config.CompanionConfig;
 import net.tfminecraft.companionpets.integration.ModelHook;
 import net.tfminecraft.companionpets.gui.MenuHolder;
@@ -91,6 +92,12 @@ public final class PetsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (runtime != null) {
+            for (var pet : runtime.store().all()) {
+                Entity body = runtime.entity(pet);
+                if (body != null) PetFx.stopLooking(body);
+            }
+        }
         if (visualTicker != null) visualTicker.cancel();
         if (ticker != null) {
             ticker.cancel();

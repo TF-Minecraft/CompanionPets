@@ -8,6 +8,8 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+import net.tfminecraft.companionpets.behavior.Locomotion;
+import net.tfminecraft.companionpets.behavior.Rest;
 import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.Pet;
@@ -15,6 +17,51 @@ import net.tfminecraft.companionpets.pet.PetSex;
 import net.tfminecraft.companionpets.pet.Presence;
 
 class NeedClockTest {
+    @Test
+    void frozenCareDoesNotHealOrFinishTreatment() {
+        Pet pet = pet();
+        pet.illness(Illness.SICK);
+        pet.treated(true);
+        pet.need(Need.HEALTH, 90);
+        NeedClock.advance(pet, new CareInput(Presence.FROZEN, false, false, false, false, false,
+                minutes(1), CareSettings.defaults(), 0.25));
+        assertEquals(90, pet.need(Need.HEALTH));
+        assertEquals(Illness.SICK, pet.illness());
+        assertTrue(pet.treated());
+    }
+
+    @Test
+    void sittingLyingAndSleepingRecoverWithoutIdleEnergyLoss() {
+        for (var mode : java.util.List.of(
+                Locomotion.Mode.SIT, Locomotion.Mode.LIE, Locomotion.Mode.SLEEP)) {
+            Pet pet = pet();
+            pet.need(Need.ENERGY, 20);
+            boolean sleeping = mode == Locomotion.Mode.SLEEP;
+            NeedClock.advance(pet, new CareInput(Presence.NEAR, false, false, sleeping,
+                    Rest.recoversEnergy(mode), true,
+                    minutes(1), CareSettings.defaults(), 0.25));
+            assertEquals(32.5, pet.need(Need.ENERGY), 0.001);
+            assertEquals(100 - 76.0 / 30 * (sleeping ? 0.5 : 1), pet.need(Need.HUNGER), 0.001);
+        }
+    }
+
+    @Test
+    void restingRecoveryRespectsAwayRateFrozenPresenceAndFullEnergy() {
+        for (Presence presence : Presence.values()) {
+            Pet pet = pet();
+            pet.need(Need.ENERGY, 50);
+            NeedClock.advance(pet, new CareInput(presence, false, false, false, true, false,
+                    minutes(1), CareSettings.defaults(), 0.25));
+            double gain = switch (presence) { case NEAR -> 12.5; case AWAY -> 3.125; case FROZEN -> 0; };
+            assertEquals(50 + gain, pet.need(Need.ENERGY), 0.001);
+        }
+        Pet full = pet();
+        full.need(Need.ENERGY, 99);
+        NeedClock.advance(full, new CareInput(Presence.NEAR, false, false, false, true, true,
+                minutes(1), CareSettings.defaults(), 0.25));
+        assertEquals(100, full.need(Need.ENERGY), 0.001);
+    }
+
     @Test
     void hungerReachesCriticalAtTheConfiguredMinute() {
         Pet pet = pet();
@@ -124,7 +171,7 @@ class NeedClockTest {
                 care.struckMoodPenalty(),
                 care.restAgainSeconds());
         List<CareNotice> notices = NeedClock.advance(dying, new CareInput(
-                Presence.NEAR, false, false, false, true, minutes(1), lethal, 0.25));
+                Presence.NEAR, false, false, false, false, true, minutes(1), lethal, 0.25));
         assertTrue(dying.dead());
         assertTrue(notices.stream().anyMatch(notice -> notice.kind() == CareNotice.Kind.DIED));
     }
@@ -205,7 +252,7 @@ class NeedClockTest {
             boolean sleeping,
             boolean withOwner,
             long elapsed) {
-        return new CareInput(presence, walking, playing, sleeping, withOwner, elapsed, CareSettings.defaults(), 0.25);
+        return new CareInput(presence, walking, playing, sleeping, sleeping, withOwner, elapsed, CareSettings.defaults(), 0.25);
     }
 
     private static long minutes(double minutes) {

@@ -34,6 +34,9 @@ public final class ModelHook implements PetVisual {
         return Bukkit.getPluginManager().isPluginEnabled("ModelEngine");
     }
 
+    @Override public Set<String> clips(PetTypeDef type) { return bridge.clips(type.appearance()); }
+    @Override public boolean modelAvailable(PetTypeDef type) { return bridge.modelAvailable(type.appearance()); }
+
     public void registerInteractions(JavaPlugin plugin, BiConsumer<Player, Entity> interaction) {
         bridge.registerInteractions(plugin, interaction);
     }
@@ -161,12 +164,22 @@ public final class ModelHook implements PetVisual {
     public void remove(Entity entity) {
         if (entity == null) return;
         Session session = sessions.remove(entity.getUniqueId());
-        if (session == null) return;
         try {
-            session.attachment.remove();
+            if (session != null) session.attachment.remove();
+            else bridge.removeSaved(entity, null);
         } catch (RuntimeException ex) {
-            logger.log(Level.WARNING, "Could not detach pet model " + session.type, ex);
+            logger.log(Level.WARNING, "Could not detach pet model from " + entity.getUniqueId(), ex);
         }
+    }
+
+    @Override
+    public void removeBody(Entity entity) {
+        if (entity == null) return;
+        sessions.remove(entity.getUniqueId());
+        try { bridge.removeBody(entity); }
+        catch (RuntimeException ex) {
+            logger.log(Level.WARNING, "Could not remove pet model from " + entity.getUniqueId(), ex);
+        } finally { entity.remove(); }
     }
 
     @Override

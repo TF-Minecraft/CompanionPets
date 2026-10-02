@@ -63,16 +63,22 @@ public final class PetVisualTicker implements Runnable {
             if (body instanceof Cat && body.isSneaking()
                     && (pose == PetAnimation.WALK || pose == PetAnimation.RUN)) pose = PetAnimation.CROUCH;
             runtime.visual().update(body, type, pose);
-            if (runtime.visual().holdsMovement(body)) body.getPathfinder().stopPathfinding();
-            boolean wet = body instanceof Wolf wolf && wolf.isWet();
-            if (previous != null && previous.wet && !wet && body.isOnGround()) {
+            if (runtime.visual().holdsMovement(body)) net.tfminecraft.companionpets.integration.PetMotion.stop(body);
+            boolean shaking = body instanceof Wolf wolf && net.tfminecraft.companionpets.integration.WolfShake.shaking(wolf);
+            if (shaking && (previous == null || !previous.shaking)) {
                 runtime.visual().play(body, type, "SHAKE");
             }
-            samples.put(id, new Sample(at, body.getTicksLived(), pose, wet));
+            if (shaking && runtime.visual().attached(body)) {
+                // The hidden vanilla wolf cannot render its client-side water droplets.
+                body.getWorld().spawnParticle(org.bukkit.Particle.SPLASH,
+                        at.clone().add(0, body.getHeight() * 0.55, 0), 8,
+                        body.getWidth() * 0.55, body.getHeight() * 0.25, body.getWidth() * 0.55, 0.08);
+            }
+            samples.put(id, new Sample(at, body.getTicksLived(), pose, shaking));
         }
         samples.keySet().retainAll(loaded);
         runtime.visual().retain(loaded);
     }
 
-    private record Sample(Location at, int ticks, PetAnimation pose, boolean wet) { }
+    private record Sample(Location at, int ticks, PetAnimation pose, boolean shaking) { }
 }

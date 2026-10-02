@@ -173,8 +173,8 @@ final class PetSocial {
                     b.getPathfinder().stopPathfinding();
                     encounter.arrived = true;
                 }
-                PetFx.look(a, b.getEyeLocation());
-                PetFx.look(b, a.getEyeLocation());
+                PetFx.look(a, b);
+                PetFx.look(b, a);
                 if (now >= encounter.nextFxAt) {
                     PetFx.particle(a, Particle.HAPPY_VILLAGER, 2);
                     PetFx.particle(b, Particle.HAPPY_VILLAGER, 2);
@@ -210,8 +210,8 @@ final class PetSocial {
     private void bark(Encounter encounter, Mob a, Mob b) {
         a.getPathfinder().stopPathfinding();
         b.getPathfinder().stopPathfinding();
-        PetFx.look(a, b.getEyeLocation());
-        PetFx.look(b, a.getEyeLocation());
+        PetFx.look(a, b);
+        PetFx.look(b, a);
         growl(a);
         growl(b);
         PetFx.particle(a, Particle.ANGRY_VILLAGER, 2);

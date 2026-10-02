@@ -31,11 +31,12 @@ public final class NeedClock {
             if (!input.playing() && pet.illness() != Illness.SICK && pet.illness() != Illness.WEAKENED) {
                 pet.need(Need.MOOD, pet.need(Need.MOOD) - dropPerMinute(care.moodMinutesToCritical()) * minutes);
             }
-            if (input.walking() || (input.presence() == Presence.NEAR && !input.sleeping())) {
+            boolean resting = input.sleeping() || input.resting();
+            if (!resting && (input.walking() || input.presence() == Presence.NEAR)) {
                 double energyRate = input.walking() ? 1.0 : 0.35;
                 pet.need(Need.ENERGY, pet.need(Need.ENERGY) - dropPerMinute(care.energyMinutesToCritical()) * minutes * energyRate);
             }
-            if (input.sleeping()) {
+            if (resting) {
                 double fill = care.sleepMinutesToFull() <= 0 ? 100.0 : 100.0 / care.sleepMinutesToFull();
                 pet.need(Need.ENERGY, pet.need(Need.ENERGY) + fill * minutes);
             }
@@ -89,9 +90,9 @@ public final class NeedClock {
             }
         }
 
-        if (pet.treated() && !pet.dead()) {
+        if (!frozen && pet.treated() && !pet.dead()) {
             boolean othersClear = !pet.causeCritical();
-            boolean rested = input.sleeping() || pet.need(Need.ENERGY) >= 25.0;
+            boolean rested = input.sleeping() || input.resting() || pet.need(Need.ENERGY) >= 25.0;
             boolean fed = pet.need(Need.HUNGER) >= 25.0;
             boolean canRegen = switch (pet.illness()) {
                 case WEAKENED -> othersClear && rested && fed;

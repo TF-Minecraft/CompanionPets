@@ -13,8 +13,10 @@ care:
   play-mood-gain: 22
   play-energy-cost: 3
   favorite-mood-multiplier: 1.5
-  favorite-food-mood: 8
+  favorite-food-mood: 8             # Mood bonus when a hungry pet eats any accepted treat
+  # Energy recovery for sitting, lying and sleeping (100 points in this many minutes).
   sleep-minutes-to-full: 8
+  # Only sleep slows hunger; sitting uses the normal hunger rate.
   sleeping-hunger-multiplier: 0.5
   health-loss-per-minute: 12
   health-regen-per-minute: 20
@@ -33,6 +35,12 @@ play:
   throw-speed-high: 1.1
 
 training:
+  # Trained to 100% and bound to their lowercase ID, visible in the Tricks menu.
+  # Applies to new pets and grants missing defaults to saved pets on startup/reload.
+  # Removing an entry never erases previously learned tricks or words.
+  # Default tricks are enabled even if omitted from pets.<type>.tricks.
+  # IDs: follow, sit, stay, speak, jump, lay, paw, beg, or a custom-tricks ID.
+  default-tricks: [follow]
   attempts-before-bored: 6
   reward-gain: 20
   fail-gain: 2
@@ -113,11 +121,14 @@ moments:
   juvenile-dig-chance: 15
   adult-dig-chance: 10
   dig-min-energy: 40
+  # Items use the same vanilla/MMOItems/ItemsAdder IDs explained under items below.
+  # weight is a positive integer chance, not an item quantity. [] disables loot.
+  # The old MATERIAL: weight map is also accepted.
   dig-loot:
-    STICK: 45
-    BONE: 30
-    RABBIT: 15
-    LEATHER_BOOTS: 10
+    - {item: STICK, weight: 45}
+    - {item: BONE, weight: 30}
+    - {item: RABBIT, weight: 15}
+    - {item: LEATHER_BOOTS, weight: 10}
   plant-breaking-enabled: true
   respect-mob-griefing: true
   plants:
@@ -154,8 +165,29 @@ roaming:
   choice-max-seconds: 6
   player-radius: 6
   pet-radius: 6
-  name-attention-seconds: 4
+  # Quiet time after arriving, so you can type the next order.
+  name-attention-seconds: 10
 
+# Only your own pets in the same world hear their name or name + command.
+# Example: "Toby sit", "sit Toby", or "Toby follow"; no aiming required.
+orders:
+  hearing-radius: 12
+
+# ITEM IDS: the same syntax as Archaeo, for every interaction list and pet egg.
+#   Vanilla:    STICK or "minecraft:stick"
+#   MMOItems:   "mmoitems:PETS:MEAT_TREAT" (type PETS, item ID MEAT_TREAT)
+#   ItemsAdder: "itemsadder:namespace:item_id" (also accepts "namespace:item_id")
+# Short aliases mi:TYPE:id and ia:namespace:id also work. Quote custom IDs.
+# Older v.stick / m.pets.meat_treat / ia.namespace:item_id remain supported.
+# Provider identity is checked: a custom item never matches a vanilla material
+# just because both have the same base material. No dependency on MCPets/Cooking.
+# Referenced custom items must already exist in MMOItems/ItemsAdder.
+# Unknown IDs/providers never substitute unrelated vanilla items.
+#
+# GLOBAL INTERACTION LISTS: all pets inherit these five categories.
+# A pet's items.<category> REPLACES that whole category, never appends to it.
+# Omitted category = inherit. Explicit [] = disable it for that pet.
+# Other categories continue inheriting. See the commented example under pets.
 items:
   # Shelter placement is global; eggs belong to each pet type, not these lists.
   kennel: BARREL
@@ -186,6 +218,9 @@ pets:
   # 1. Copy a complete example below and give it a unique lowercase key.
   # 2. Choose its entity, appearance and egg, then its food and toys.
   # 3. Optionally restrict its tricks. Omit tricks to allow all existing tricks.
+  # 4. Omit default-tricks to inherit training.default-tricks. A pet-specific
+  #    list REPLACES the global list. [] gives no initial learning for that type.
+  #    Example inside a pet: default-tricks: [follow, sit, lay]
   # Use spaces, not tabs. Keep each pet key at the same indentation as wolf.
   #
   # COMMON FIELDS (apply to vanilla AND ModelEngine pets)
@@ -194,21 +229,36 @@ pets:
   # entity: Minecraft entity type in uppercase, e.g. WOLF, CAT, FOX or FROG.
   #   This supplies the body and AI; it does not select a custom model/skin.
   # appearance.type: vanilla (default) or modelengine. See the beagle example.
-  # egg: vanilla, mmoitems:TYPE:ID or itemsadder:namespace:id selector.
-  # egg-custom-model-data: optional item CustomModelData number. The combination
-  #   of egg material + this number must be unique across pet types.
-  #   If omitted, the egg must have NO CustomModelData. The plugin does not
-  #   create custom egg items; supply them through your item provider/command.
+  # egg: item selector used to create this pet, e.g. WOLF_SPAWN_EGG,
+  #   "mmoitems:PETS:PET_BEAGLE_EGG" or "itemsadder:tfmc:beagle_egg". Each must be unique.
+  # egg-custom-model-data: legacy option ONLY for vanilla material selectors.
+  #   Material + number must be unique; when omitted a vanilla egg must have
+  #   NO CustomModelData. For MMOItems/ItemsAdder eggs use ONLY their ID.
+  #   A custom provider ID takes priority over legacy material + model matches.
   # sex: random = assigned automatically; choose = player chooses when naming.
-  # items: optional per-category overrides; omitted categories inherit globals.
-  # Example: items: {treats: ["mmoitems:PETS:FISH_TREAT"], medicines: []}
+  # items: optional per-pet replacement of one or more global interaction lists.
+  # No active overrides below: all species share treats, food, medicine, brushes
+  # and toys. Remove a category to inherit it again; [] disables that category.
+  # Example inside a pet definition (same indentation as entity/egg):
+  #   items:
+  #     treats: ["mmoitems:PETS:FISH_TREAT"]  # ONLY fish; meat is not accepted
+  #     foods:
+  #       - {item: SALMON, hunger: 55}        # ONLY salmon; no Universal Feed
+  #     medicines: []                       # No medicine for this type
+  #     brushes: [BRUSH]                     # Vanilla brush instead of Glove
+  #     toys: [STICK, "itemsadder:tfmc:ball"] # Example custom ID to register first
+  # Any omitted categories still use the global lists. items: {} inherits all.
+  # Legacy care.foods / care.favorite / care.medicine and root toys still load
+  # as category replacements, but prefer the identical global/per-pet items form.
   #
   # TRICKS: what this type may learn AND perform, independently of animations.
   # Omitted = all compatible base/custom tricks. [] = none. A list restricts them.
-  # sit = sit down; come = follow; stay = stay in place; speak = make its sound;
-  # jump = jump; spin = move in a circle; sleep = sleep; paw = give a paw;
+  # sit = sit down; follow = resume following; stay = stay in place; speak = make its sound;
+  # come = get up, walk to the owner, then resume the previous sit/lay/stay posture.
+  # jump = jump; lay = lie down to sleep until told to follow; paw = give a paw;
+  # Legacy sleep trick IDs are accepted as lay, keeping saved words/progress.
   # beg = ask for a treat using the vanilla sitting/attention behaviour.
-  # Add custom-tricks IDs to the same list, e.g. [sit, come, paw, salute].
+  # Add custom-tricks IDs to the same list, e.g. [sit, follow, paw, salute].
   # IDs are case-insensitive. Unknown IDs are skipped with a warning. A non-list
   # disables tricks for that type, but the pet still loads. Saved progress/words
   # are retained even when a custom definition or allowed trick is removed.
@@ -232,3 +282,77 @@ pets:
       type: vanilla
     egg: FOX_SPAWN_EGG
     sex: choose
+
+  # MODELENGINE EXAMPLE: uncomment this complete beagle block to enable it.
+  # Install/register the beagle blueprint and serve its generated resource pack.
+  # The beagle's body/AI is WOLF; its visible appearance is the ModelEngine model.
+  # Register PET_BEAGLE_EGG in MMOItems type PETS before using this example.
+  # Use WOLF_SPAWN_EGG as its base material; its model number is irrelevant here.
+  # ModelEngine 4 is optional; an unavailable model uses the vanilla
+  # body and logs the reason. The default pets above need no ModelEngine plugin.
+  # beagle:
+  #   entity: WOLF
+  #   egg: "mmoitems:PETS:PET_BEAGLE_EGG"
+  #   appearance:
+  #     type: modelengine
+  #     model: beagle                 # ModelEngine model ID (not an item skin)
+  #     scale: 1.0                    # Model and hitbox scale
+  #   # tricks omitted: this beagle can learn all tricks.
+  #   sex: random
+  #   # Interaction items are inherited from the global items lists.
+
+  # VANILLA FROG EXAMPLE: no ModelEngine needed; no paw or beg tricks.
+  # frog:
+  #   entity: FROG
+  #   appearance:
+  #     type: vanilla
+  #   egg: FROG_SPAWN_EGG
+  #   sex: random
+  #   tricks: [follow, come, stay, speak, jump]
+  #   # Inherits the same global interaction lists, including both treats.
+
+  # OPTIONAL MODELENGINE SETTINGS
+  # Put these inside a pet's appearance block, next to type/model/scale.
+  # You can OMIT animations entirely when clips use the default names.
+  # ALL animations are optional and automatically used IF present:
+  # idle, walk, run, crouch, sit, lie, sleep, jump, fall, swim, head_tilt, shake,
+  # paw, beg, pet, fly, hover, attack, hurt, death, eat, speak, spawn,
+  # lie_back, belly_up, get_up. Missing clips do not prevent model attachment.
+  # idle/walk are recommended to avoid a static model. If lie is absent, the
+  # original lay clip is recognized automatically unless lie was disabled.
+  # If neither lie nor lay exists, an enabled sleep clip supplies the lie pose.
+  # Missing run uses walk at 1.5x speed; crouch uses walk; sleep uses lie then
+  # sit; lie uses sit if no lay/sleep alias is available. Without jump/swim,
+  # use idle in the air and walk in water.
+  # jump plays once on takeoff, holding its last pose until landing (or fall).
+  # Shake follows the beginning of the native WOLF shake, alongside its sound.
+  # head_tilt is for training; author only head bones and use a distinct clip.
+  # Without corresponding clips, eating/speaking
+  # use effects/sounds. pet is the normal petting reaction; it does not interrupt
+  # belly rubs. belly_up may be a zero-length pose; the plugin holds it itself.
+  # There are no sick, pet1, pet2 or despawn hooks.
+  #
+  # Example overrides (copy only the entries you need into appearance):
+  #     run-speed: 0.22             # Movement threshold in blocks per tick
+  #     animations:
+  #       lie: sleep                # Reuse the sleeping posture for exhaustion
+  #       paw: give_paw             # Left: plugin action; right: model clip name
+  #       head_tilt: {name: head_tilt, speed: 1.0, blend: 0.15}
+  #       # speed: playback multiplier; blend: transition time in seconds.
+  #       # Poses loop; gestures play once. Optional "" disables a clip.
+  #       # Every clip can be disabled, including idle/walk/sit/death.
+  #       # Disable unfinished optional placeholders until you animate them:
+  #       shake: ""
+  #
+  # For the definitive frog model (idle/walk/jump/swim/lay are automatic):
+  #     animations:
+  #       speak: croak
+  #       eat: tongue               # Optional use of its tongue clip
+  # The definitive dogs/cats/fox have sleep instead of lay and no jump/swim.
+  # They need no overrides for resting, jumping or swimming.
+  # For the fox, pet: pet2 enables its existing petting reaction.
+  # Any other absent clips simply use their fallback or remain unanimated.
+  #
+  # Optional MythicMobs integration: mythic-mob: <internal mob ID> can provide
+  # the body instead of entity. This requires MythicMobs to be installed.
+  # Keep appearance ownership with CompanionPets when using ModelEngine here.

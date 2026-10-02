@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
+import net.tfminecraft.companionpets.item.ItemRef;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
@@ -130,7 +130,8 @@ public final class PetTicker implements Runnable {
                     presence,
                     mode == Locomotion.Mode.FOLLOW,
                     pet.activity() == Activity.PLAYING,
-                    pet.activity() == Activity.SLEEPING,
+                    pet.activity() == Activity.SLEEPING || mode == Locomotion.Mode.SLEEP,
+                    Rest.recoversEnergy(mode),
                     withOwner,
                     elapsed,
                     runtime.config().care(),
@@ -142,8 +143,7 @@ public final class PetTicker implements Runnable {
                 if (body instanceof org.bukkit.entity.LivingEntity living && runtime.visual().attached(body)) {
                     living.setHealth(0);
                 } else if (body != null) {
-                    runtime.visual().remove(body);
-                    body.remove();
+                    runtime.visual().removeBody(body);
                 }
                 if (online) {
                     PetFx.tell(owner, pet.name() + " grew too weak without care and has passed away.");
@@ -191,7 +191,7 @@ public final class PetTicker implements Runnable {
                     body.getWorld().playSound(body.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 0.7f, 1.2f);
                 }
             }
-            if (pet.activity() == Activity.SLEEPING && pet.need(Need.ENERGY) >= 100.0) {
+            if (pet.activity() == Activity.SLEEPING && pet.order() != net.tfminecraft.companionpets.pet.PetOrder.LAY && pet.need(Need.ENERGY) >= 100.0) {
                 pet.activity(Activity.NONE);
                 if (online) {
                     PetFx.bar(owner, pet.name() + " wakes up, fully rested");
@@ -232,12 +232,24 @@ public final class PetTicker implements Runnable {
                     pet.order(),
                     pet.staying());
             actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
-            if (actions.moments().tickBelly(pet, mob, owner)) continue;
-            if (mode != Locomotion.Mode.LIE && mode != Locomotion.Mode.SLEEP && runtime.visual().holdsMovement(mob)) {
-                mob.getPathfinder().stopPathfinding();
+            if (mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP) PetFx.stopLooking(mob);
+            if (actions.moments().tickBelly(pet, mob, owner)) {
+                PetFx.stopLooking(mob);
                 continue;
             }
-            if (actions.roaming().tickAttention(pet, mob, now)) {
+            boolean held = mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.STAY
+                    || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP;
+            if (!held && runtime.visual().holdsMovement(mob)) {
+                net.tfminecraft.companionpets.integration.PetMotion.stop(mob);
+                continue;
+            }
+            if (held && mob.isAware()) actions.clearInteractions(pet);
+            mob.setAware(!held);
+            if (held) {
+                actions.roaming().cancel(pet);
+                net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+            }
+            if (!held && actions.roaming().tickAttention(pet, mob, now)) {
                 continue;
             }
             if (mode == Locomotion.Mode.FOLLOW && mob.getTarget() != null) {
@@ -245,9 +257,6 @@ public final class PetTicker implements Runnable {
             }
             if (actions.social().engaged(pet)) {
                 actions.roaming().cancelPlan(pet);
-                continue;
-            }
-            if (actions.advanceSpin(pet, mob, mode, now)) {
                 continue;
             }
             if (mode == Locomotion.Mode.FETCH) {
@@ -280,7 +289,8 @@ public final class PetTicker implements Runnable {
                     pet.pauseUntilMillis(now + 2_000L);
                 }
                 double distance = mob.getLocation().distance(owner.getLocation());
-                if (distance > runtime.config().followTeleportBlocks()) {
+                if (distance > runtime.config().followTeleportBlocks()
+                        && pet.order() == net.tfminecraft.companionpets.pet.PetOrder.FOLLOW && !pet.staying()) {
                     mob.teleport(PetRuntime.beside(owner));
                     mob.getPathfinder().stopPathfinding();
                 } else if (actions.roaming().step(pet, mob, owner, speed, now)) {
@@ -289,7 +299,7 @@ public final class PetTicker implements Runnable {
                     mob.getPathfinder().moveTo(owner.getLocation(), speed);
                 } else {
                     mob.getPathfinder().stopPathfinding();
-                    PetFx.look(mob, owner.getEyeLocation());
+                    PetFx.look(mob, owner);
                 }
             }
             case SIT, STAY -> {
@@ -429,9 +439,9 @@ public final class PetTicker implements Runnable {
             }
             Pet pet = runtime.store().get(session.petId());
             PetTypeDef type = pet == null ? null : runtime.config().type(pet.typeId());
-            net.tfminecraft.companionpets.item.ItemRef treat = type == null ? null : type.foodIcon();
+            java.util.List<ItemRef> treats = type == null ? java.util.List.of() : type.treats();
             Entity body = pet == null ? null : runtime.entity(pet);
-            boolean holding = type != null && type.isTreat(player.getInventory().getItemInMainHand());
+            boolean holding = treats.stream().anyMatch(treat -> treat.matches(player.getInventory().getItemInMainHand()));
             boolean close = body != null
                     && body.getWorld().equals(player.getWorld())
                     && body.getLocation().distance(player.getLocation()) <= runtime.config().training().sessionDistance();
@@ -439,7 +449,7 @@ public final class PetTicker implements Runnable {
                 actions.endTraining(player, pet, "your pet went back to the shelter");
             } else if (!holding) {
                 String treatName = actions.treatName(pet);
-                actions.endTraining(player, pet, type.treats().stream().anyMatch(ref -> java.util.Arrays.stream(player.getInventory().getContents()).anyMatch(ref::matches))
+                actions.endTraining(player, pet, java.util.Arrays.stream(player.getInventory().getStorageContents()).anyMatch(item -> treats.stream().anyMatch(treat -> treat.matches(item)))
                         ? "you put the " + treatName + " away"
                         : "you ran out of " + treatName);
             } else if (!close) {

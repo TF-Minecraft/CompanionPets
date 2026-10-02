@@ -36,6 +36,7 @@ public final class Pet {
     private Illness illness = Illness.NONE;
     private boolean treated;
     private boolean dead;
+
     private String favoriteToy;
     private String carriedToy;
     private final Map<String, Trick> words = new LinkedHashMap<>();
@@ -294,8 +295,7 @@ public final class Pet {
             return null;
         }
         String key = SpokenOrder.key(word);
-        Trick direct = words.get(key);
-        return direct != null ? direct : "follow".equals(key) && words.get("come") == Trick.COME ? Trick.COME : null;
+        return words.get(key);
     }
 
     public boolean knowsWord(String word) {

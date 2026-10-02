@@ -21,11 +21,12 @@ public record PetTypeDef(
         SexMode sexMode,
         PetAppearance appearance,
         PetItems items,
-        Set<Trick> tricks) {
+        Set<Trick> tricks,
+        List<Trick> defaultTricks) {
 
     public PetTypeDef {
         tricks = Set.copyOf(tricks);
-
+        defaultTricks = List.copyOf(defaultTricks);
     }
 
     public boolean allowsTrick(Trick trick) {

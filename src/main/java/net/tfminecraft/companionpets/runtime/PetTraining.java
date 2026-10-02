@@ -117,7 +117,7 @@ final class PetTraining {
                 PetFx.bar(player, pet.name() + " already knows " + PetTexts.trickName(known) + ". No practice needed");
                 return;
             }
-            if (pet.activity() == Activity.SLEEPING && known != Trick.SLEEP && known != Trick.COME) {
+            if (pet.activity() == Activity.SLEEPING && known != Trick.LAY && known != Trick.FOLLOW && known != Trick.COME) {
                 executor.perform(player, pet, looked, known, false);
                 return;
             }
@@ -232,7 +232,7 @@ final class PetTraining {
             endTraining(player, runtime.store().get(existing.petId()), "you started training another pet");
         }
         runtime.sessions().training(player.getUniqueId(), new TrainingSession(pet.id()));
-        PetFx.look(entity, player.getEyeLocation());
+        PetFx.look(entity, player);
         if (entity instanceof Mob mob) {
             mob.getPathfinder().stopPathfinding();
         }
@@ -364,7 +364,7 @@ final class PetTraining {
         UUID id = entity.getUniqueId();
         if (headTiltUntil.containsKey(id)) return;
         headTiltUntil.put(id, now + 3_000L);
-        PetFx.look(entity, player.getEyeLocation());
+        PetFx.look(entity, player);
         runtime.visual().play(entity, runtime.config().type(pet.typeId()), "HEAD_TILT");
         if (entity instanceof Wolf wolf) {
             wolf.setInterested(true);

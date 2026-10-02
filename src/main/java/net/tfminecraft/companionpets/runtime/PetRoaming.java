@@ -16,15 +16,19 @@ import net.tfminecraft.companionpets.config.RoamSettings;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.pet.Activity;
 import net.tfminecraft.companionpets.pet.Pet;
+import net.tfminecraft.companionpets.pet.PetOrder;
+import net.tfminecraft.companionpets.integration.PetMotion;
+import net.tfminecraft.companionpets.visual.PetAnimation;
 
 /** Small trips and changing attention around an owner who is standing still. */
 final class PetRoaming {
     private final PetRuntime runtime;
+    private final java.util.function.BiConsumer<Entity, Boolean> sleep;
     private final Map<UUID, OwnerMotion> owners = new HashMap<>();
     private final Map<UUID, Plan> plans = new HashMap<>();
     private final Map<UUID, Attention> attention = new HashMap<>();
 
-    PetRoaming(PetRuntime runtime) { this.runtime = runtime; }
+    PetRoaming(PetRuntime runtime, java.util.function.BiConsumer<Entity, Boolean> sleep) { this.runtime = runtime; this.sleep = sleep; }
 
     void tickOwners(long now) {
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -48,31 +52,65 @@ final class PetRoaming {
     }
 
     void attend(Pet pet, Player owner, long now) {
+        attend(pet, owner, now, null);
+    }
+
+    PetOrder returnOrder(Pet pet) {
+        Attention job = attention.get(pet.id());
+        if (job != null && job.returnOrder != null) return job.returnOrder;
+        if (pet.order() == PetOrder.LAY || pet.activity() == Activity.SLEEPING) return PetOrder.LAY;
+        return pet.staying() ? PetOrder.STAY : pet.order();
+    }
+
+    boolean coming(Pet pet) {
+        Attention job = attention.get(pet.id());
+        return job != null && job.returnOrder != null;
+    }
+
+    void come(Pet pet, Player owner, long now, PetOrder returnOrder) {
+        attend(pet, owner, now, returnOrder);
+    }
+
+    private void attend(Pet pet, Player owner, long now, PetOrder returnOrder) {
         plans.remove(pet.id());
+        if (runtime.entity(pet) instanceof Mob body) {
+            net.tfminecraft.companionpets.integration.PetMotion.stop(body);
+            body.setAware(true);
+            CallNavigationGoal.ensure(runtime, pet, body, () -> tickAttention(pet, body, System.currentTimeMillis()));
+        }
         pet.activity(Activity.ATTENDING);
         attention.put(pet.id(), new Attention(owner.getUniqueId(),
-                now + Math.round(runtime.config().roaming().nameAttentionSeconds() * 1000.0)));
+                now + 30_000L, returnOrder));
     }
 
     boolean tickAttention(Pet pet, Mob body, long now) {
         Attention job = attention.get(pet.id());
         if (job == null) return false;
-        if (pet.activity() != Activity.ATTENDING) {
+        if (pet.activity() != Activity.ATTENDING || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW || pet.staying()) {
             cancelAttention(pet);
             return false;
         }
         Player owner = Bukkit.getPlayer(job.ownerId);
-        if (owner == null || !owner.isOnline() || now >= job.until || !owner.getWorld().equals(body.getWorld())) {
+        if (owner == null || !owner.isOnline() || now >= (job.waitUntil == 0 ? job.until : job.waitUntil)
+                || !owner.getWorld().equals(body.getWorld())) {
             cancelAttention(pet);
-            return false;
+            if (job.returnOrder != null) restorePosture(pet, body, job.returnOrder);
+            return job.returnOrder != null;
         }
         PetFx.sit(body, false);
         PetFx.lie(body, false);
-        if (body.getLocation().distanceSquared(owner.getLocation()) > 4.0) {
+        if (job.waitUntil == 0 && body.getLocation().distanceSquared(owner.getLocation()) > 4.0) {
             body.getPathfinder().moveTo(owner.getLocation(), 1.25);
         } else {
-            body.getPathfinder().stopPathfinding();
-            PetFx.look(body, owner.getEyeLocation());
+            if (job.returnOrder != null) {
+                attention.remove(pet.id());
+                restorePosture(pet, body, job.returnOrder);
+                PetFx.happy(body, false);
+                return true;
+            }
+            if (job.waitUntil == 0) job.waitUntil = now + Math.round(runtime.config().roaming().nameAttentionSeconds() * 1000.0);
+            net.tfminecraft.companionpets.integration.PetMotion.hold(body);
+            PetFx.look(body, owner);
             if (!job.greeted) {
                 PetFx.happy(body, false);
                 PetFx.hearts(body, 2);
@@ -80,6 +118,20 @@ final class PetRoaming {
             }
         }
         return true;
+    }
+
+    private void restorePosture(Pet pet, Mob body, PetOrder order) {
+        pet.order(order); pet.staying(order == PetOrder.STAY);
+        pet.activity(order == PetOrder.LAY ? Activity.SLEEPING : Activity.NONE);
+        PetFx.lie(body, order == PetOrder.LAY);
+        if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT);
+        sleep.accept(body, order == PetOrder.LAY);
+        if (order == PetOrder.FOLLOW) { PetMotion.stop(body); body.setAware(true); }
+        else PetMotion.hold(body);
+        var type = runtime.config().type(pet.typeId());
+        if (type != null) runtime.visual().update(body, type,
+                order == PetOrder.LAY ? PetAnimation.SLEEP : order == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE);
+        runtime.store().save();
     }
 
     boolean step(Pet pet, Mob body, Player owner, double speed, long now) {
@@ -119,14 +171,14 @@ final class PetRoaming {
                 plan.arrived = true;
             }
             if (targetEntity != null && body.getLocation().distanceSquared(targetEntity.getLocation()) <= 16.0) {
-                PetFx.look(body, targetEntity.getLocation().add(0, 0.8, 0));
+                PetFx.look(body, targetEntity);
                 if (!plan.greeted && targetEntity instanceof Player) {
                     PetFx.happy(body, false);
                     PetFx.particle(body, org.bukkit.Particle.HAPPY_VILLAGER, 2);
                     plan.greeted = true;
                 }
             } else if (runtime.random().nextInt(5) == 0) {
-                PetFx.look(body, owner.getEyeLocation());
+                PetFx.look(body, owner);
             }
         }
         return true;
@@ -174,7 +226,15 @@ final class PetRoaming {
         if (pet.activity() == Activity.ATTENDING) pet.activity(Activity.NONE);
     }
 
-    void clear() { plans.clear(); attention.clear(); owners.clear(); }
+    void clear() {
+        for (var entry : java.util.List.copyOf(attention.entrySet())) {
+            var pet = runtime.store().get(entry.getKey());
+            if (pet != null && entry.getValue().returnOrder != null && runtime.entity(pet) instanceof Mob body)
+                restorePosture(pet, body, entry.getValue().returnOrder);
+            else if (pet != null && pet.activity() == Activity.ATTENDING) pet.activity(Activity.NONE);
+        }
+        plans.clear(); attention.clear(); owners.clear();
+    }
 
     private static double horizontalSpeed(Player player) {
         return player.getVelocity().getX() * player.getVelocity().getX()
@@ -204,7 +264,9 @@ final class PetRoaming {
     private static final class Attention {
         private final UUID ownerId;
         private final long until;
+        private final PetOrder returnOrder;
+        private long waitUntil;
         private boolean greeted;
-        private Attention(UUID ownerId, long until) { this.ownerId = ownerId; this.until = until; }
+        private Attention(UUID ownerId, long until, PetOrder returnOrder) { this.ownerId = ownerId; this.until = until; this.returnOrder = returnOrder; }
     }
 }

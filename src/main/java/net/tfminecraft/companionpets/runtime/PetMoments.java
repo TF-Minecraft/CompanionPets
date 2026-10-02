@@ -182,7 +182,7 @@ final class PetMoments {
     }
 
     private void askForAffection(Pet pet, Mob body, Player owner) {
-        PetFx.look(body, owner.getEyeLocation());
+        PetFx.look(body, owner);
         PetFx.sad(body);
         MomentSettings settings = runtime.config().moments();
         PetFx.particle(body, settings.affectionParticle(), settings.affectionParticleCount());
@@ -313,7 +313,7 @@ final class PetMoments {
 
     private void barkAt(Pet pet, Mob body, Player owner, LivingEntity target) {
         runtime.visual().play(body, runtime.config().type(pet.typeId()), "SPEAK");
-        PetFx.look(body, target.getEyeLocation());
+        PetFx.look(body, target);
         Sound sound = switch (body.getType()) {
             case WOLF -> Sound.ENTITY_WOLF_GROWL;
             case CAT -> Sound.ENTITY_CAT_HISS;

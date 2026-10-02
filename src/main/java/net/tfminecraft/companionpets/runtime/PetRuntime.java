@@ -47,6 +47,7 @@ public final class PetRuntime {
         this.visual = visual;
         this.petKey = petKey;
         this.toyKey = toyKey;
+        applyDefaultTricks();
     }
 
     public JavaPlugin plugin() {
@@ -59,6 +60,13 @@ public final class PetRuntime {
 
     public void config(CompanionConfig config) {
         this.config = java.util.Objects.requireNonNull(config);
+        applyDefaultTricks();
+    }
+
+    private void applyDefaultTricks() {
+        boolean changed = false;
+        for (Pet pet : store.all()) changed |= net.tfminecraft.companionpets.training.DefaultTricks.apply(config, pet);
+        if (changed) store.save();
     }
 
     public PetStore store() {

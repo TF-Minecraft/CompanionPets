@@ -15,6 +15,29 @@ import net.tfminecraft.companionpets.config.PetAppearance.Clip;
 
 class AnimationControllerTest {
     @Test
+    void currentModelsUseIdleInAirWalkInWaterAndSleepWhenLyingDown() {
+        Player player = new Player();
+        Map<PetAnimation, Clip> clips = new EnumMap<>(PetAnimation.class);
+        for (PetAnimation animation : List.of(PetAnimation.IDLE, PetAnimation.WALK, PetAnimation.SIT, PetAnimation.SLEEP, PetAnimation.PAW))
+            clips.put(animation, new Clip(animation.name().toLowerCase(java.util.Locale.ROOT), 1, 0.15));
+        clips.put(PetAnimation.LIE, clips.get(PetAnimation.SLEEP));
+        AnimationController controller = new AnimationController(player, clips);
+        controller.update(PetAnimation.JUMP);
+        controller.update(PetAnimation.FALL);
+        assertEquals(List.of("play:idle:true"), player.events);
+        controller.update(PetAnimation.SWIM);
+        assertEquals("play:walk:true", player.events.getLast());
+        controller.update(PetAnimation.LIE);
+        controller.update(PetAnimation.SLEEP);
+        assertEquals("play:sleep:true", player.events.getLast());
+        assertEquals(1, player.events.stream().filter("play:sleep:true"::equals).count());
+        controller.update(PetAnimation.SIT);
+        assertEquals("play:sit:true", player.events.getLast());
+        assertTrue(controller.play(PetAnimation.PAW));
+        assertEquals("play:paw:false", player.events.getLast());
+    }
+
+    @Test
     void repeatedUpdatesDoNotRestartLoopsAndWakeStopsSleep() {
         Player player = new Player();
         AnimationController controller = new AnimationController(player, clips());

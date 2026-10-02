@@ -1,7 +1,6 @@
 package net.tfminecraft.companionpets.integration;
 
 import java.lang.reflect.Method;
-import java.util.EnumMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -72,25 +71,50 @@ final class ModelEngineBridge {
         if (owner != null) {
             Object model = unwrap(call(method(modeled, "removeModel", String.class), owner, id));
             if (model != null) call(method(active, "destroy"), model);
-            Map<?, ?> remaining = (Map<?, ?>) call(method(modeled, "getModels"), owner);
-            if (remaining.isEmpty()) call(method(modeled, "setBaseEntityVisible", boolean.class), owner, true);
+            finishRemoval(owner, entity.isValid() && !entity.isDead());
         }
         entity.getPersistentDataContainer().remove(MODEL_KEY);
+    }
+
+    /** Destroy the complete modeled entity without force-spawning its hidden vanilla body. */
+    void removeBody(Entity entity) {
+        Object owner = unwrap(call(method(api, "getModeledEntity", UUID.class), null, entity.getUniqueId()));
+        if (owner != null) destroyOwner(owner);
+        entity.getPersistentDataContainer().remove(MODEL_KEY);
+    }
+
+    private void finishRemoval(Object owner, boolean restoreBase) {
+        Map<?, ?> remaining = (Map<?, ?>) call(method(modeled, "getModels"), owner);
+        if (!remaining.isEmpty()) return;
+        if (restoreBase) call(method(modeled, "setBaseEntityVisible", boolean.class), owner, true);
+        destroyOwner(owner);
+    }
+
+    private void destroyOwner(Object owner) {
+        // This removes both registry entries and renderers synchronously on Paper.
+        // removeModeledEntity(UUID) only marks removal for a later ModelEngine tick.
+        call(method(modeled, "setSaved", boolean.class), owner, false);
+        Object updaters = call(method(api, "getModelUpdaters"), call(method(api, "getAPI"), null));
+        call(method(api("model.ModelUpdaters"), "forceRemoveModeledEntity", modeled), updaters, owner);
+    }
+
+    boolean modelAvailable(PetAppearance appearance) {
+        return !appearance.modeled() || call(method(api, "getBlueprint", String.class), null, appearance.model()) != null;
+    }
+
+    java.util.Set<String> clips(PetAppearance appearance) {
+        if (!appearance.modeled()) return java.util.Set.of();
+        Object definition = call(method(api, "getBlueprint", String.class), null, appearance.model());
+        if (definition == null) return java.util.Set.of();
+        Map<?, ?> available = (Map<?, ?>) call(method(blueprint, "getAnimations"), definition);
+        return available.keySet().stream().map(Object::toString).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     Attachment attach(Entity entity, PetAppearance appearance) {
         Object definition = call(method(api, "getBlueprint", String.class), null, appearance.model());
         if (definition == null) throw new IllegalStateException("ModelEngine model '" + appearance.model() + "' is not registered");
         Map<?, ?> available = (Map<?, ?>) call(method(blueprint, "getAnimations"), definition);
-        Map<PetAnimation, Clip> clips = new EnumMap<>(PetAnimation.class);
-        for (var entry : appearance.animations().entrySet()) {
-            if (available.containsKey(entry.getValue().name())) {
-                clips.put(entry.getKey(), entry.getValue());
-            }
-        }
-        var lie = appearance.animations().get(PetAnimation.LIE);
-        if (!clips.containsKey(PetAnimation.LIE) && lie != null && lie.name().equals("lie") && available.containsKey("lay"))
-            clips.put(PetAnimation.LIE, new Clip("lay", lie.speed(), lie.blend()));
+        Map<PetAnimation, Clip> clips = appearance.availableClips(available.keySet());
         Object owner = unwrap(call(method(api, "getModeledEntity", UUID.class), null, entity.getUniqueId()));
         if (owner == null) owner = call(method(api, "createModeledEntity", Entity.class), null, entity);
         Object model = unwrap(call(method(modeled, "getModel", String.class), owner, appearance.model()));
@@ -181,8 +205,7 @@ final class ModelEngineBridge {
         void remove() {
             call(method(modeled, "removeModel", String.class), owner, id);
             call(method(active, "destroy"), model);
-            Map<?, ?> remaining = (Map<?, ?>) call(method(modeled, "getModels"), owner);
-            if (remaining.isEmpty()) call(method(modeled, "setBaseEntityVisible", boolean.class), owner, true);
+            finishRemoval(owner, entity.isValid() && !entity.isDead());
             entity.getPersistentDataContainer().remove(MODEL_KEY);
         }
     }

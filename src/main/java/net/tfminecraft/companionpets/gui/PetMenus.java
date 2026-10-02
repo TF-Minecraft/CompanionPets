@@ -300,11 +300,12 @@ public final class PetMenus {
             case CUSTOM -> Material.NETHER_STAR;
             case SIT -> Material.OAK_STAIRS;
             case COME -> Material.COMPASS;
+            case FOLLOW -> Material.COMPASS;
             case STAY -> Material.ARMOR_STAND;
             case SPEAK -> Material.OAK_SIGN;
             case JUMP -> Material.LEATHER_BOOTS;
             case SPIN -> Material.WIND_CHARGE;
-            case SLEEP -> Material.RED_BED;
+            case LAY -> Material.RED_BED;
             case PAW -> Material.RABBIT_FOOT;
             case BEG -> Material.COOKIE;
         };
