@@ -14,6 +14,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Fox;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Sittable;
 import org.bukkit.entity.Wolf;
@@ -159,7 +160,7 @@ public final class PetFx {
         }
         if (entity instanceof LivingEntity living) {
             Location above = living.getLocation().add(0, 2, 0);
-            living.lookAt(above.getX(), above.getY(), above.getZ(), LookAnchor.EYES);
+            look(living, above);
         }
     }
 
@@ -176,9 +177,24 @@ public final class PetFx {
     }
 
     public static void look(Entity entity, Location target) {
-        if (entity instanceof LivingEntity living && target != null) {
+        if (entity instanceof Mob mob && target != null && mob.getWorld().equals(target.getWorld())) {
+            PetLookGoal.look(mob, target);
+        } else if (entity instanceof LivingEntity living && target != null && living.getWorld().equals(target.getWorld())) {
             living.lookAt(target.getX(), target.getY(), target.getZ(), LookAnchor.EYES);
         }
+    }
+
+    public static void look(Entity entity, Entity target) {
+        if (target == null) return;
+        if (entity instanceof Mob mob && mob.getWorld().equals(target.getWorld())) {
+            PetLookGoal.look(mob, target);
+        } else {
+            look(entity, target instanceof LivingEntity living ? living.getEyeLocation() : target.getLocation());
+        }
+    }
+
+    public static void stopLooking(Entity entity) {
+        if (entity instanceof Mob mob) PetLookGoal.remove(mob);
     }
 
     private record Hold(String text, long at) {

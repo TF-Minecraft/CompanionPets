@@ -6,7 +6,7 @@ public record RoamSettings(boolean enabled, double stationarySeconds, double rad
         double choiceMinSeconds, double choiceMaxSeconds, double playerRadius,
         double petRadius, double nameAttentionSeconds) {
     public static RoamSettings defaults() {
-        return new RoamSettings(true, 2, 4, 3, 6, 6, 6, 4);
+        return new RoamSettings(true, 2, 4, 3, 6, 6, 6, 10);
     }
 
     public static RoamSettings load(ConfigurationSection section, java.util.logging.Logger logger) {

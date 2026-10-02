@@ -5,9 +5,9 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class Sessions {
-    private final Map<UUID, HatchPrompt> hatches = new HashMap<>();
-    private final Map<UUID, RenamePrompt> renames = new HashMap<>();
-    private final Map<UUID, ReleasePrompt> releases = new HashMap<>();
+    private final Map<UUID, HatchPrompt> hatches = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, RenamePrompt> renames = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, ReleasePrompt> releases = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<UUID, TrainingSession> training = new HashMap<>();
     private final Map<UUID, Long> trainingRest = new HashMap<>();
 
@@ -38,6 +38,13 @@ public final class Sessions {
     public ReleasePrompt release(UUID playerId) { return releases.get(playerId); }
     public void release(UUID playerId, ReleasePrompt prompt) { releases.put(playerId, prompt); }
     public void clearRelease(UUID playerId) { releases.remove(playerId); }
+
+    /** Thread-safe identity snapshot for async chat; prompt contents stay on the main thread. */
+    public Object privatePrompt(UUID playerId) {
+        Object prompt = releases.get(playerId);
+        if (prompt == null) prompt = hatches.get(playerId);
+        return prompt == null ? renames.get(playerId) : prompt;
+    }
 
     public TrainingSession training(UUID playerId) {
         return training.get(playerId);
@@ -76,6 +83,12 @@ public final class Sessions {
         renames.remove(playerId);
         releases.remove(playerId);
         training.remove(playerId);
+    }
+
+    public void clearPet(UUID petId) {
+        training.values().removeIf(session -> session.petId().equals(petId));
+        renames.values().removeIf(prompt -> prompt.petId().equals(petId));
+        releases.values().removeIf(prompt -> prompt.petId().equals(petId));
     }
 
     public void clearForReload() {

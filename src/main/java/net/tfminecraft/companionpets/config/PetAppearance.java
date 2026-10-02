@@ -17,6 +17,23 @@ public record PetAppearance(String model, double scale, double runSpeed,
 
     public boolean modeled() { return model != null; }
 
+    /** Resolve optional clips against the actual blueprint, respecting overrides and disabled entries. */
+    public Map<PetAnimation, Clip> availableClips(java.util.Set<?> available) {
+        Map<PetAnimation, Clip> clips = new EnumMap<>(PetAnimation.class);
+        for (var entry : animations.entrySet()) {
+            if (available.contains(entry.getValue().name())) clips.put(entry.getKey(), entry.getValue());
+        }
+        Clip lie = animations.get(PetAnimation.LIE);
+        if (!clips.containsKey(PetAnimation.LIE) && lie != null && lie.name().equals("lie")) {
+            if (available.contains("lay")) {
+                clips.put(PetAnimation.LIE, new Clip("lay", lie.speed(), lie.blend()));
+            } else if (clips.containsKey(PetAnimation.SLEEP)) {
+                clips.put(PetAnimation.LIE, clips.get(PetAnimation.SLEEP));
+            }
+        }
+        return Map.copyOf(clips);
+    }
+
     public static PetAppearance read(ConfigurationSection pet, String id, Logger logger) {
         ConfigurationSection section = pet.getConfigurationSection("appearance");
         if (section == null) {

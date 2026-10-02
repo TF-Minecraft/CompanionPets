@@ -344,7 +344,8 @@ public final class PetStore {
                 continue;
             }
             try {
-                pet.bindWord(String.valueOf(word), Trick.valueOf(String.valueOf(trick)));
+                Trick parsed = Trick.valueOf(String.valueOf(trick));
+                if (!parsed.equals(Trick.SPIN)) pet.bindWord(String.valueOf(word), parsed);
             } catch (IllegalArgumentException ignored) {
                 continue;
             }
@@ -353,11 +354,19 @@ public final class PetStore {
         if (progress != null) {
             for (String trickId : progress.getKeys(false)) {
                 try {
-                    pet.progress(Trick.valueOf(trickId), progress.getDouble(trickId));
+                    Trick trick = Trick.valueOf(trickId);
+                    if (trick.equals(Trick.SPIN)) continue;
+                    pet.progress(trick, Math.max(pet.progress(trick), progress.getDouble(trickId)));
                 } catch (IllegalArgumentException ignored) {
                     continue;
                 }
             }
+        }
+        // An earlier development build folded Come into Follow. Preserve its learned
+        // literal word without treating every custom Follow word as a Come command.
+        if (pet.trickFor("come") == Trick.FOLLOW) {
+            pet.bindWord("come", Trick.COME);
+            pet.progress(Trick.COME, Math.max(pet.progress(Trick.COME), pet.progress(Trick.FOLLOW)));
         }
         return pet;
     }

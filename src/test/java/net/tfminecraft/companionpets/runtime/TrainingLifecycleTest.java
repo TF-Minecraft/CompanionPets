@@ -19,6 +19,36 @@ import net.tfminecraft.companionpets.visual.IdleVisual;
 class TrainingLifecycleTest {
     @AfterEach void cleanup() { MockBukkit.unmock(); }
 
+    @Test void offHandTreatIsReportedAsPutAwayRatherThanExhausted() throws Exception {
+        var server = MockBukkit.mock();
+        var plugin = MockBukkit.createMockPlugin();
+        var player = server.addPlayer();
+        var config = new YamlConfiguration();
+        config.loadFromString("items: {treats: [COD, SALMON]}\npets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}}");
+        var visual = new IdleVisual();
+        var key = new NamespacedKey(plugin, "pet");
+        var store = new PetStore(plugin);
+        assertTrue(store.load());
+        var runtime = new PetRuntime(plugin, CompanionConfig.load(plugin, config),
+                store, new Sessions(), new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
+        var pet = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        pet.stored(false);
+        store.add(pet);
+        var ticker = new PetTicker(runtime, new PetActions(runtime));
+        var watch = PetTicker.class.getDeclaredMethod("watchTraining", long.class);
+        watch.setAccessible(true);
+        player.getInventory().setItemInOffHand(new org.bukkit.inventory.ItemStack(org.bukkit.Material.SALMON));
+        runtime.sessions().training(player.getUniqueId(), new TrainingSession(pet.id()));
+        assertDoesNotThrow(() -> watch.invoke(ticker, System.currentTimeMillis()));
+        assertNull(runtime.sessions().training(player.getUniqueId()));
+        assertTrue(player.nextMessage().contains("you put the"));
+        player.getInventory().setItemInOffHand(null);
+        runtime.sessions().training(player.getUniqueId(), new TrainingSession(pet.id()));
+        assertDoesNotThrow(() -> watch.invoke(ticker, System.currentTimeMillis()));
+        assertNull(runtime.sessions().training(player.getUniqueId()));
+        assertTrue(player.nextMessage().contains("you ran out of"));
+    }
+
     @Test void missingPetTypeEndsTrainingWithoutThrowing() throws Exception {
         var server = MockBukkit.mock();
         var plugin = MockBukkit.createMockPlugin();

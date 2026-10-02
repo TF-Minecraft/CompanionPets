@@ -21,6 +21,18 @@ public final class MythicSpawn {
         }
     }
 
+    public static boolean registered(String id) {
+        try {
+            Class<?> api = Class.forName("io.lumine.mythic.bukkit.MythicBukkit");
+            Object plugin = api.getMethod("inst").invoke(null);
+            Object manager = plugin.getClass().getMethod("getMobManager").invoke(plugin);
+            Object result = manager.getClass().getMethod("getMythicMob", String.class).invoke(manager, id);
+            return result instanceof Optional<?> found && found.isPresent();
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
+            return false;
+        }
+    }
+
     public static Entity spawn(String mobId, Location location, Logger logger) {
         try {
             Class<?> mythicClass = Class.forName("io.lumine.mythic.bukkit.MythicBukkit");

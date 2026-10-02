@@ -154,12 +154,13 @@ public final class PetTexts {
         return switch (trick.kind()) {
             case CUSTOM -> trick.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
             case SIT -> "Sit";
-            case COME -> "Follow";
+            case FOLLOW -> "Follow";
+            case COME -> "Come";
             case STAY -> "Stay";
             case SPEAK -> "Speak";
             case JUMP -> "Jump";
             case SPIN -> "Spin";
-            case SLEEP -> "Rest";
+            case LAY -> "Lay";
             case PAW -> "Shake Paw";
             case BEG -> "Beg";
         };
@@ -169,12 +170,13 @@ public final class PetTexts {
         return switch (trick.kind()) {
             case CUSTOM -> "Performs a learned gesture";
             case SIT -> "Sits down and stops following";
-            case COME -> "Wakes up and follows you again";
+            case FOLLOW -> "Wakes up and follows you again";
+            case COME -> "Comes to you, then resumes its previous posture";
             case STAY -> "Stands still where it is, until you say follow";
             case SPEAK -> "Barks, meows or yips on cue";
             case JUMP -> "Leaps up into the air";
             case SPIN -> "Twirls around in a circle";
-            case SLEEP -> "Lies down and rests until recovered";
+            case LAY -> "Lies down to sleep until you say follow";
             case PAW -> "Gives you a paw";
             case BEG -> "Sits up and begs for a treat";
         };
@@ -184,12 +186,13 @@ public final class PetTexts {
         return switch (trick.kind()) {
             case CUSTOM -> name + " performs " + trickName(trick);
             case SIT -> name + " sits down and looks up at you";
-            case COME -> name + " gets up and follows you";
+            case FOLLOW -> name + " gets up and follows you";
+            case COME -> name + " comes to you, then resumes " + his(sex) + " previous posture";
             case STAY -> name + " stands still, watching you";
             case SPEAK -> name + " speaks up proudly";
             case JUMP -> name + " leaps into the air";
             case SPIN -> name + " chases " + his(sex) + " own tail in a circle";
-            case SLEEP -> name + " curls up to rest";
+            case LAY -> name + " lies down to sleep";
             case PAW -> name + " lifts a paw and gives it to you";
             case BEG -> name + " sits up and begs";
         };

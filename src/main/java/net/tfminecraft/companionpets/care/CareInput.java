@@ -7,6 +7,7 @@ public record CareInput(
         boolean walking,
         boolean playing,
         boolean sleeping,
+        boolean resting,
         boolean withOwner,
         long elapsedMillis,
         CareSettings care,

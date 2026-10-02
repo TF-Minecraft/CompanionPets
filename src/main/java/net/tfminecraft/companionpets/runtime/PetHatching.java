@@ -107,11 +107,15 @@ final class PetHatching {
             return;
         }
         Pet pet = new Pet(UUID.randomUUID(), player.getUniqueId(), type.id(), name, sex);
+        net.tfminecraft.companionpets.training.DefaultTricks.apply(runtime.config(), pet);
         pet.bornAt(System.currentTimeMillis());
         FavoriteToy.Result favorite = FavoriteToy.reconcile(null, PetActions.toyNames(type), runtime.random());
         pet.favoriteToy(favorite.toy());
         runtime.store().add(pet);
         PetFx.tell(player, name + " has hatched! Welcome to the family.");
+        if (!type.defaultTricks().isEmpty()) PetFx.tell(player, "Already learned: "
+                + type.defaultTricks().stream().map(t -> net.tfminecraft.companionpets.training.TrickAvailability.name(runtime, t)).collect(java.util.stream.Collectors.joining(", "))
+                + ". Open the Tricks page to see the command words.");
         Entity entity = runtime.bodies().spawn(pet, type, PetRuntime.beside(player), player);
         if (entity == null) {
             pet.stored(true);

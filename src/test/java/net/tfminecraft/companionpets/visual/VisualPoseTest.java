@@ -11,6 +11,7 @@ class VisualPoseTest {
         assertEquals(PetAnimation.IDLE, ground(Mode.FOLLOW, 0, null));
         assertEquals(PetAnimation.WALK, ground(Mode.FOLLOW, 0.1, null));
         assertEquals(PetAnimation.IDLE, ground(Mode.STAY, 0, null));
+        assertEquals(PetAnimation.IDLE, VisualPose.select(Mode.STAY, true, false, true, false, 0, 0, 0.22, PetAnimation.SIT));
         assertEquals(PetAnimation.SLEEP, ground(Mode.SLEEP, 0, null));
         assertEquals(PetAnimation.LIE, ground(Mode.LIE, 0, null));
     }

@@ -35,6 +35,16 @@ class PetStoreTest {
         return new PetStore(new File(directory.toFile(), "pets.yml"), logger);
     }
 
+    @Test void explicitStayAndLayPersistAsOrdersAcrossRestart() {
+        var first = store(); assertTrue(first.load());
+        for (PetOrder order : new PetOrder[]{PetOrder.STAY, PetOrder.LAY}) {
+            var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", order.name(), PetSex.MALE);
+            pet.order(order); first.add(pet);
+        }
+        assertTrue(first.save()); var restored = store(); assertTrue(restored.load());
+        assertEquals(java.util.Set.of(PetOrder.STAY, PetOrder.LAY), restored.all().stream().map(Pet::order).collect(java.util.stream.Collectors.toSet()));
+    }
+
     @Test
     void savesPetsAndKennelsAcrossRestart() {
         UUID owner = UUID.randomUUID();
@@ -59,7 +69,7 @@ class PetStoreTest {
         pet.carriedToy("FEATHER");
         pet.announcedLow(EnumSet.of(Need.HUNGER));
         pet.bindWord("sit down", Trick.SIT);
-        pet.progress(Trick.SPIN, 45);
+        pet.progress(Trick.JUMP, 45);
         first.add(pet);
         String kennel = PetStore.kennelKey("world", 1, 70, -3);
         first.kennel(kennel, owner);
@@ -90,7 +100,7 @@ class PetStoreTest {
         assertEquals("FEATHER", restored.carriedToy());
         assertTrue(restored.announcedLow(Need.HUNGER));
         assertEquals(Trick.SIT, restored.trickFor("sit down"));
-        assertEquals(45, restored.progress(Trick.SPIN));
+        assertEquals(45, restored.progress(Trick.JUMP));
         assertEquals(owner, second.kennelOwner(kennel));
     }
 

@@ -34,6 +34,8 @@ public final class CompanionConfig {
     private final SocialSettings social;
     private final RoamSettings roaming;
     private final double ownerNearRadius;
+    public double hearingRadius() { return hearingRadius; }
+    private final double hearingRadius;
     private final double awayRate;
     private final double followTeleportBlocks;
     private final double cryIntervalSeconds;
@@ -60,6 +62,7 @@ public final class CompanionConfig {
             SocialSettings social,
             RoamSettings roaming,
             double ownerNearRadius,
+            double hearingRadius,
             double awayRate,
             double followTeleportBlocks,
             double cryIntervalSeconds,
@@ -77,6 +80,8 @@ public final class CompanionConfig {
         this.social = social;
         this.roaming = roaming;
         this.ownerNearRadius = ownerNearRadius;
+        if (hearingRadius <= 0 || hearingRadius > 64) throw new IllegalArgumentException("orders.hearing-radius must be greater than 0 and at most 64");
+        this.hearingRadius = hearingRadius;
         this.awayRate = awayRate;
         this.followTeleportBlocks = followTeleportBlocks;
         this.cryIntervalSeconds = cryIntervalSeconds;
@@ -178,7 +183,8 @@ public final class CompanionConfig {
         }
         boolean mythic = plugin.getServer().getPluginManager().isPluginEnabled("MythicMobs");
         Map<Trick, CustomTrick> custom = CustomTrick.read(config.getConfigurationSection("custom-tricks"), logger);
-        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), mythic, plugin.getLogger(), custom, interactionItems);
+        List<Trick> defaultTricks = readDefaultTricks(config, "training.default-tricks", List.of(Trick.FOLLOW), custom);
+        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), mythic, plugin.getLogger(), custom, interactionItems, defaultTricks);
         return new CompanionConfig(
                 careSettings,
                 playSettings,
@@ -188,6 +194,7 @@ public final class CompanionConfig {
                 socialSettings,
                 roamSettings,
                 near,
+                num(logger, config.getConfigurationSection("orders"), "hearing-radius", 12),
                 away,
                 teleport,
                 cry,
@@ -199,7 +206,21 @@ public final class CompanionConfig {
                 BellySettings.read(config.getConfigurationSection("moments.belly-up"), logger));
     }
 
-    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom, PetItems globalItems) {
+    private static List<Trick> readDefaultTricks(ConfigurationSection section, String key, List<Trick> inherited, Map<Trick, CustomTrick> custom) {
+        if (!section.contains(key)) return inherited;
+        if (!section.isList(key)) throw new IllegalArgumentException(section.getCurrentPath() + "." + key + " must be a list of trick IDs");
+        var result = new java.util.LinkedHashSet<Trick>();
+        for (Object value : section.getList(key)) {
+            if (!(value instanceof String id)) throw new IllegalArgumentException(key + ": expected a trick ID, got " + value);
+            Trick trick = Trick.valueOf(id.trim());
+            if (trick.equals(Trick.SPIN) || trick.kind() == Trick.Kind.CUSTOM && !custom.containsKey(trick))
+                throw new IllegalArgumentException(key + ": unknown or removed trick " + id);
+            result.add(trick);
+        }
+        return List.copyOf(result);
+    }
+
+    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom, PetItems globalItems, List<Trick> globalDefaults) {
         Map<String, PetTypeDef> types = new LinkedHashMap<>();
         if (pets == null) {
             return types;
@@ -256,6 +277,7 @@ public final class CompanionConfig {
                     try {
                         if (!(value instanceof String)) throw new IllegalArgumentException();
                         Trick parsed = Trick.valueOf(((String) value).trim());
+                        if (parsed.equals(Trick.SPIN)) throw new IllegalArgumentException();
                         if (parsed.kind() == Trick.Kind.CUSTOM && !custom.containsKey(parsed)) throw new IllegalArgumentException();
                         tricks.add(parsed);
                     } catch (IllegalArgumentException ex) {
@@ -263,6 +285,8 @@ public final class CompanionConfig {
                     }
                 }
             }
+            List<Trick> defaults = readDefaultTricks(section, "default-tricks", globalDefaults, custom);
+            tricks.addAll(defaults);
             PetAppearance appearance;
             try {
                 appearance = PetAppearance.read(section, id, logger);
@@ -293,7 +317,7 @@ public final class CompanionConfig {
                     eggCustomModelData,
                     sexMode,
                     appearance,
-                    petItems, tricks));
+                    petItems, tricks, defaults));
         }
         return Collections.unmodifiableMap(types);
     }

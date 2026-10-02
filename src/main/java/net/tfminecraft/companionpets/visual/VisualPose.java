@@ -15,6 +15,7 @@ public final class VisualPose {
         }
         if (mode == Locomotion.Mode.SLEEP) return PetAnimation.SLEEP;
         if (mode == Locomotion.Mode.LIE) return PetAnimation.LIE;
+        if (mode == Locomotion.Mode.STAY) return PetAnimation.IDLE;
         if (mode == Locomotion.Mode.SIT || sitting) return PetAnimation.SIT;
         if (speed <= 0.015) return PetAnimation.IDLE;
         double threshold = previous == PetAnimation.RUN ? runSpeed * 0.85 : runSpeed;
