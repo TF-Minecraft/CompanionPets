@@ -157,7 +157,29 @@ roaming:
   name-attention-seconds: 4
 
 items:
+  # Shelter placement is global; eggs belong to each pet type, not these lists.
   kennel: BARREL
+  kennel-block: BARREL
+  # Both treats work for ALL species. Hold either to train; rewards consume one.
+  # Switching between accepted treats keeps the training session active.
+  # As before, a hungry pet can eat a treat for 30 hunger points and a mood bonus.
+  treats:
+    - "mmoitems:PETS:MEAT_TREAT"
+    - "mmoitems:PETS:FISH_TREAT"
+  # Food consumes one item. hunger = restored points (finite, nonnegative).
+  foods:
+    - {item: "mmoitems:PETS:UNIVERSAL_FEED", hunger: 35}
+  # Either medicine treats sickness; consumes one and uses care.medicine-health-bump.
+  # These concoctions now heal rather than granting MCPets experience.
+  medicines:
+    - "mmoitems:PETS:GREEN_CONCOCTION"
+    - "mmoitems:PETS:RED_CONCOCTION"
+  # Cleans the pet without consuming the item.
+  brushes:
+    - "mmoitems:PETS:CARING_ITEM"
+  # Only a vanilla stick for now. Returned toys keep their full item data.
+  toys:
+    - STICK
 
 pets:
   # HOW TO ADD A PET
@@ -172,16 +194,14 @@ pets:
   # entity: Minecraft entity type in uppercase, e.g. WOLF, CAT, FOX or FROG.
   #   This supplies the body and AI; it does not select a custom model/skin.
   # appearance.type: vanilla (default) or modelengine. See the beagle example.
-  # egg: Minecraft item material used to create this pet.
+  # egg: vanilla, mmoitems:TYPE:ID or itemsadder:namespace:id selector.
   # egg-custom-model-data: optional item CustomModelData number. The combination
   #   of egg material + this number must be unique across pet types.
   #   If omitted, the egg must have NO CustomModelData. The plugin does not
   #   create custom egg items; supply them through your item provider/command.
   # sex: random = assigned automatically; choose = player chooses when naming.
-  # care.foods: accepted item materials and the hunger points each restores.
-  # care.favorite: preferred food, also used as the training treat.
-  # care.medicine: item used to treat the pet.
-  # toys: accepted toy item materials; [] means no toys.
+  # items: optional per-category overrides; omitted categories inherit globals.
+  # Example: items: {treats: ["mmoitems:PETS:FISH_TREAT"], medicines: []}
   #
   # TRICKS: what this type may learn AND perform, independently of animations.
   # Omitted = all compatible base/custom tricks. [] = none. A list restricts them.
@@ -200,126 +220,15 @@ pets:
       type: vanilla
     egg: WOLF_SPAWN_EGG
     sex: random
-    care:
-      foods:
-        BEEF: 35
-        COOKED_BEEF: 55
-      favorite: COOKED_BEEF
-      medicine: HONEY_BOTTLE
-    toys:
-      - STICK
-      - FEATHER
   cat:
     entity: CAT
     appearance:
       type: vanilla
     egg: CAT_SPAWN_EGG
     sex: random
-    care:
-      foods:
-        COD: 35
-        SALMON: 55
-      favorite: SALMON
-      medicine: HONEY_BOTTLE
-    toys:
-      - STRING
-      - FEATHER
   fox:
     entity: FOX
     appearance:
       type: vanilla
     egg: FOX_SPAWN_EGG
     sex: choose
-    care:
-      foods:
-        SWEET_BERRIES: 35
-        GLOW_BERRIES: 55
-      favorite: GLOW_BERRIES
-      medicine: HONEY_BOTTLE
-    toys:
-      - STICK
-      - FEATHER
-
-  # MODELENGINE EXAMPLE: uncomment this complete beagle block to enable it.
-  # Install/register the beagle blueprint and serve its generated resource pack.
-  # The beagle's body/AI is WOLF; its visible appearance is the ModelEngine model.
-  # Give its egg CustomModelData 12001 through your item provider or command.
-  # ModelEngine 4 is optional; an unavailable model uses the vanilla
-  # body and logs the reason. The default pets above need no ModelEngine plugin.
-  # beagle:
-  #   entity: WOLF
-  #   egg: WOLF_SPAWN_EGG
-  #   egg-custom-model-data: 12001
-  #   appearance:
-  #     type: modelengine
-  #     model: beagle                 # ModelEngine model ID (not an item skin)
-  #     scale: 1.0                    # Model and hitbox scale
-  #   # tricks omitted: this beagle can learn all tricks.
-  #   sex: random
-  #   care:
-  #     foods:
-  #       BEEF: 35
-  #       COOKED_BEEF: 55
-  #     favorite: COOKED_BEEF
-  #     medicine: HONEY_BOTTLE
-  #   toys:
-  #     - STICK
-  #     - FEATHER
-
-  # VANILLA FROG EXAMPLE: no ModelEngine needed; no paw or beg tricks.
-  # frog:
-  #   entity: FROG
-  #   appearance:
-  #     type: vanilla
-  #   egg: FROG_SPAWN_EGG
-  #   sex: random
-  #   tricks: [come, stay, speak, jump]
-  #   care:
-  #     foods:
-  #       SLIME_BALL: 35
-  #     favorite: SLIME_BALL
-  #     medicine: HONEY_BOTTLE
-  #   toys: []
-
-  # OPTIONAL MODELENGINE SETTINGS
-  # Put these inside a pet's appearance block, next to type/model/scale.
-  # You can OMIT animations entirely when clips use the default names.
-  # ALL animations are optional and automatically used IF present:
-  # idle, walk, run, crouch, sit, lie, sleep, jump, fall, swim, head_tilt, shake,
-  # paw, beg, pet, fly, hover, attack, hurt, death, eat, speak, spawn, spin,
-  # lie_back, belly_up, get_up. Missing clips do not prevent model attachment.
-  # idle/walk are recommended to avoid a static model. If lie is absent, the
-  # original lay clip is recognized automatically unless lie was disabled.
-  # Missing run uses walk at 1.5x speed; crouch uses walk; sleep uses lie then
-  # sit; lie uses sit. Without jump/swim, use idle in the air and walk in water.
-  # jump plays once on takeoff, holding its last pose until landing (or fall).
-  # Shake is for a WOLF changing from wet to dry while on the ground.
-  # head_tilt is for training; author only head bones and use a distinct clip.
-  # Without corresponding clips, spinning uses movement and eating/speaking
-  # use effects/sounds. pet is the normal petting reaction; it does not interrupt
-  # belly rubs. belly_up may be a zero-length pose; the plugin holds it itself.
-  # There are no sick, pet1, pet2 or despawn hooks.
-  #
-  # Example overrides (copy only the entries you need into appearance):
-  #     run-speed: 0.22             # Movement threshold in blocks per tick
-  #     animations:
-  #       lie: sleep                # Reuse the sleeping posture for exhaustion
-  #       paw: give_paw             # Left: plugin action; right: model clip name
-  #       head_tilt: {name: head_tilt, speed: 1.0, blend: 0.15}
-  #       # speed: playback multiplier; blend: transition time in seconds.
-  #       # Poses loop; gestures play once. Optional "" disables a clip.
-  #       # Every clip can be disabled, including idle/walk/sit/death.
-  #       # Disable unfinished optional placeholders until you animate them:
-  #       shake: ""
-  #
-  # For a ModelEngine frog using the original blueprint's clip names:
-  #     animations:
-  #       walk: animation.frog.walk
-  #       jump: animation.frog.jump
-  #       swim: animation.frog.swim
-  #       speak: animation.frog.croak
-  # Any other absent clips simply use their fallback or remain unanimated.
-  #
-  # Optional MythicMobs integration: mythic-mob: <internal mob ID> can provide
-  # the body instead of entity. This requires MythicMobs to be installed.
-  # Keep appearance ownership with CompanionPets when using ModelEngine here.

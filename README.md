@@ -91,6 +91,98 @@ For a frog, the existing `animation.frog.croak` can optionally be mapped to
 to `eat` or `attack` if desired. These are species-specific uses of existing
 clips, not additional animation requirements for every pet.
 
+## Interaction items and per-pet overrides
+
+Item IDs use the same notation and optional provider APIs as Archaeo:
+
+| Provider | Example |
+| --- | --- |
+| Vanilla | `STICK` or `minecraft:stick` |
+| MMOItems | `mmoitems:PETS:MEAT_TREAT` (type `PETS`, item ID `MEAT_TREAT`) |
+| ItemsAdder | `itemsadder:tfmc:pet_ball` (namespace `tfmc`, item ID `pet_ball`) |
+
+Aliases `mi:TYPE:id`, `ia:namespace:id` and bare `namespace:id` also work.
+Quote custom IDs in YAML; one-key maps caused by unquoted colons are recovered
+as in Archaeo. Provider IDs are matched case-insensitively and independently of
+base material/model data. Vanilla excludes provider-identified items but accepts
+renamed/enchanted vanilla items. MMOItems identity uses its `getTypeName`/`getID`
+API; custom APIs are optional and loaded by reflection. CompanionPets has no
+runtime dependency on Archaeo, Cooking or MCPets. The former dotted selectors
+(`v.stick`, `m.pets.meat_treat`, `ia.tfmc:pet_ball`) remain compatible.
+
+The five global categories are under `items`. All species share these defaults:
+
+```yaml
+items:
+  treats:
+    - "mmoitems:PETS:MEAT_TREAT"
+    - "mmoitems:PETS:FISH_TREAT"
+  foods:
+    - {item: "mmoitems:PETS:UNIVERSAL_FEED", hunger: 35}
+  medicines:
+    - "mmoitems:PETS:GREEN_CONCOCTION"
+    - "mmoitems:PETS:RED_CONCOCTION"
+  brushes:
+    - "mmoitems:PETS:CARING_ITEM"
+  toys:
+    - STICK
+```
+
+Both treats train/reward every species. You may switch accepted treats without
+ending the session. Treat rewards consume one and use the training settings;
+as with former favourite food, hungry pets may eat a treat for 30 hunger points
+and the `care.favorite-food-mood` bonus. Regular food uses each entry's `hunger`
+value. Both medicines consume one to treat sickness and apply
+`care.medicine-health-bump`; they do not grant MCPets experience. The glove cleans
+without being consumed. Toys retain their full metadata through throwing,
+fetching, returns and saved carried items.
+
+For a species-specific replacement, use the same fields under `pets.<id>.items`:
+
+```yaml
+pets:
+  cat:
+    entity: CAT
+    egg: CAT_SPAWN_EGG
+    items:
+      treats: ["mmoitems:PETS:FISH_TREAT"]
+      foods: [{item: SALMON, hunger: 55}]
+      medicines: []
+      # brushes and toys are omitted, so they remain global.
+```
+
+A present category **replaces the entire corresponding global list**. It never
+appends to that list. An omitted category inherits; `[]` disables that category.
+`items: {}` inherits everything. Malformed/invalid override entries are logged
+and skipped without falling back to the global category. The shipped pet types
+have no active overrides; config.yml includes a commented example for each
+category. The default custom IDs must be registered in MMOItems; servers using
+only vanilla items can replace the global lists with vanilla IDs.
+
+Legacy per-pet `care.foods`, `care.favorite`, `care.medicine` and root `toys`
+remain category replacements unless the corresponding new `items` list is
+present. The former global `items.brush` is accepted if `items.brushes` is absent.
+Food accepts the old `MATERIAL: hunger` map as well as `item`/`hunger` lists.
+Finite nonnegative hunger values are required. Dig gifts accept the same item
+IDs in `item`/`weight` lists (positive integer weights); the old material map
+also works and `dig-loot: []` disables gifts.
+
+Custom IDs reference provider-owned items. Unknown/unavailable items never
+substitute unrelated vanilla items. Menus show the provider model/name and all
+accepted treats, medicines and brushes. Lookups retry as provider registries
+become available. Existing saved vanilla toys and favourite-toy IDs still load.
+
+Eggs remain unique per pet type. Use `mmoitems:PETS:PET_BEAGLE_EGG` or an
+ItemsAdder ID alone for custom eggs. The legacy `egg-custom-model-data` only
+works with vanilla material selectors; those material/model combinations also
+accept provider-created eggs for compatibility. Explicit provider IDs take
+priority. Confirmation rechecks the held item before consuming it.
+
+Shelter placement stays global: `items.kennel` selects the consumed held item;
+`items.kennel-block` selects the actual vanilla block (BARREL for custom tokens).
+This places an ordinary shelter, not ItemsAdder furniture. Plant/block settings
+continue to use vanilla materials.
+
 ## Pet types and ModelEngine
 
 `src/main/resources/config.yml` defines pet types under `pets`. The key is the
@@ -328,3 +420,9 @@ Copyright (c) 2026 TF-Minecraft contributors.
 TF-Minecraft-authored material in this repository is licensed under the
 [Artistic License 2.0](LICENSE). Third-party dependencies and pre-existing
 material retain their own licenses.
+
+## Verification
+
+Run `mvn -Pcoverage clean verify` with Java 21 to run the unit tests and generate
+the JaCoCo report at `target/site/jacoco/index.html`. CI retains test and coverage
+reports for review.

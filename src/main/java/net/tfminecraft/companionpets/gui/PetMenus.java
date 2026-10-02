@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import net.tfminecraft.companionpets.item.ItemRef;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -73,8 +74,8 @@ public final class PetMenus {
         }
         frame(inventory);
         PetTypeDef type = runtime.config().type(pet.typeId());
-        Material egg = type == null || type.egg() == null ? Material.BONE : type.egg();
-        Material food = type == null || type.favoriteFood() == null ? Material.COOKED_BEEF : type.favoriteFood();
+        ItemStack egg = type == null ? new ItemStack(Material.BONE) : type.eggIcon();
+        ItemStack food = type == null || type.foodIcon() == null ? new ItemStack(Material.COOKED_BEEF) : type.foodIcon().icon(Material.COOKED_BEEF);
         boolean sick = pet.illness() != Illness.NONE;
 
         inventory.setItem(37, null);
@@ -92,18 +93,22 @@ public final class PetMenus {
         inventory.setItem(15, named(Material.CLOCK, "Age", NamedTextColor.WHITE,
                 line(PetTexts.age(pet.bornAt(), System.currentTimeMillis()), NamedTextColor.GRAY)));
 
-        Component treat = type == null || type.favoriteFood() == null ? line("treats", NamedTextColor.GRAY) : item(type.favoriteFood());
+        Component treat = itemList(type == null ? List.of() : type.treats(), "treats");
         inventory.setItem(20, needIcon(food, pet, Need.HUNGER, line("Feed ", NamedTextColor.DARK_GRAY).append(foods(type))));
         inventory.setItem(21, needIcon(Material.SUNFLOWER, pet, Need.MOOD,
                 line("Throw a toy, or pet " + PetTexts.him(pet.sex()) + " with an empty hand. Favorite: ", NamedTextColor.DARK_GRAY).append(treat)));
         inventory.setItem(22, needIcon(Material.BLAZE_POWDER, pet, Need.ENERGY,
                 line("Teach " + PetTexts.him(pet.sex()) + " to rest, or " + PetTexts.he(pet.sex()) + " lies down when exhausted", NamedTextColor.DARK_GRAY)));
-        inventory.setItem(23, needIcon(Material.BRUSH, pet, Need.CLEANLINESS,
-                line("Use a brush on " + PetTexts.him(pet.sex()), NamedTextColor.DARK_GRAY)));
-        Material medicine = type == null || type.medicine() == null ? Material.HONEY_BOTTLE : type.medicine();
-        inventory.setItem(24, needIcon(sick ? medicine : Material.GOLDEN_APPLE, pet, Need.HEALTH,
+        List<ItemRef> brushes = type == null ? List.of() : type.brushes();
+        ItemRef brush = brushes.isEmpty() ? null : brushes.getFirst();
+        inventory.setItem(23, needIcon(brush == null ? new ItemStack(Material.BRUSH) : brush.icon(Material.BRUSH), pet, Need.CLEANLINESS,
+                line("Use ", NamedTextColor.DARK_GRAY).append(itemList(brushes, "a cleaning item"))
+                        .append(line(" on " + PetTexts.him(pet.sex()), NamedTextColor.DARK_GRAY))));
+        List<ItemRef> medicines = type == null ? List.of() : type.medicines();
+        ItemRef medicine = medicines.isEmpty() ? ItemRef.vanilla(Material.HONEY_BOTTLE) : medicines.getFirst();
+        inventory.setItem(24, needIcon(sick ? medicine.icon(Material.HONEY_BOTTLE) : new ItemStack(Material.GOLDEN_APPLE), pet, Need.HEALTH,
                 sick
-                        ? line("Cure with ", NamedTextColor.DARK_GRAY).append(item(medicine))
+                        ? line("Cure with ", NamedTextColor.DARK_GRAY).append(itemList(medicines, "medicine"))
                         : line("Keep " + PetTexts.his(pet.sex()) + " needs up to stay healthy", NamedTextColor.DARK_GRAY),
                 sick ? line(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED) : null));
 
@@ -151,33 +156,22 @@ public final class PetMenus {
         return line("● Needs care: " + StatLook.state(worst, value).toLowerCase(java.util.Locale.ROOT), StatLook.band(value));
     }
 
-    private static Component item(Material material) {
-        return Component.translatable(material.translationKey(), NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false);
+    private static Component item(ItemRef ref) {
+        return ref.displayName().color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false);
     }
 
     private static Component foods(PetTypeDef type) {
-        if (type == null || type.foods().isEmpty()) {
-            return line("food", NamedTextColor.GRAY);
-        }
-        Component joined = Component.empty();
-        int index = 0;
-        for (Material food : type.foods().keySet()) {
-            if (index > 0) {
-                joined = joined.append(line(index == type.foods().size() - 1 ? " or " : ", ", NamedTextColor.DARK_GRAY));
-            }
-            joined = joined.append(item(food));
-            index++;
-        }
-        return joined;
+        return itemList(type == null ? List.of() : List.copyOf(type.foods().keySet()), "food");
     }
 
     private static ItemStack toyIcon(Pet pet) {
-        Material toy = pet.favoriteToy() == null ? null : Material.matchMaterial(pet.favoriteToy());
+        ItemRef toy = null;
+        try { if (pet.favoriteToy() != null) toy = ItemRef.parse(pet.favoriteToy()); }
+        catch (IllegalArgumentException ignored) { /* Old/removed favourites are reconciled on the next tick. */ }
         if (toy == null) {
             return named(Material.BARRIER, "No favorite toy yet", NamedTextColor.WHITE);
         }
-        return named(toy, "Favorite Toy", NamedTextColor.WHITE,
-                Component.translatable(toy.translationKey()).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+        return named(toy.icon(Material.BONE), "Favorite Toy", NamedTextColor.WHITE, item(toy));
     }
 
     public void openKennel(org.bukkit.entity.Player player) {
@@ -191,7 +185,7 @@ public final class PetMenus {
                 break;
             }
             PetTypeDef type = runtime.config().type(pet.typeId());
-            Material icon = type == null || type.egg() == null ? Material.BONE : type.egg();
+            ItemStack icon = type == null ? new ItemStack(Material.BONE) : type.eggIcon();
             boolean stored = pet.stored();
             ItemStack item = named(icon, pet.name(), NamedTextColor.GOLD,
                     line(PetTexts.sexName(pet.sex()) + " " + PetTexts.speciesName(pet.typeId()).toLowerCase(java.util.Locale.ROOT),
@@ -354,18 +348,7 @@ public final class PetMenus {
     }
 
     private static ItemStack needIcon(Material material, Pet pet, Need need, Component hint, Component... extra) {
-        double value = pet.need(need);
-        List<Component> lore = new ArrayList<>();
-        lore.add(StatLook.bar(value));
-        lore.add(line(StatLook.state(need, value), StatLook.band(value)));
-        for (Component component : extra) {
-            if (component != null) {
-                lore.add(component);
-            }
-        }
-        lore.add(Component.empty());
-        lore.add(hint);
-        return named(material, PetTexts.needName(need), NamedTextColor.WHITE, lore.toArray(new Component[0]));
+        return needIcon(new ItemStack(material), pet, need, hint, extra);
     }
 
     private static ItemStack action(Material material, String name, Component... lore) {
@@ -385,7 +368,25 @@ public final class PetMenus {
     }
 
     private static ItemStack named(Material material, String name, TextColor color, Component... lore) {
-        ItemStack item = new ItemStack(material);
+        return named(new ItemStack(material), name, color, lore);
+    }
+
+    private static Component itemList(List<ItemRef> items, String fallback) {
+        if (items.isEmpty()) return line(fallback, NamedTextColor.GRAY);
+        Component joined = Component.empty();
+        int index = 0;
+        for (ItemRef food : items) {
+            if (index > 0) {
+                joined = joined.append(line(index == items.size() - 1 ? " or " : ", ", NamedTextColor.DARK_GRAY));
+            }
+            joined = joined.append(item(food));
+            index++;
+        }
+        return joined;
+    }
+
+    private static ItemStack named(ItemStack original, String name, TextColor color, Component... lore) {
+        ItemStack item = original.clone();
         ItemMeta meta = item.getItemMeta();
         meta.displayName(Component.text(name, color).decoration(TextDecoration.ITALIC, false));
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
@@ -400,5 +401,20 @@ public final class PetMenus {
         }
         item.setItemMeta(meta);
         return item;
+    }
+
+    private static ItemStack needIcon(ItemStack material, Pet pet, Need need, Component hint, Component... extra) {
+        double value = pet.need(need);
+        List<Component> lore = new ArrayList<>();
+        lore.add(StatLook.bar(value));
+        lore.add(line(StatLook.state(need, value), StatLook.band(value)));
+        for (Component component : extra) {
+            if (component != null) {
+                lore.add(component);
+            }
+        }
+        lore.add(Component.empty());
+        lore.add(hint);
+        return named(material, PetTexts.needName(need), NamedTextColor.WHITE, lore.toArray(new Component[0]));
     }
 }
