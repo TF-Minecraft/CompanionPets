@@ -451,7 +451,7 @@ public final class PetTicker implements Runnable {
                 actions.endTraining(player, pet, "your pet type is no longer configured");
             } else if (!holding) {
                 String treatName = actions.treatName(pet);
-                actions.endTraining(player, pet, java.util.Arrays.stream(player.getInventory().getStorageContents()).anyMatch(item -> treats.stream().anyMatch(treat -> treat.matches(item)))
+                actions.endTraining(player, pet, java.util.Arrays.stream(player.getInventory().getContents()).anyMatch(item -> treats.stream().anyMatch(treat -> treat.matches(item)))
                         ? "you put the " + treatName + " away"
                         : "you ran out of " + treatName);
             } else if (!close) {
