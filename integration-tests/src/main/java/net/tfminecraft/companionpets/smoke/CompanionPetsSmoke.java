@@ -31,6 +31,9 @@ public final class CompanionPetsSmoke extends JavaPlugin {
     private int checks;
     private PetVisual visual;
     private PetStore store;
+    private final Set<UUID> posturePets = new HashSet<>();
+    private Set<String> checkedTypes = Set.of();
+    private boolean checksComplete;
     private static final class TeleportProbe implements org.bukkit.event.Listener {
         private final NamespacedKey key;
         private int blocked;
@@ -195,6 +198,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                     var resting = new Pet(UUID.randomUUID(), owner, type.id(), "Hold " + type.id() + " " + posture.name(), PetSex.MALE);
                     net.tfminecraft.companionpets.training.DefaultTricks.apply(config, resting);
                     String word = posture.name().toLowerCase(Locale.ROOT); resting.bindWord(word, posture); resting.progress(posture, 100);
+                    posturePets.add(resting.id());
                     store.add(resting);
                     var mob = (Mob) runtime.bodies().spawn(resting, type, at, null); entities.add(mob); runtime.remember(resting, mob);
                     mob.setCollidable(false);
@@ -233,7 +237,8 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                         check(dx * dx + dz * dz < 0.0025, sample.description() + " remains in place after 20 native ticks");
                         checkStopped(sample.body(), sample.description() + " after native ticks");
                     }
-                    getLogger().info("COMPANIONPETS_INTEGRATION PASS checks=" + checks + " types=" + config.types().keySet());
+                    checkedTypes = new LinkedHashSet<>(config.types().keySet());
+                    checksComplete = true;
                 } catch (Throwable ex) { getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL", ex); }
                 finally { Bukkit.getPluginManager().disablePlugin(this); }
             }, 20);
@@ -294,13 +299,47 @@ public final class CompanionPetsSmoke extends JavaPlugin {
     }
 
     @Override public void onDisable() {
+        boolean cleanupSucceeded = true;
         for (Entity entity : entities) {
-            if (visual != null) visual.remove(entity);
-            entity.remove();
+            try {
+                if (visual != null) visual.remove(entity);
+            } catch (Throwable ex) {
+                cleanupSucceeded = false;
+                getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL: visual cleanup", ex);
+            } finally {
+                try { entity.remove(); }
+                catch (Throwable ex) {
+                    cleanupSucceeded = false;
+                    getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL: entity cleanup", ex);
+                }
+            }
         }
-        if (visual != null) visual.close();
-        if (store != null) store.close();
-        for (var chunk : forcedChunks) chunk.setForceLoaded(false);
+        try { if (visual != null) visual.close(); }
+        catch (Throwable ex) {
+            cleanupSucceeded = false;
+            getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL: visual shutdown", ex);
+        }
+        if (store != null) {
+            try {
+                for (UUID id : posturePets) store.remove(id);
+                if (!store.close()) {
+                    cleanupSucceeded = false;
+                    getLogger().severe("COMPANIONPETS_INTEGRATION FAIL: isolated store did not close");
+                }
+            } catch (Throwable ex) {
+                cleanupSucceeded = false;
+                getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL: store shutdown", ex);
+            }
+        }
+        for (var chunk : forcedChunks) {
+            try { chunk.setForceLoaded(false); }
+            catch (Throwable ex) {
+                cleanupSucceeded = false;
+                getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL: chunk cleanup", ex);
+            }
+        }
         forcedChunks.clear();
+        if (checksComplete && cleanupSucceeded)
+            getLogger().info("COMPANIONPETS_INTEGRATION PASS checks=" + checks + " types=" + checkedTypes);
     }
 }

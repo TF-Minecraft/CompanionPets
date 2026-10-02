@@ -42,7 +42,7 @@ final class PetCreation {
                 : tricks.equalsIgnoreCase("none") ? List.of() : Arrays.asList(tricks.split(",", -1));
         for (String token : selected) {
             String[] parts = token.split(":", 2);
-            Trick trick = Trick.valueOf(parts[0]);
+            Trick trick = Trick.valueOf(parts[0].trim());
             StaffCommands.require(TrickAvailability.allows(runtime, pet, trick), "Unavailable trick for " + type.id() + ": " + parts[0]);
             String word = Names.sanitize(parts.length == 2 ? parts[1] : trick.name().toLowerCase(Locale.ROOT));
             StaffCommands.require(!word.isBlank(), "A trick word cannot be empty.");
@@ -78,7 +78,7 @@ final class PetCreation {
             String key = pair[0].toLowerCase(Locale.ROOT);
             StaffCommands.require(OPTIONS.contains(key + "="), "Unknown creation parameter: " + key);
             String value = pair[1];
-            if (key.equals("name")) {
+            if (key.equals("name") || key.equals("tricks")) {
                 while (index + 1 < args.length && !args[index + 1].contains("=")) value += " " + args[++index];
                 value = value.trim();
             }

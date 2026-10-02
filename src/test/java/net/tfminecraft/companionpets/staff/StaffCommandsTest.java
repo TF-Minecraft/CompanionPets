@@ -60,6 +60,24 @@ class StaffCommandsTest {
     }
     @AfterEach void teardown() { MockBukkit.unmock(); }
 
+    @Test void createAcceptsWhitespaceAroundCommaSeparatedTrickIds() {
+        command("create", "Owner", "type=wolf", "name=Luna", "tricks=follow,", "sit,", "lay:duerme");
+        var created = runtime.store().of(owner.getUniqueId()).stream().filter(p -> !p.id().equals(pet.id())).findFirst().orElseThrow();
+        assertEquals(Trick.FOLLOW, created.trickFor("follow"));
+        assertEquals(Trick.SIT, created.trickFor("sit"));
+        assertEquals(Trick.LAY, created.trickFor("duerme"));
+        assertEquals(100, created.progress(Trick.SIT));
+        assertEquals(100, created.progress(Trick.LAY));
+    }
+
+    @Test void invalidEggAmountsExplainTheRangeAndDeliverNothing() {
+        for (String amount : List.of("abc", "0", "65", "999999999999999999999999")) {
+            command("egg", "wolf", "Owner", amount);
+            assertTrue(staff.nextMessage().contains("between 1 and 64"));
+            assertTrue(owner.getInventory().isEmpty());
+        }
+    }
+
     @Test void createRebuildsAPlayersPetWithSpecifiedLearningWordsAndStatsInTheirShelter() throws Exception {
         command("create", "Owner", "wolf", "Toby", "de", "prueba", "tricks=sit:sientate,lay:duerme", "hunger=61", "mood=72", "energy=83", "cleanliness=94", "health=55", "bond=66", "sex=female", "personality=shy", "agehours=48");
         var created = runtime.store().all().stream().filter(p -> !p.id().equals(pet.id())).findFirst().orElseThrow();

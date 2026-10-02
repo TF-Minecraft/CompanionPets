@@ -157,7 +157,12 @@ public final class StaffCommands {
         require(args.length >= 2 && args.length <= 4, "Usage: /companionpets egg <type|all> [online-player] [1..64]");
         Player target = args.length >= 3 ? Bukkit.getPlayerExact(args[2]) : sender instanceof Player player ? player : null;
         require(target != null, "Specify an online player; a staff player can omit the name to receive the eggs.");
-        int amount = args.length == 4 ? Integer.parseInt(args[3]) : 1;
+        int amount;
+        try {
+            amount = args.length == 4 ? Integer.parseInt(args[3]) : 1;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Egg amount must be between 1 and 64.");
+        }
         require(amount >= 1 && amount <= 64, "Egg amount must be between 1 and 64.");
         var selected = args[1].equalsIgnoreCase("all") ? new ArrayList<>(runtime.config().types().values())
                 : runtime.config().type(args[1]) == null ? List.<net.tfminecraft.companionpets.config.PetTypeDef>of() : List.of(runtime.config().type(args[1]));
