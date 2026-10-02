@@ -378,8 +378,8 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   energy. Needs and illness can prevent a pet from moving even after release.
 - Follow is one trick, learned at 100% by default and shown with its command
   words on the Tricks page. Say `follow` while looking or `<name> follow`.
-  The old Come ID migrates to Follow, preserving
-  words and progress. Existing custom word bindings are never overwritten.
+  Come is a separate trick; saved Come words and progress stay with Come.
+  Existing custom word bindings are never overwritten.
 - Right-click the air with a listed toy to throw it. The summoned pet fetches
   that item and drops it in front of the owner.
 - Several pets can be outside at once. Look at one and say its learned word,
