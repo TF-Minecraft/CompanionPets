@@ -46,10 +46,6 @@ public final class StaffCommands {
             String action = args[0].toLowerCase(Locale.ROOT);
             require(sender.hasPermission(permission(action)), "You do not have permission to use " + action + ".");
             switch (action) {
-                case "reload" -> {
-                    require(args.length == 1, "Usage: /companionpets reload");
-                    runtime.plugin().onCommand(sender, runtime.plugin().getCommand("companionpets"), "companionpets", args);
-                }
                 case "list" -> list(sender, args);
                 case "find" -> find(sender, args);
                 case "create" -> create(sender, args);

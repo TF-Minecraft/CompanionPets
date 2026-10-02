@@ -31,7 +31,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
     private int checks;
     private PetVisual visual;
     private PetStore store;
-    private final Set<UUID> posturePets = new HashSet<>();
+    private final Set<UUID> trackedPets = new HashSet<>();
     private Set<String> checkedTypes = Set.of();
     private boolean checksComplete;
     private static final class TeleportProbe implements org.bukkit.event.Listener {
@@ -76,6 +76,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                 var oldIds = new HashSet<UUID>(); store.all().forEach(p -> oldIds.add(p.id()));
                 staff.execute(Bukkit.getConsoleSender(), "create", owner.toString(), "type=" + type.id(), "name=Replacement", "tricks=follow", "hunger=61", "energy=83", "bond=66", "sex=female");
                 var replacement = store.all().stream().filter(p -> !oldIds.contains(p.id())).findFirst().orElseThrow();
+                trackedPets.add(replacement.id());
                 check(replacement.ownerId().equals(owner) && replacement.typeId().equals(type.id()) && replacement.stored(), type.id() + " manual replacement ownership and shelter");
                 check(replacement.need(Need.HUNGER) == 61 && replacement.need(Need.ENERGY) == 83 && replacement.bond() == 66, type.id() + " replacement stats");
                 check(replacement.progress(Trick.FOLLOW) == 100 && replacement.trickFor("follow") == Trick.FOLLOW, type.id() + " replacement learning");
@@ -86,7 +87,9 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                 check(pet.trickFor("follow") == Trick.FOLLOW, type.id() + " Follow has visible command word");
                 pet.need(Need.HUNGER, 55); pet.progress(Trick.SPEAK, 73); pet.bindWord("here", Trick.SPEAK);
                 var body = runtime.bodies().spawn(pet, type, at, null);
-                check(body instanceof Mob, type.id() + " body spawn"); entities.add(body); runtime.remember(pet, body); store.add(pet);
+                if (body != null) entities.add(body);
+                check(body instanceof Mob, type.id() + " body spawn"); runtime.remember(pet, body);
+                trackedPets.add(pet.id()); store.add(pet);
                 check(pet.id().equals(runtime.bodies().readId(body)), type.id() + " tagged identity");
                 check(((Mob) body).isAware(), type.id() + " ordinary pet has native AI");
                 check(type.matchesEgg(type.eggIcon()), type.id() + " egg identity");
@@ -186,7 +189,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                 check(pet.need(Need.HUNGER) == 55 && pet.progress(Trick.SPEAK) == 73, type.id() + " shelter preserves learning and needs");
                 check(store.remove(pet.id()), type.id() + " cleanup journal");
                 var released = new Pet(UUID.randomUUID(), owner, type.id(), "Release smoke", PetSex.MALE);
-                store.add(released);
+                trackedPets.add(released.id()); store.add(released);
                 var releaseBody = runtime.bodies().spawn(released, type, at, null); entities.add(releaseBody); runtime.remember(released, releaseBody);
                 modeledOwner = modeledOwner(releaseBody);
                 runtime.sessions().release(owner, new net.tfminecraft.companionpets.session.ReleasePrompt(released.id(), System.currentTimeMillis() + 30_000));
@@ -198,7 +201,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                     var resting = new Pet(UUID.randomUUID(), owner, type.id(), "Hold " + type.id() + " " + posture.name(), PetSex.MALE);
                     net.tfminecraft.companionpets.training.DefaultTricks.apply(config, resting);
                     String word = posture.name().toLowerCase(Locale.ROOT); resting.bindWord(word, posture); resting.progress(posture, 100);
-                    posturePets.add(resting.id());
+                    trackedPets.add(resting.id());
                     store.add(resting);
                     var mob = (Mob) runtime.bodies().spawn(resting, type, at, null); entities.add(mob); runtime.remember(resting, mob);
                     mob.setCollidable(false);
@@ -212,7 +215,8 @@ public final class CompanionPetsSmoke extends JavaPlugin {
             check(toyType != null && !toyType.toys().isEmpty(), "Wolf test toy configured");
             var toy = toyType.toys().getFirst().create(); check(toy != null, "Provider creates configured toy");
             var meta = toy.getItemMeta(); meta.getPersistentDataContainer().set(new NamespacedKey(this, "custom-data"), PersistentDataType.STRING, "keep"); toy.setItemMeta(meta);
-            var pet = new Pet(UUID.randomUUID(), owner, "wolf", "Toy smoke", PetSex.MALE); store.add(pet);
+            var pet = new Pet(UUID.randomUUID(), owner, "wolf", "Toy smoke", PetSex.MALE);
+            trackedPets.add(pet.id()); store.add(pet);
             String saved = ToyItems.encode(toy);
             Snowball ball = world.spawn(at, Snowball.class); entities.add(ball);
             ball.getPersistentDataContainer().set(runtime.toyKey(), PersistentDataType.STRING, pet.id() + "|" + saved);
@@ -321,7 +325,12 @@ public final class CompanionPetsSmoke extends JavaPlugin {
         }
         if (store != null) {
             try {
-                for (UUID id : posturePets) store.remove(id);
+                for (UUID id : trackedPets) {
+                    if (store.get(id) != null && !store.remove(id)) {
+                        cleanupSucceeded = false;
+                        getLogger().severe("COMPANIONPETS_INTEGRATION FAIL: cannot remove temporary record " + id);
+                    }
+                }
                 if (!store.close()) {
                     cleanupSucceeded = false;
                     getLogger().severe("COMPANIONPETS_INTEGRATION FAIL: isolated store did not close");
