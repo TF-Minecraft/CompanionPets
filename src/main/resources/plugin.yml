@@ -2,23 +2,51 @@ name: CompanionPets
 main: net.tfminecraft.companionpets.PetsPlugin
 version: ${project.version}
 api-version: "1.21.10"
-description: Pets you hatch, care for, and train. Each one keeps its needs, favorite toy, and tricks.
+description: Pets you hatch, care for, and train.
 
 commands:
   companionpets:
-    description: CompanionPets test utilities
-    usage: /companionpets <order WORD|calm|testdog [name]|moment TYPE|personality TYPE|social TYPE|owner TARGET|reload>
+    description: Staff pet management
+    usage: /companionpets <reload|moment|testpet|list|find|create|egg>
 
 permissions:
-  companionpets.test:
-    description: CompanionPets test utilities
+  companionpets.staff:
+    description: All CompanionPets staff commands and informational inventories
     default: op
+    children:
+      companionpets.admin: true
+      companionpets.test: true
+  petcompanions.staff:
+    description: Alias permission for existing staff assignments
+    default: op
+    children:
+      companionpets.staff: true
+  companionpets.test:
+    description: Spawn pets with learned tricks and trigger moments
+    default: op
+  companionpets.admin:
+    description: All CompanionPets staff management
+    default: op
+    children:
+      companionpets.reload: true
+      companionpets.admin.list: true
+      companionpets.admin.create: true
+      companionpets.admin.locate: true
+      companionpets.admin.giveegg: true
   companionpets.reload:
-    description: Reload CompanionPets config.yml without restarting the server
+    description: Reload config
+    default: op
+  companionpets.admin.list:
+    description: Browse players and their pets
+    default: op
+  companionpets.admin.create:
+    description: Create a replacement pet with chosen learning and stats
+    default: op
+  companionpets.admin.locate:
+    description: Find a player's pets
+    default: op
+  companionpets.admin.giveegg:
+    description: Give configured eggs
     default: op
 
-softdepend:
-  - MythicMobs
-  - ModelEngine
-  - ItemsAdder
-  - MMOItems
+softdepend: [MythicMobs, ModelEngine, ItemsAdder, MMOItems, MythicLib]

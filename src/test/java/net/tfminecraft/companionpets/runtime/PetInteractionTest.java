@@ -422,6 +422,13 @@ class PetInteractionTest {
         assertEquals(PetOrder.STAY, pet.order()); assertFalse(body.isAware());
     }
 
+    @Test void profileHasNoDedicatedFollowButton() {
+        actions.menus().openCare(player, pet);
+        var holder = (net.tfminecraft.companionpets.gui.MenuHolder) player.getOpenInventory().getTopInventory().getHolder();
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder.getInventory().getItem(39).getType());
+        pet.order(PetOrder.SIT); actions.clickMenu(player, holder, 39, null, false, false, false);
+        assertEquals(PetOrder.SIT, pet.order());
+    }
 
     @SuppressWarnings("deprecation")
     private org.bukkit.event.player.AsyncPlayerChatEvent chatEvent(String text) {

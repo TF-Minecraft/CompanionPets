@@ -46,6 +46,11 @@ jobs:
       - name: Run unit tests and build
         run: mvn -B --no-transfer-progress -Pcoverage clean install -DskipTests=false -Dmaven.test.skip=false
 
+      - name: Compile dev integration harness
+        env:
+          PLUGIN_VERSION: ${{ steps.dev.outputs.version }}
+        run: mvn -B --no-transfer-progress -f integration-tests/pom.xml "-Dcompanionpets.version=$PLUGIN_VERSION" clean package
+
       - name: Verify runtime JAR
         env:
           ARTIFACT_PATH: ${{ steps.dev.outputs.jar }}

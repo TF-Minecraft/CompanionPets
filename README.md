@@ -460,9 +460,107 @@ Standing still with Stay does not count as rest. Only sleeping reduces hunger
 decay through `care.sleeping-hunger-multiplier`. Automatic exhaustion sleep ends
 at full energy; an explicit Lay order continues until another order changes it.
 
+## Staff commands
 
-## Verification
+All commands are staff-only. The command is /companionpets; there are no other
+root aliases. Running /companionpets shows help and examples.
 
-Run `mvn -Pcoverage clean verify` with Java 21 to run tests and generate the
-JaCoCo report in `target/site/jacoco/`. The final staff commands and inventory
-navigation are introduced in the next PR in this stack.
+| Command after /companionpets | Purpose |
+| --- | --- |
+| reload | Reload config and refresh models. Provider problems are logged automatically. |
+| moment <affection/bark/mischief/dig/belly> | Trigger a moment while looking at your pet; normal care and animation conditions apply. |
+| testpet <type> [name...] | Spawn a normal pet with every compatible trick learned. No special marker, pause state or cleanup category. |
+| list <player> [pet name...] | Open that player's pets or a selected pet's read-only profile. Console gets readable names. |
+| find <player> [pet name...] | Show shelter/current/last-known location and missing or duplicate bodies for that player's pets, without loading chunks. |
+| create <player> type=<type> name=<name...> [option=value ...] | Create a new saved replacement in the owner's shelter. |
+| egg <type/all> [online-player] [1..64] | Give configured eggs; omit recipient in game to receive them yourself. |
+
+Tab completion suggests player names first, then only that player's pet names.
+Names can contain spaces. Duplicate pet names are never resolved arbitrarily:
+select the pet from list to view its identity internally. Pet lists have 45
+entries per page. There is no player inventory: select the owner using command
+completion. The footer is reserved for navigation. Back uses an item frame in
+the bottom left corner and always returns to the parent menu, independently of
+the current page. Pet lists and the shelter have no Back button. Their pets fill rows from left to
+right, top to bottom, sorted by name, with a stable identity tie-breaker.
+An arrow always occupies the bottom right corner, with the page counter in its
+title (1/1, 1/2, etc.). Left-click opens the next nonempty page; right-click opens
+the previous page. Both gestures are explained on the arrow. At either boundary
+it plays a private denial sound and keeps the same inventory. There is no separate
+page indicator or previous-page arrow.
+All empty slots use light gray glass. The selected pet's staff inventory shares
+the normal pet profile: species, name, sex, age, needs, bond, personality,
+favorite toy and learned tricks. It is read-only, including its trick inventory;
+renaming, calling, shelter and release actions are omitted. No UUIDs or audit
+snapshots are required or shown in command help, completion or pet cards.
+Profiles opened directly from the animal have no Back button; profiles reached
+from the shelter return there, and keep that parent when browsing their tricks.
+
+    /companionpets list Nowko
+    /companionpets find Nowko Toby
+    /companionpets create Nowko type=beagle name=Toby tricks=all
+    /companionpets create Nowko type=beagle name=Toby de prueba tricks=follow,sit:sientate,lay:duerme hunger=80 mood=90 energy=70 cleanliness=100 health=100 bond=60 sex=male personality=friendly agehours=48
+    /companionpets egg all
+    /companionpets testpet frog Rana
+    /companionpets moment belly
+
+Create makes a new identity.
+Creation accepts tricks, the five needs, bond, sex, personality and agehours.
+Named parameters can appear in any order. Names may contain spaces up to the
+next parameter=value. Tab after the owner immediately offers type= and name=
+examples, plus optional parameters; Tab after '=' suggests suitable values.
+Previously supplied keys disappear from suggestions. Trick suggestions use the
+selected type and exclude IDs already included in a comma-separated list.
+The earlier positional type/name syntax remains accepted for compatibility.
+Tricks is a comma-separated list of IDs or ID:word, learned at 100% in addition
+to configured default tricks. tricks=all teaches every compatible enabled trick;
+tricks=none adds no extra tricks.
+Defaults: needs 100, bond 0, male, new age, generated personality.
+An explicitly supplied owner UUID is still accepted for reconstruction of an
+unknown/offline player; ordinary browsing and completion use player names.
+Creation validates options before writing and checks shelter capacity.
+The owner takes the created pet out through their shelter menu.
+
+The companionpets.staff permission grants all staff commands and inventory
+browsing; petcompanions.staff is retained for existing permission assignments.
+Granular permissions for reload, list, create, locate/find and giveegg/egg are
+retained. companionpets.test grants testpet and
+moment only. Inventory permissions are checked again when clicked.
+
+Staff interventions are audited privately to
+plugins/CompanionPets/staff-audit.yml.log. An unavailable audit/persistence
+refuses mutations. Deletion uses the durable identity journal.
+Old test-pet and test-frozen save fields are ignored and disappear on save;
+previously marked or paused pets resume their normal behavior.
+
+Plugin replies and egg/rename/release dialogue inputs are private. Ordinary
+spoken pet orders remain roleplay chat.
+
+Trick menus show learned tricks, then tricks in practice, then unknown tricks.
+Within each group: Follow, Come, Sit, Stay, Lay, Paw, Speak, Beg, Jump, followed by
+custom tricks in configuration order. Trick inventories have three rows, with
+18 entries per page from slot 0. All nine slots in the third row are reserved
+for navigation; the nineteenth trick starts on the next page.
+Follow is available as a learned trick rather than a separate profile button.
+The Tricks button occupies the middle of the profile's bottom row.
+Sex uses white dye for both sexes, with neutral text and no sex symbols.
+
+Name calls own the native MOVE goal and refresh the destination from the owner's
+current position. On arrival, the pet waits for the configured attention time.
+Sit, Stay and Lay cancel the call and clear both pathfinding and native travel
+inputs immediately, preserving vertical physics. Their holds also apply during
+model animations, so a posture cannot slide along an old movement route.
+Stay uses the standing idle pose, independently of stale vanilla sitting flags.
+Native entity teleports are cancelled while a pet has a hold order, including
+the tameable mob's built-in teleport to its owner. Follow and temporary Come
+movement remain permitted; an explicit profile Call switches to Follow before
+teleporting.
+
+Modeled wolves emit water splash particles throughout their native shake clock,
+alongside the shake animation and vanilla sound. Vanilla fallback wolves retain
+their original particles.
+
+MMOItems eggs dispatch mi give TYPE ID PLAYER AMOUNT from console;
+they are not also inserted via API. Vanilla/ItemsAdder eggs retain their identity.
+All selected egg IDs are checked before delivery.
+[MMOItems command documentation](https://docs.phoenixdevt.fr/mmoitems/general/commands.html).

@@ -34,7 +34,9 @@ import net.tfminecraft.companionpets.visual.IdleVisual;
 import net.tfminecraft.companionpets.visual.PetVisual;
 import net.tfminecraft.companionpets.visual.PetVisualTicker;
 
-public final class PetsPlugin extends JavaPlugin {
+public class PetsPlugin extends JavaPlugin {
+    private static final java.util.Map<String, String> TEST_COMMANDS = java.util.Map.of(
+            "testpet", "spawn", "moment", "moment");
     private static final long AUTOSAVE_TICKS = 20L * 300;
 
     private PetStore store;
@@ -46,6 +48,8 @@ public final class PetsPlugin extends JavaPlugin {
     private PetVisual visual;
     private PetRuntime runtime;
     private PetListener petListener;
+    private net.tfminecraft.companionpets.staff.StaffCommands staff;
+    private net.tfminecraft.companionpets.staff.TestCommands tests;
 
     @Override
     public void onEnable() {
@@ -75,6 +79,10 @@ public final class PetsPlugin extends JavaPlugin {
         Bodies bodies = new Bodies(this, petKey, visual);
         runtime = new PetRuntime(this, config, store, new Sessions(), bodies, visual, petKey, toyKey);
         actions = new PetActions(runtime);
+        staff = new net.tfminecraft.companionpets.staff.StaffCommands(runtime, actions);
+        tests = new net.tfminecraft.companionpets.staff.TestCommands(runtime, actions, staff);
+        Bukkit.getPluginManager().registerEvents(staff.menus(), this);
+        Bukkit.getScheduler().runTaskLater(this, this::validateProviders, 200L);
         petListener = new PetListener(runtime, actions);
         Bukkit.getPluginManager().registerEvents(petListener, this);
         PetTicker petTicker = new PetTicker(runtime, actions);
@@ -126,85 +134,45 @@ public final class PetsPlugin extends JavaPlugin {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-            if (!sender.hasPermission("companionpets.reload")) {
-                sender.sendMessage("You do not have permission to reload CompanionPets.");
-                return true;
-            }
-            reloadSettings(sender);
+        if (!staffAccess(sender)) { sender.sendMessage("CompanionPets commands are for staff only."); return true; }
+        if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
+            if (args.length != 1) { sender.sendMessage("Usage: /companionpets reload"); return true; }
+            if (!sender.hasPermission("companionpets.reload")) sender.sendMessage("You do not have permission to reload CompanionPets.");
+            else reloadSettings(sender);
             return true;
         }
-        if (args.length >= 2 && args[0].equalsIgnoreCase("order")) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("This command can only be used in game.");
-                return true;
+        if (args.length > 0) {
+            String action = args[0].toLowerCase(Locale.ROOT);
+            if (TEST_COMMANDS.containsKey(action)) {
+                String[] forwarded = args.clone(); forwarded[0] = TEST_COMMANDS.get(action);
+                return tests.execute(sender, forwarded);
             }
-            actions.orderLookingAt(player, String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length)));
-            return true;
+            if (net.tfminecraft.companionpets.staff.StaffCommands.ACTIONS.contains(action)) return staff.execute(sender, args);
         }
-        if (args.length == 1 && args[0].equalsIgnoreCase("calm")) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("This command can only be used in game.");
-                return true;
-            }
-            actions.calmLookingAt(player);
-            return true;
+        sender.sendMessage("CompanionPets staff commands:");
+        for (String available : onTabComplete(sender, command, label, new String[]{""})) {
+            String example = switch (available) {
+                case "reload" -> "reload - reload configuration";
+                case "moment" -> "moment <affection|bark|mischief|dig|belly> - look at your pet";
+                case "testpet" -> "testpet <type> [name] - spawn a pet with all compatible tricks learned";
+                case "list" -> "list <player> [pet name] - their pets and read-only pet details";
+                case "find" -> "find <player> [pet name] - show pet locations";
+                case "create" -> "create <player> type=<type> name=<name> [tricks=all] [hunger=100 ...] - create in shelter";
+                case "egg" -> "egg <type|all> [player] [amount] - give configured eggs";
+                default -> available;
+            };
+            sender.sendMessage("/companionpets " + example);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("owner")) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("This command can only be used in game.");
-                return true;
-            }
-            if (!player.hasPermission("companionpets.test")) {
-                player.sendMessage("You do not have permission to use this test command.");
-                return true;
-            }
-            actions.setTestOwner(player, args[1]);
-            return true;
-        }
-        if (args.length >= 1 && args[0].equalsIgnoreCase("testdog")) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("This command can only be used in game.");
-                return true;
-            }
-            if (!player.hasPermission("companionpets.test")) {
-                player.sendMessage("You do not have permission to use this test command.");
-                return true;
-            }
-            String name = args.length > 1 ? String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length)) : "Test Dog";
-            actions.spawnTestDog(player, Names.sanitize(name));
-            return true;
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("moment")) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("This command can only be used in game.");
-                return true;
-            }
-            if (!player.hasPermission("companionpets.test")) {
-                player.sendMessage("You do not have permission to use this test command.");
-                return true;
-            }
-            actions.triggerTestMoment(player, args[1]);
-            return true;
-        }
-        if (args.length == 2 && (args[0].equalsIgnoreCase("personality") || args[0].equalsIgnoreCase("social"))) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("This command can only be used in game.");
-                return true;
-            }
-            if (!player.hasPermission("companionpets.test")) {
-                player.sendMessage("You do not have permission to use this test command.");
-                return true;
-            }
-            if (args[0].equalsIgnoreCase("personality")) {
-                actions.setTestPersonality(player, args[1]);
-            } else {
-                actions.triggerTestSocial(player, args[1]);
-            }
-            return true;
-        }
-        sender.sendMessage("Usage: /companionpets <order WORD|calm|testdog [name]|moment TYPE|personality TYPE|social TYPE|owner TARGET|reload>");
         return true;
+    }
+
+    private static boolean staffAccess(CommandSender sender) {
+        return sender.hasPermission("companionpets.test") || net.tfminecraft.companionpets.staff.StaffCommands.ACTIONS.stream()
+                .anyMatch(a -> sender.hasPermission(net.tfminecraft.companionpets.staff.StaffCommands.permission(a)));
+    }
+
+    private void validateProviders() {
+        for (String issue : staff.diagnostics().validate()) getLogger().warning("Configuration validation: " + issue);
     }
 
     private void reloadSettings(CommandSender sender) {
@@ -237,13 +205,14 @@ public final class PetsPlugin extends JavaPlugin {
             return;
         }
         for (var player : Bukkit.getOnlinePlayers()) {
-            if (player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder) player.closeInventory();
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder || player.getOpenInventory().getTopInventory().getHolder() instanceof net.tfminecraft.companionpets.staff.StaffMenuHolder) player.closeInventory();
         }
         actions.clearInteractions();
         actions.holograms().clear();
         runtime.sessions().clearForReload();
         visual.close();
         runtime.config(next);
+        Bukkit.getScheduler().runTaskLater(this, this::validateProviders, 1L);
         for (var world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) actions.reattach(entity);
         }
@@ -253,32 +222,17 @@ public final class PetsPlugin extends JavaPlugin {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 0) return List.of();
-        boolean test = sender.hasPermission("companionpets.test");
-        List<String> choices = new ArrayList<>();
+        if (args.length == 0 || !staffAccess(sender)) return List.of();
         if (args.length == 1) {
-            choices.add("order");
-            choices.add("calm");
-            if (test) choices.addAll(List.of("testdog", "moment", "personality", "social", "owner"));
-            if (sender.hasPermission("companionpets.reload")) choices.add("reload");
-        } else if (args.length == 2) {
-            switch (args[0].toLowerCase(Locale.ROOT)) {
-                case "order" -> {
-                    if (sender instanceof Player player) choices.addAll(actions.orderWordsLookingAt(player));
-                }
-                case "moment" -> { if (test) choices.addAll(List.of("affection", "bark", "mischief", "dig", "belly")); }
-                case "personality" -> { if (test) choices.addAll(List.of("friendly", "playful", "shy", "territorial", "grumpy")); }
-                case "social" -> { if (test) choices.addAll(List.of("sniff", "chase", "bark")); }
-                case "owner" -> {
-                    if (test) {
-                        choices.addAll(List.of("fake", "self"));
-                        for (Player player : Bukkit.getOnlinePlayers()) choices.add(player.getName());
-                    }
-                }
-                default -> { }
-            }
+            List<String> choices = new ArrayList<>(staff.complete(sender, args));
+            if (sender.hasPermission("companionpets.test")) choices.addAll(TEST_COMMANDS.keySet());
+            return net.tfminecraft.companionpets.staff.StaffCommands.filter(choices, args[0]);
         }
-        String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
-        return choices.stream().filter(value -> value.toLowerCase(Locale.ROOT).startsWith(prefix)).distinct().sorted().toList();
+        String action = args[0].toLowerCase(Locale.ROOT);
+        if (TEST_COMMANDS.containsKey(action)) {
+            String[] forwarded = args.clone(); forwarded[0] = TEST_COMMANDS.get(action);
+            return tests.complete(sender, forwarded);
+        }
+        return net.tfminecraft.companionpets.staff.StaffCommands.ACTIONS.contains(action) ? staff.complete(sender, args) : List.of();
     }
 }

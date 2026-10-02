@@ -1,0 +1,7 @@
+name: CompanionPetsSmoke
+main: net.tfminecraft.companionpets.smoke.CompanionPetsSmoke
+version: 1.0.0
+api-version: '1.21.10'
+description: DEV ONLY - isolated CompanionPets integration checks, automatically runs once and disables itself
+depend: [CompanionPets]
+softdepend: [ModelEngine, MMOItems, ItemsAdder, MythicMobs]
