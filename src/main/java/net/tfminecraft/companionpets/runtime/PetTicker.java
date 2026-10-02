@@ -447,6 +447,8 @@ public final class PetTicker implements Runnable {
                     && body.getLocation().distance(player.getLocation()) <= runtime.config().training().sessionDistance();
             if (pet == null || pet.stored()) {
                 actions.endTraining(player, pet, "your pet went back to the shelter");
+            } else if (type == null) {
+                actions.endTraining(player, pet, "your pet type is no longer configured");
             } else if (!holding) {
                 String treatName = actions.treatName(pet);
                 actions.endTraining(player, pet, java.util.Arrays.stream(player.getInventory().getStorageContents()).anyMatch(item -> treats.stream().anyMatch(treat -> treat.matches(item)))

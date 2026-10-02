@@ -169,7 +169,7 @@ public final class CompanionConfig {
         double teleport = num(logger, presence, "follow-teleport-blocks", 16);
         double cry = num(logger, presence, "cry-interval-seconds", 45);
 
-        ConfigurationSection items = config.getConfigurationSection("items");
+        ConfigurationSection items = PetItems.explicitSection(config, "items");
         ItemRef kennel = item(items, "kennel", ItemRef.vanilla(Material.BARREL), logger);
         Material kennelBlock = material(items, "kennel-block", kennel == null || kennel.material() == null ? Material.BARREL : kennel.material(), logger);
         if (!kennelBlock.isBlock() || kennelBlock.isAir()) {
@@ -325,7 +325,7 @@ public final class CompanionConfig {
     static Map<ItemRef, Double> readFoods(ConfigurationSection care, Logger logger) {
         Map<ItemRef, Double> foods = new LinkedHashMap<>();
         if (care == null) return foods;
-        Object raw = care.get("foods");
+        Object raw = care.get("foods", null);
         if (raw instanceof List<?> entries) {
             for (Object entry : entries) {
                 if (entry instanceof Map<?, ?> values && ItemRef.yamlToken(values.get("item")) != null) {

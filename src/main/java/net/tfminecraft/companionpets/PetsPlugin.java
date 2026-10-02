@@ -54,7 +54,14 @@ public class PetsPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        CompanionConfig config = CompanionConfig.load(this);
+        final CompanionConfig config;
+        try {
+            config = CompanionConfig.load(this);
+        } catch (IllegalArgumentException ex) {
+            getLogger().log(Level.SEVERE, "Invalid CompanionPets config.yml; disabling plugin", ex);
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         store = new PetStore(this);
         if (!store.load() || !store.beginSession()) {
             getServer().getPluginManager().disablePlugin(this);
