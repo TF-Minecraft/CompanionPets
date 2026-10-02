@@ -37,9 +37,9 @@ public record PetItems(Map<ItemRef, Double> foods, List<ItemRef> treats,
     }
 
     public static PetItems forPet(ConfigurationSection pet, PetItems global, Logger logger) {
-        ConfigurationSection local = pet.getConfigurationSection("items");
+        ConfigurationSection local = explicitSection(pet, "items");
         PetItems current = read(local, global, logger);
-        ConfigurationSection care = pet.getConfigurationSection("care");
+        ConfigurationSection care = explicitSection(pet, "care");
         // Legacy settings remain per-category overrides, without appending the global entries.
         Map<ItemRef, Double> foods = !has(local, "foods") && has(care, "foods")
                 ? CompanionConfig.readFoods(care, logger) : current.foods();
@@ -47,13 +47,18 @@ public record PetItems(Map<ItemRef, Double> foods, List<ItemRef> treats,
                 ? singleton(care.get("favorite"), logger) : current.treats();
         List<ItemRef> medicines = !has(local, "medicines") && has(care, "medicine")
                 ? singleton(care.get("medicine"), logger) : current.medicines();
-        List<ItemRef> toys = !has(local, "toys") && pet.contains("toys")
+        List<ItemRef> toys = !has(local, "toys") && has(pet, "toys")
                 ? list(pet, "toys", List.of(), logger) : current.toys();
         return new PetItems(foods, treats, medicines, current.brushes(), toys);
     }
 
     static boolean has(ConfigurationSection section, String key) {
-        return section != null && section.contains(key);
+        return section != null && section.contains(key, true);
+    }
+
+    static ConfigurationSection explicitSection(ConfigurationSection parent, String path) {
+        Object value = parent.get(path, null);
+        return value instanceof ConfigurationSection section ? section : null;
     }
 
     static List<ItemRef> singleton(Object raw, Logger logger) {

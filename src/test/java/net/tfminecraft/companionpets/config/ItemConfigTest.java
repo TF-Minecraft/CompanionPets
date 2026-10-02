@@ -17,6 +17,44 @@ class ItemConfigTest {
     @AfterAll static void unmock() { MockBukkit.unmock(); }
     private final Logger logger = Logger.getLogger("ItemConfigTest");
 
+    @Test void legacyConfigWithBundledDefaultsRetainsItemInheritanceAndBrush() throws Exception {
+        var bundled = YamlConfiguration.loadConfiguration(new InputStreamReader(
+                getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
+        var legacy = new YamlConfiguration();
+        legacy.loadFromString("""
+                items: {kennel: BARREL, brush: FEATHER}
+                pets:
+                  wolf:
+                    entity: WOLF
+                    egg: WOLF_SPAWN_EGG
+                    care: {foods: {BEEF: 35}, favorite: SALMON}
+                    toys: [FEATHER]
+                """);
+        legacy.setDefaults(bundled);
+        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), legacy);
+        var defaults = PetItems.defaults();
+        assertEquals(defaults.foods(), config.items().foods());
+        assertEquals(defaults.treats(), config.items().treats());
+        assertEquals(defaults.medicines(), config.items().medicines());
+        assertEquals(defaults.toys(), config.items().toys());
+        assertEquals(java.util.List.of(ItemRef.parse("FEATHER")), config.items().brushes());
+        assertEquals(Map.of(ItemRef.parse("BEEF"), 35.0), config.type("wolf").foods());
+        assertEquals(java.util.List.of(ItemRef.parse("SALMON")), config.type("wolf").treats());
+        assertEquals(java.util.List.of(ItemRef.parse("FEATHER")), config.type("wolf").toys());
+        assertTrue(CompanionConfig.readFoods(legacy.getConfigurationSection("items"), logger).isEmpty());
+    }
+
+    @Test void absentItemsSectionWithBundledDefaultsUsesRuntimeDefaults() throws Exception {
+        var bundled = YamlConfiguration.loadConfiguration(new InputStreamReader(
+                getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
+        var legacy = new YamlConfiguration();
+        legacy.loadFromString("pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}}");
+        legacy.setDefaults(bundled);
+        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), legacy);
+        assertEquals(PetItems.defaults(), config.items());
+        assertEquals(PetItems.defaults(), config.type("wolf").items());
+    }
+
     @Test void foodListAcceptsEveryProviderAndPreservesDottedIds() throws Exception {
         var yaml = new YamlConfiguration();
         yaml.loadFromString("""
