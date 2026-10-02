@@ -376,6 +376,9 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   resumed, and survive restarts. Lay stays asleep even at full energy. Automatic
   exhaustion sleep can still end when recovered. Sitting and sleeping recover
   energy. Needs and illness can prevent a pet from moving even after release.
+  In water, land pets float and seek a nearby dry bank even when hungry,
+  weakened, sitting or sleeping. Their saved order resumes on land. This does
+  not apply to aquatic bodies such as fish, axolotls, tadpoles or turtles.
 - Follow is one trick, learned at 100% by default and shown with its command
   words on the Tricks page. Say `follow` while looking or `<name> follow`.
   Come is a separate trick; saved Come words and progress stay with Come.
@@ -472,6 +475,12 @@ recreates it at the saved position if it is missing. Missing or unloaded bodies
 do not delete pet records; care pauses until the body is available. Actual deaths
 still remove the pet normally. Calling an outside pet from its shelter also
 loads its saved chunk and attempts to recover its body.
+
+Restarting or reconnecting does not teleport distant pets with a saved Follow
+order to their owner. They wait at their existing position until the owner
+approaches, explicitly asks them to follow, or calls them from the shelter.
+Pets already following during the current session retain their usual catch-up
+teleport when the owner moves too far away.
 Sitting, lying from weakness/exhaustion and sleeping all recover energy at the
 `care.sleep-minutes-to-full` rate (default: 12.5 points per minute), without idle
 energy loss. Away recovery uses the same away rate; frozen presence pauses it.

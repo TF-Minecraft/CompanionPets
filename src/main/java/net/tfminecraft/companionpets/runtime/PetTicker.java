@@ -19,6 +19,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 
 import net.tfminecraft.companionpets.behavior.Locomotion;
 import net.tfminecraft.companionpets.behavior.Rest;
+import net.tfminecraft.companionpets.behavior.WaterEscape;
 import net.tfminecraft.companionpets.care.CareInput;
 import net.tfminecraft.companionpets.care.CareNotice;
 import net.tfminecraft.companionpets.care.DominantNeed;
@@ -113,7 +114,8 @@ public final class PetTicker implements Runnable {
                             pet.order(),
                             pet.staying());
             boolean withOwner = !pet.stored() && online && distance <= runtime.config().ownerNearRadius();
-            if (!pet.stored() && Rest.shouldLieDown(
+            boolean swimming = body instanceof Mob mob && WaterEscape.needed(mob);
+            if (!pet.stored() && !swimming && Rest.shouldLieDown(
                     pet.need(Need.ENERGY),
                     pet.activity(),
                     pet.fetch() != null,
@@ -129,10 +131,10 @@ public final class PetTicker implements Runnable {
             }
             List<CareNotice> notices = NeedClock.advance(pet, new CareInput(
                     presence,
-                    mode == Locomotion.Mode.FOLLOW,
+                    swimming || mode == Locomotion.Mode.FOLLOW,
                     pet.activity() == Activity.PLAYING,
-                    pet.activity() == Activity.SLEEPING || mode == Locomotion.Mode.SLEEP,
-                    Rest.recoversEnergy(mode),
+                    !swimming && (pet.activity() == Activity.SLEEPING || mode == Locomotion.Mode.SLEEP),
+                    !swimming && Rest.recoversEnergy(mode),
                     withOwner,
                     elapsed,
                     runtime.config().care(),
@@ -222,6 +224,15 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
+            if (WaterEscape.needed(mob)) {
+                actions.roaming().cancelWithPosture(pet);
+                actions.clearInteractions(pet);
+                actions.markSleep(mob, false);
+                runtime.visual().cancelAction(mob);
+                WaterEscape.swim(mob, null);
+                WaterNavigationGoal.ensure(runtime, pet, mob);
+                continue;
+            }
             Locomotion.Mode mode = Locomotion.choose(
                     pet.illness(),
                     pet.need(Need.HEALTH),
@@ -232,6 +243,8 @@ public final class PetTicker implements Runnable {
                     now < pet.forcedSitUntilMillis(),
                     pet.order(),
                     pet.staying());
+            if (mode == Locomotion.Mode.FOLLOW && pet.activity() != Activity.ATTENDING
+                    && !runtime.followingAllowed(pet, owner)) mode = Locomotion.Mode.STAY;
             actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
             if (mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP) PetFx.stopLooking(mob);
             if (actions.moments().tickBelly(pet, mob, owner)) {
@@ -280,6 +293,10 @@ public final class PetTicker implements Runnable {
                 PetFx.lie(mob, false);
                 if (!sameWorld) {
                     mob.getPathfinder().stopPathfinding();
+                    return;
+                }
+                if (!runtime.followingAllowed(pet, owner)) {
+                    net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
                     return;
                 }
                 if (pet.illness() == Illness.SICK && now < pet.pauseUntilMillis()) {

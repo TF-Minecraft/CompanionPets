@@ -130,6 +130,7 @@ public final class PetFx {
     }
 
     public static void sit(Entity entity, boolean sitting) {
+        if (entity instanceof Mob mob && net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob)) sitting = false;
         if (entity instanceof Sittable sittable) {
             sittable.setSitting(sitting);
         }
@@ -139,6 +140,7 @@ public final class PetFx {
     }
 
     public static void lie(Entity entity, boolean lying) {
+        if (entity instanceof Mob mob && net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob)) lying = false;
         if (entity instanceof Fox fox) {
             fox.setSleeping(lying);
             fox.setSitting(false);

@@ -219,6 +219,12 @@ final class PetRoaming {
     }
 
     void cancel(Pet pet) { plans.remove(pet.id()); cancelAttention(pet); }
+    void cancelWithPosture(Pet pet) {
+        Attention job = attention.get(pet.id());
+        cancel(pet);
+        if (job != null && job.returnOrder != null && runtime.entity(pet) instanceof Mob body)
+            restorePosture(pet, body, job.returnOrder);
+    }
     void cancelPlan(Pet pet) { plans.remove(pet.id()); }
 
     private void cancelAttention(Pet pet) {

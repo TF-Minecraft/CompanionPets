@@ -17,7 +17,7 @@ final class CallNavigationGoal implements Goal<Mob> {
     static void ensure(PetRuntime runtime, Pet pet, Mob body, Runnable step) {
         GoalKey<Mob> key = GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "call_navigation"));
         if (!(Bukkit.getMobGoals().getGoal(body, key) instanceof CallNavigationGoal))
-            Bukkit.getMobGoals().addGoal(body, 0, new CallNavigationGoal(key, pet, step));
+            Bukkit.getMobGoals().addGoal(body, 1, new CallNavigationGoal(key, pet, step));
     }
     @Override public boolean shouldActivate() { return pet.activity() == Activity.ATTENDING && pet.order() == PetOrder.FOLLOW && !pet.stored() && !pet.dead(); }
     @Override public boolean shouldStayActive() { return shouldActivate(); }

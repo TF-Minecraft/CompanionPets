@@ -32,7 +32,7 @@ final class FetchNavigationGoal implements Goal<Mob> {
         if (registered instanceof FetchNavigationGoal goal) {
             goal.fetchStep = fetchStep;
         } else {
-            Bukkit.getMobGoals().addGoal(body, 0, new FetchNavigationGoal(key, pet, fetchStep));
+            Bukkit.getMobGoals().addGoal(body, 1, new FetchNavigationGoal(key, pet, fetchStep));
         }
     }
 

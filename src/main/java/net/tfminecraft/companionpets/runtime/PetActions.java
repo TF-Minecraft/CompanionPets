@@ -120,6 +120,7 @@ public final class PetActions {
     private void resumeFollowing(Player player, Pet pet, long now) {
         clearInteractions(pet); releaseFetch(pet, player, true);
         pet.order(PetOrder.FOLLOW); pet.staying(false); pet.forcedSitUntilMillis(0);
+        runtime.resumeFollowing(pet);
         wakeToFollow(pet, now);
         Entity body = runtime.entity(pet);
         if (body != null) {
@@ -143,6 +144,23 @@ public final class PetActions {
         calming.clear();
         moments.clear();
         social.clear();
+    }
+
+    public void ownerSessionChanged(Player player) {
+        runtime.suspendFollowing(player.getUniqueId());
+        for (Pet pet : runtime.store().of(player.getUniqueId())) {
+            if (pet.fetch() != null) continue;
+            roaming.cancelWithPosture(pet);
+            clearInteractions(pet);
+            if (runtime.entity(pet) instanceof Mob mob && pet.order() == PetOrder.FOLLOW)
+                net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+        }
+    }
+
+    private void pauseRestoredFollowing(Pet pet, Entity entity) {
+        if (entity instanceof Mob mob && pet.order() == PetOrder.FOLLOW
+                && !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId())))
+            net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
     }
 
     private boolean calmInteraction(Player player, Pet pet) {
@@ -567,6 +585,7 @@ public final class PetActions {
         runtime.remember(pet, entity);
         PetTypeDef type = runtime.config().type(pet.typeId());
         runtime.bodies().reattach(entity, pet, type);
+        pauseRestoredFollowing(pet, entity);
     }
 
     public Entity restoreBody(Pet pet) {
@@ -594,6 +613,7 @@ public final class PetActions {
         if (body != null) {
             pet.clearRuntimeMotion();
             runtime.remember(pet, body);
+            pauseRestoredFollowing(pet, body);
             runtime.store().save();
             runtime.plugin().getLogger().info("Restored missing body for pet " + pet.id() + " (" + pet.name() + ")");
         }
@@ -844,6 +864,7 @@ public final class PetActions {
         }
         pet.stored(false);
         runtime.remember(pet, entity);
+        runtime.resumeFollowing(pet);
         runtime.store().save();
     }
 
@@ -1008,6 +1029,7 @@ public final class PetActions {
         pet.order(PetOrder.FOLLOW);
         pet.staying(false);
         wakeToFollow(pet, System.currentTimeMillis());
+        runtime.resumeFollowing(pet);
         entity.teleport(PetRuntime.beside(player));
         runtime.remember(pet, entity);
         runtime.store().save();

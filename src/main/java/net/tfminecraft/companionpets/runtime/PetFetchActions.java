@@ -66,10 +66,7 @@ final class PetFetchActions {
             }
             return;
         }
-        job.projectileId(ball.getUniqueId());
-        throwsInProgress.put(job.id(), job);
-        lastLocations.put(job.id(), eye.clone());
-        expiresAt.put(job.id(), System.currentTimeMillis() + 30_000L);
+        register(job, ball);
         for (Pet pet : runtime.store().all()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             Entity body = runtime.entity(pet);
@@ -89,6 +86,13 @@ final class PetFetchActions {
             pet.activity(Activity.PLAYING);
             pet.playUntilMillis(0L);
         }
+    }
+
+    void register(FetchJob job, Snowball ball) {
+        job.projectileId(ball.getUniqueId());
+        throwsInProgress.put(job.id(), job);
+        lastLocations.put(job.id(), ball.getLocation().clone());
+        expiresAt.put(job.id(), System.currentTimeMillis() + 30_000L);
     }
 
     boolean canChase(Pet pet) {

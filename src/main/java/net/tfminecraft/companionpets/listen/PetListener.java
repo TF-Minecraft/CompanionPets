@@ -28,6 +28,7 @@ import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -61,6 +62,7 @@ public final class PetListener implements Listener {
         if (pet == null || pet.stored() || pet.dead()) return;
         if (pet.staying() || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW
                 || pet.activity() == net.tfminecraft.companionpets.pet.Activity.SLEEPING
+                || !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId()))
                 || System.currentTimeMillis() < pet.forcedSitUntilMillis()) event.setCancelled(true);
     }
 
@@ -226,7 +228,13 @@ public final class PetListener implements Listener {
     }
 
     @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        actions.ownerSessionChanged(event.getPlayer());
+    }
+
+    @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        actions.ownerSessionChanged(event.getPlayer());
         lastClicks.remove(event.getPlayer().getUniqueId());
         runtime.sessions().clearPlayer(event.getPlayer().getUniqueId());
         PetFx.clearPlayer(event.getPlayer().getUniqueId());
