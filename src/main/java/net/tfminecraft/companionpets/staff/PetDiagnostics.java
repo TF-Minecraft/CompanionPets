@@ -54,7 +54,7 @@ public final class PetDiagnostics {
 
     public List<String> explain(Pet pet) {
         List<String> reasons = new ArrayList<>();
-        if (pet.stored()) reasons.add("In shelter");
+        if (pet.stored()) reasons.add("In Pet House");
         if (runtime.entity(pet) == null && !pet.stored()) reasons.add("Body missing or its chunk is unloaded");
         if (pet.dead()) reasons.add("Dead; cannot be recovered");
         if (pet.illness() != net.tfminecraft.companionpets.pet.Illness.NONE) reasons.add("Illness: " + pet.illness());

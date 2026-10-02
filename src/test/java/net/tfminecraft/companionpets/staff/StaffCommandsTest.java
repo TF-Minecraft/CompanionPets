@@ -84,7 +84,7 @@ class StaffCommandsTest {
         }
     }
 
-    @Test void createRebuildsAPlayersPetWithSpecifiedLearningWordsAndStatsInTheirShelter() throws Exception {
+    @Test void createRebuildsAPlayersPetWithSpecifiedLearningWordsAndStatsInTheirPetHouse() throws Exception {
         command("create", "Owner", "wolf", "Toby", "de", "prueba", "tricks=sit:sientate,lay:duerme", "hunger=61", "mood=72", "energy=83", "cleanliness=94", "health=55", "bond=66", "sex=female", "personality=shy", "agehours=48");
         var created = runtime.store().all().stream().filter(p -> !p.id().equals(pet.id())).findFirst().orElseThrow();
         assertEquals(owner.getUniqueId(), created.ownerId()); assertEquals("Toby de prueba", created.name());
@@ -193,7 +193,7 @@ class StaffCommandsTest {
 
     @Test void findReportsSavedAndOrphanBodiesWithoutMutatingOrCreatingPets() {
         assertTrue(PetSearch.find(runtime, null, null, "").isEmpty(), "A healthy stored pet is not considered lost");
-        var shelter = PetSearch.find(runtime, owner.getUniqueId(), null, "Toby"); assertEquals(1, shelter.size()); assertTrue(shelter.getFirst().description().contains("shelter"));
+        var petHouse = PetSearch.find(runtime, owner.getUniqueId(), null, "Toby"); assertEquals(1, petHouse.size()); assertTrue(petHouse.getFirst().description().contains("Pet House"));
         pet.stored(false); pet.place("missing_world", 1, 2, 3, 0);
         var lost = PetSearch.find(runtime, null, null, ""); assertEquals(1, lost.size()); assertTrue(lost.getFirst().description().contains("world unavailable"));
         var body = owner.getWorld().spawn(owner.getLocation(), org.bukkit.entity.Wolf.class);
@@ -276,7 +276,7 @@ class StaffCommandsTest {
         assertTrue(console.nextMessage().contains("Owner")); assertTrue(console.nextMessage().contains("Toby"));
         commands.execute(console, "find", "Owner", "Toby");
         assertTrue(console.nextMessage().contains("Owner"));
-        String location = console.nextMessage(); assertTrue(location.contains("Toby")); assertTrue(location.contains("shelter"));
+        String location = console.nextMessage(); assertTrue(location.contains("Toby")); assertTrue(location.contains("Pet House"));
         assertFalse(location.contains(id())); assertFalse(location.contains(owner.getUniqueId().toString()));
     }
 

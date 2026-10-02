@@ -403,7 +403,7 @@ public final class PetTicker implements Runnable {
                     && body.getWorld().equals(player.getWorld())
                     && body.getLocation().distance(player.getLocation()) <= runtime.config().training().sessionDistance();
             if (pet == null || pet.stored()) {
-                actions.endTraining(player, pet, "your pet went back to the shelter");
+                actions.endTraining(player, pet, "your pet went back to the Pet House");
             } else if (type == null) {
                 actions.endTraining(player, pet, "your pet type is no longer configured");
             } else if (!holding) {

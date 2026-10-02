@@ -191,21 +191,34 @@ class PetFetchWorkflowTest {
         assertNull(pet.fetch()); assertFalse(navigationTargets.containsKey(firstBody.getUniqueId()));
     }
 
-    @Test void awakeSittingAndStayingPetsJoinTheRaceAndKeepTheirSavedOrders() {
-        pet.order(PetOrder.SIT);
-        Pet other = outsidePet(UUID.randomUUID(), "Luna", -2);
-        other.order(PetOrder.STAY); other.staying(true);
-        ((WolfMock) runtime.entity(pet)).setSitting(true);
+    @Test void onlyFollowingPetsChaseWhileAwakeSittingAndStayingPetsRemainInPlace() {
+        Pet sitting = outsidePet(UUID.randomUUID(), "Sit", -2); sitting.order(PetOrder.SIT);
+        Pet staying = outsidePet(UUID.randomUUID(), "Stay", 2); staying.order(PetOrder.STAY);
+        Pet anchored = outsidePet(UUID.randomUUID(), "Anchored", -3); anchored.staying(true);
+        var sittingBody = (WolfMock) runtime.entity(sitting);
+        sittingBody.setSitting(true); sittingBody.setAware(false);
+        ((WolfMock) runtime.entity(staying)).setAware(false);
         Snowball ball = throwToy();
-        assertNotNull(pet.fetch()); assertSame(pet.fetch(), other.fetch());
+        assertNotNull(pet.fetch());
+        for (Pet idle : java.util.List.of(sitting, staying, anchored)) assertNull(idle.fetch());
+        assertEquals(1, navigationTargets.size());
+        assertTrue(sittingBody.isSitting()); assertFalse(sittingBody.isAware());
         land(ball); new PetTicker(runtime, actions).run();
-        assertEquals(2, navigationTargets.size());
-        actions.releaseFetch(pet, owner, false); actions.releaseFetch(other, null, false);
-        assertEquals(PetOrder.SIT, pet.order());
-        assertEquals(PetOrder.STAY, other.order()); assertTrue(other.staying());
-        new PetTicker(runtime, actions).run();
-        assertTrue(((WolfMock) runtime.entity(pet)).isSitting());
-        assertFalse(((WolfMock) runtime.entity(other)).isAware());
+        assertEquals(1, navigationTargets.size());
+        assertEquals(PetOrder.SIT, sitting.order()); assertTrue(sittingBody.isSitting());
+        assertEquals(PetOrder.STAY, staying.order()); assertFalse(((WolfMock) runtime.entity(staying)).isAware());
+        assertEquals(PetOrder.FOLLOW, anchored.order()); assertTrue(anchored.staying());
+    }
+
+    @Test void changingFromFollowToAHoldOrderDropsOutOfTheRace() {
+        for (PetOrder order : java.util.List.of(PetOrder.SIT, PetOrder.STAY, PetOrder.LAY)) {
+            pet.order(PetOrder.FOLLOW);
+            land(throwToy()); assertNotNull(pet.fetch());
+            pet.order(order);
+            actions.fetchActions().tick(System.currentTimeMillis());
+            assertNull(pet.fetch()); assertEquals(order, pet.order());
+            assertTrue(items().stream().noneMatch(item -> item.getPersistentDataContainer().has(runtime.toyKey())));
+        }
     }
 
     @Test void normalTickerReturnGoesToThrowerAndRewardsOnlyWinningPet() throws Exception {

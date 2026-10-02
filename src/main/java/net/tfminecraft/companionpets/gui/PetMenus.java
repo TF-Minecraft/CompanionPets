@@ -48,14 +48,14 @@ public final class PetMenus {
         openCare(player, pet, false);
     }
 
-    public void openCare(org.bukkit.entity.Player player, Pet pet, boolean shelterBack) {
-        openCare(player, pet, shelterBack, 0);
+    public void openCare(org.bukkit.entity.Player player, Pet pet, boolean petHouseBack) {
+        openCare(player, pet, petHouseBack, 0);
     }
 
-    public void openCare(org.bukkit.entity.Player player, Pet pet, boolean shelterBack, int shelterPage) {
+    public void openCare(org.bukkit.entity.Player player, Pet pet, boolean petHouseBack, int petHousePage) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.CARE, pet.id(), null);
-        holder.shelterBack(shelterBack);
-        holder.shelterPage(shelterPage);
+        holder.petHouseBack(petHouseBack);
+        holder.petHousePage(petHousePage);
         Inventory inventory = Bukkit.createInventory(holder, 45, title(pet.name()));
         holder.inventory(inventory);
         fillCare(inventory, pet);
@@ -72,7 +72,7 @@ public final class PetMenus {
     }
 
     private void fillCare(Inventory inventory, Pet pet) {
-        fillProfile(inventory, pet, true, inventory.getHolder() instanceof MenuHolder holder && holder.shelterBack());
+        fillProfile(inventory, pet, true, inventory.getHolder() instanceof MenuHolder holder && holder.petHouseBack());
     }
 
     public void fillInformation(Inventory inventory, Pet pet) {
@@ -96,7 +96,7 @@ public final class PetMenus {
         inventory.setItem(13, named(Material.NAME_TAG, pet.name(), NamedTextColor.WHITE,
                 condition(pet),
                 Component.empty(),
-                management ? line("Rename " + PetTexts.him(pet.sex()) + " from your shelter", NamedTextColor.DARK_GRAY) : null));
+                management ? line("Rename " + PetTexts.him(pet.sex()) + " from your Pet House", NamedTextColor.DARK_GRAY) : null));
         inventory.setItem(15, named(Material.CLOCK, "Age", NamedTextColor.WHITE,
                 line(PetTexts.age(pet.bornAt(), System.currentTimeMillis()), NamedTextColor.GRAY)));
 
@@ -121,7 +121,7 @@ public final class PetMenus {
                 line("Energy >= 25 or rest; low mood is OK", NamedTextColor.DARK_GRAY),
                 sick ? line(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED) : null));
 
-        if (back) MenuNavigation.back(inventory, management ? "Return to the shelter list" : "Return to this player's pets");
+        if (back) MenuNavigation.back(inventory, management ? "Return to the Pet House list" : "Return to this player's pets");
         inventory.setItem(TRICKS_SLOT, action(Material.BOOK, "Tricks",
                 line("See what " + pet.name() + " has learned", NamedTextColor.GRAY)));
         if (management) {
@@ -129,7 +129,7 @@ public final class PetMenus {
             inventory.setItem(CALL_SLOT, action(stored ? Material.LEAD : Material.COMPASS,
                     stored ? "Bring out" : "Call",
                     line(stored ? "Bring " + PetTexts.him(pet.sex()) + " out beside you" : "Call " + PetTexts.him(pet.sex()) + " to your side", NamedTextColor.GRAY)));
-            if (!stored) inventory.setItem(STORE_SLOT, action(Material.BARREL, "Send to shelter",
+            if (!stored) inventory.setItem(STORE_SLOT, action(Material.BARREL, "Send to Pet House",
                     line("Take " + PetTexts.him(pet.sex()) + " out of the world", NamedTextColor.GRAY)));
             inventory.setItem(RELEASE_SLOT, action(Material.BARRIER, "Release forever",
                     line(pet.name() + " leaves for good and cannot come back", NamedTextColor.GRAY)));
@@ -200,7 +200,7 @@ public final class PetMenus {
 
     public void openKennel(org.bukkit.entity.Player player, int requestedPage) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.KENNEL, null, null);
-        Inventory inventory = Bukkit.createInventory(holder, 54, title("Shelter"));
+        Inventory inventory = Bukkit.createInventory(holder, 54, title("Pet House"));
         holder.inventory(inventory);
         frame(inventory);
         int slot = 0;
@@ -216,7 +216,7 @@ public final class PetMenus {
             ItemStack item = named(icon, pet.name(), NamedTextColor.GOLD,
                     line(PetTexts.sexName(pet.sex()) + " " + PetTexts.speciesName(pet.typeId()).toLowerCase(java.util.Locale.ROOT),
                             NamedTextColor.GRAY),
-                    line(stored ? "Resting in the shelter" : "Out and about", stored ? NamedTextColor.DARK_GRAY : NamedTextColor.GREEN),
+                    line(stored ? "Resting in the Pet House" : "Out and about", stored ? NamedTextColor.DARK_GRAY : NamedTextColor.GREEN),
                     line("Energy ", StatLook.theme(Need.ENERGY)).append(StatLook.bar(pet.need(Need.ENERGY))),
                     Component.empty(),
                     line("Click to open", NamedTextColor.YELLOW));
@@ -234,7 +234,7 @@ public final class PetMenus {
 
     public void openLearned(org.bukkit.entity.Player player, Pet pet, int page) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.LEARNED, pet.id(), null);
-        inheritShelterNavigation(player, holder);
+        inheritPetHouseNavigation(player, holder);
         Inventory inventory = Bukkit.createInventory(holder, 27, title(pet.name() + "'s tricks"));
         holder.inventory(inventory);
         frame(inventory);
@@ -286,7 +286,7 @@ public final class PetMenus {
 
     public void openTricks(org.bukkit.entity.Player player, Pet pet, String word, int page) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.TRICK, pet.id(), word);
-        inheritShelterNavigation(player, holder);
+        inheritPetHouseNavigation(player, holder);
         Inventory inventory = Bukkit.createInventory(holder, 27, title("Choose a trick"));
         holder.inventory(inventory);
         frame(inventory);
@@ -299,12 +299,12 @@ public final class PetMenus {
         player.openInventory(inventory);
     }
 
-    private void inheritShelterNavigation(org.bukkit.entity.Player player, MenuHolder holder) {
+    private void inheritPetHouseNavigation(org.bukkit.entity.Player player, MenuHolder holder) {
         Inventory previousInventory = player.getOpenInventory().getTopInventory();
         if (previousInventory != null && previousInventory.getHolder() instanceof MenuHolder previous
                 && holder.petId().equals(previous.petId())) {
-            holder.shelterBack(previous.shelterBack());
-            holder.shelterPage(previous.shelterPage());
+            holder.petHouseBack(previous.petHouseBack());
+            holder.petHousePage(previous.petHousePage());
         }
     }
 

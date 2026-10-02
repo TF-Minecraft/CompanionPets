@@ -24,7 +24,7 @@ final class PetSearch {
                     || !pet.name().toLowerCase(Locale.ROOT).contains(filter)) continue;
             var found = bodies.getOrDefault(pet.id(), List.of());
             String status;
-            if (pet.stored()) status = found.isEmpty() ? "in shelter" : "in shelter; unexpected loaded body";
+            if (pet.stored()) status = found.isEmpty() ? "in Pet House" : "in Pet House; unexpected loaded body";
             else if (!found.isEmpty()) status = (found.size() > 1 ? "duplicate bodies (" + found.size() + ")" : "loaded body") + ": " + position(found.getFirst());
             else {
                 var world = Bukkit.getWorld(pet.worldName());

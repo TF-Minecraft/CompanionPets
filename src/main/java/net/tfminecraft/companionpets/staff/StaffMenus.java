@@ -31,7 +31,7 @@ public final class StaffMenus implements Listener {
             var type = runtime.config().type(pet.typeId());
             var icon = type == null ? new ItemStack(Material.BONE) : type.eggIcon();
             button(holder, slot++, named(icon, pet.name(), "Owner: " + commands.ownerName(owner), "Type: " + pet.typeId(),
-                    pet.stored() ? "In shelter" : "Outside", "Click to view this pet"), () -> refresh(player, pet.id()));
+                    pet.stored() ? "In Pet House" : "Outside", "Click to view this pet"), () -> refresh(player, pet.id()));
         }
         navigation(player, holder, pets.size(), () -> list(player, owner, page - 1), () -> list(player, owner, page + 1));
         player.openInventory(holder.getInventory());

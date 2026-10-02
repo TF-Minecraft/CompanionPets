@@ -82,7 +82,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                 var created = store.all().stream().filter(p -> !oldIds.contains(p.id())).toList();
                 check(created.size() == 1, type.id() + " create adds exactly one pet");
                 var replacement = created.getFirst();
-                check(replacement.ownerId().equals(owner) && replacement.typeId().equals(type.id()) && replacement.stored(), type.id() + " manual replacement ownership and shelter");
+                check(replacement.ownerId().equals(owner) && replacement.typeId().equals(type.id()) && replacement.stored(), type.id() + " manual replacement ownership and Pet House");
                 check(replacement.need(Need.HUNGER) == 61 && replacement.need(Need.ENERGY) == 83 && replacement.bond() == 66, type.id() + " replacement stats");
                 check(replacement.progress(Trick.FOLLOW) == 100 && replacement.trickFor("follow") == Trick.FOLLOW, type.id() + " replacement learning");
                 check(store.remove(replacement.id()) && store.save(), type.id() + " isolated replacement cleanup");
@@ -182,16 +182,16 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                 var ownerFixture = ownerFixture(owner, at);
                 var care = new net.tfminecraft.companionpets.gui.MenuHolder(net.tfminecraft.companionpets.gui.MenuHolder.Kind.CARE, pet.id(), null);
                 actions.clickMenu(ownerFixture, care, net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, null, false, false, false);
-                check(pet.stored() && pet.entityId() == null && !restored.isValid(), type.id() + " owner's shelter removes body");
-                checkRemovedVisual(restored, modeledOwner, type.id() + " owner's shelter");
+                check(pet.stored() && pet.entityId() == null && !restored.isValid(), type.id() + " owner's Pet House removes body");
+                checkRemovedVisual(restored, modeledOwner, type.id() + " owner's Pet House");
                 pet.stored(false);
-                restored = actions.restoreBody(pet); check(restored != null, type.id() + " shelter pet can be restored"); entities.add(restored);
+                restored = actions.restoreBody(pet); check(restored != null, type.id() + " Pet House pet can be restored"); entities.add(restored);
                 modeledOwner = modeledOwner(restored);
                 actions.clickMenu(ownerFixture, care, net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, null, false, false, false);
-                check(pet.stored() && runtime.entity(pet) == null && !restored.isValid(), type.id() + " second shelter entry removes body");
-                checkRemovedVisual(restored, modeledOwner, type.id() + " second shelter entry");
+                check(pet.stored() && runtime.entity(pet) == null && !restored.isValid(), type.id() + " second Pet House entry removes body");
+                checkRemovedVisual(restored, modeledOwner, type.id() + " second Pet House entry");
 
-                check(pet.need(Need.HUNGER) == 55 && pet.progress(Trick.SPEAK) == 73, type.id() + " shelter preserves learning and needs");
+                check(pet.need(Need.HUNGER) == 55 && pet.progress(Trick.SPEAK) == 73, type.id() + " Pet House preserves learning and needs");
                 check(store.remove(pet.id()), type.id() + " cleanup journal");
                 var released = new Pet(UUID.randomUUID(), owner, type.id(), "Release smoke", PetSex.MALE);
                 trackedPets.add(released.id()); store.add(released);

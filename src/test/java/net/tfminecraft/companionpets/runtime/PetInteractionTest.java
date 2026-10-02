@@ -338,11 +338,11 @@ class PetInteractionTest {
         assertFalse(runtime.store().isDeleted(pet.id()));
     }
 
-    @Test void shelterDeletesVisualAndBodyButPreservesLearningAndNeeds() {
+    @Test void petHouseDeletesVisualAndBodyButPreservesLearningAndNeeds() {
         pet.progress(Trick.FOLLOW, 73); pet.bindWord("here", Trick.FOLLOW); pet.need(Need.HUNGER, 55);
         var holder = new net.tfminecraft.companionpets.gui.MenuHolder(net.tfminecraft.companionpets.gui.MenuHolder.Kind.CARE, pet.id(), null);
         actions.clickMenu(player, holder, net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, null, false, false, false);
-        assertEquals(1, bodyRemovals, "Shelter must not detach by revealing the vanilla mob");
+        assertEquals(1, bodyRemovals, "Pet House must not detach by revealing the vanilla mob");
         assertFalse(body.isValid());
         assertTrue(pet.stored()); assertNull(pet.entityId());
         assertEquals(55, pet.need(Need.HUNGER)); assertEquals(73, pet.progress(Trick.FOLLOW)); assertEquals(Trick.FOLLOW, pet.trickFor("here"));

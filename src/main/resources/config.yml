@@ -192,7 +192,7 @@ orders:
 # Omitted category = inherit. Explicit [] = disable it for that pet.
 # Other categories continue inheriting. See the commented example under pets.
 items:
-  # Shelter placement is global; eggs belong to each pet type, not these lists.
+  # Pet House placement is global; eggs belong to each pet type, not these lists.
   kennel: BARREL
   kennel-block: BARREL
   # Both treats work for ALL species. Hold either to train; rewards consume one.

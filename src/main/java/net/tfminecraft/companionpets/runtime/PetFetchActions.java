@@ -103,7 +103,7 @@ final class PetFetchActions {
         return !pet.stored() && !pet.dead() && pet.illness() != Illness.SICK && pet.illness() != Illness.WEAKENED
                 && pet.need(Need.HEALTH) > 0 && pet.need(Need.ENERGY) >= 25 && pet.need(Need.HUNGER) >= 25
                 && !training(pet)
-                && pet.activity() != Activity.SLEEPING && pet.order() != PetOrder.LAY
+                && pet.activity() != Activity.SLEEPING && pet.order() == PetOrder.FOLLOW && !pet.staying()
                 && System.currentTimeMillis() >= pet.forcedSitUntilMillis();
     }
 

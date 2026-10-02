@@ -203,7 +203,7 @@ public final class PetActions {
         Entity target = lookingAt(player, 6.0);
         Pet pet = runtime.byEntity(target);
         if (pet == null || pet.stored() || !pet.ownerId().equals(player.getUniqueId()) || !(target instanceof Mob body)) {
-            PetFx.tell(player, "Look at one of your pets that is outside the shelter first.");
+            PetFx.tell(player, "Look at one of your pets that is outside the Pet House first.");
             return false;
         }
         Locomotion.Mode mode = Locomotion.choose(pet.illness(), pet.need(Need.HEALTH),
@@ -367,7 +367,7 @@ public final class PetActions {
             UUID owner = runtime.store().kennelOwner(PetStore.kennelKey(
                     clicked.getWorld().getName(), clicked.getX(), clicked.getY(), clicked.getZ()));
             if (owner != null && !owner.equals(player.getUniqueId())) {
-                PetFx.bar(player, "This shelter belongs to someone else");
+                PetFx.bar(player, "This Pet House belongs to someone else");
                 return;
             }
             menus.openKennel(player);
@@ -428,7 +428,7 @@ public final class PetActions {
             if (slot == PetMenus.TRICKS_BACK_SLOT) {
                 Pet pet = runtime.store().get(holder.petId());
                 if (pet != null && pet.ownerId().equals(player.getUniqueId())) {
-                    menus.openCare(player, pet, holder.shelterBack(), holder.shelterPage());
+                    menus.openCare(player, pet, holder.petHouseBack(), holder.petHousePage());
                 }
             }
             return;
@@ -436,7 +436,7 @@ public final class PetActions {
         if (holder.kind() == MenuHolder.Kind.TRICK) {
             if (slot == PetMenus.TRICKS_BACK_SLOT) {
                 Pet pet = runtime.store().get(holder.petId());
-                if (pet != null && pet.ownerId().equals(player.getUniqueId())) menus.openCare(player, pet, holder.shelterBack(), holder.shelterPage());
+                if (pet != null && pet.ownerId().equals(player.getUniqueId())) menus.openCare(player, pet, holder.petHouseBack(), holder.petHousePage());
             } else clickTrick(player, holder, slot);
             return;
         }
@@ -473,7 +473,7 @@ public final class PetActions {
             return;
         }
         if (slot == PetMenus.BACK_SLOT) {
-            if (holder.shelterBack()) menus.openKennel(player, holder.shelterPage());
+            if (holder.petHouseBack()) menus.openKennel(player, holder.petHousePage());
             return;
         }
         if (slot == PetMenus.TRICKS_SLOT) {
@@ -490,7 +490,7 @@ public final class PetActions {
             } else {
                 call(player, pet);
             }
-            menus.openCare(player, pet, holder.shelterBack(), holder.shelterPage());
+            menus.openCare(player, pet, holder.petHouseBack(), holder.petHousePage());
             return;
         }
         if (slot == PetMenus.STORE_SLOT && !pet.stored()) {
@@ -938,7 +938,7 @@ public final class PetActions {
             return false;
         }
         if (!Quota.canBringOut(runtime.store().countOut(player.getUniqueId()), runtime.config().limits().maxOut())) {
-            PetFx.tell(player, "You have reached the active pet limit. Send one to the shelter first.");
+            PetFx.tell(player, "You have reached the active pet limit. Send one to the Pet House first.");
             return false;
         }
         String safeName = Names.sanitize(name);
@@ -1021,7 +1021,7 @@ public final class PetActions {
         }
         Entity entity = restoreBody(pet);
         if (entity == null) {
-            PetFx.bar(player, pet.name() + " can't be found. Send " + PetTexts.him(pet.sex()) + " to the shelter to bring "
+            PetFx.bar(player, pet.name() + " can't be found. Send " + PetTexts.him(pet.sex()) + " to the Pet House to bring "
                     + PetTexts.him(pet.sex()) + " back");
             return;
         }
@@ -1039,7 +1039,7 @@ public final class PetActions {
     private void placeKennel(Player player, ItemStack hand, Block clicked, BlockFace face) {
         Block place = clicked.getRelative(face);
         if (!place.getType().isAir() && !place.isReplaceable()) {
-            PetFx.bar(player, "There isn't enough room for a shelter there");
+            PetFx.bar(player, "There isn't enough room for a Pet House there");
             return;
         }
         if (!consumeHand(player, hand)) {
@@ -1048,7 +1048,7 @@ public final class PetActions {
         place.setType(runtime.config().kennelBlock());
         runtime.store().kennel(PetStore.kennelKey(place.getWorld().getName(), place.getX(), place.getY(), place.getZ()), player.getUniqueId());
         runtime.store().save();
-        PetFx.bar(player, "Shelter placed. Right-click it to look after your pets");
+        PetFx.bar(player, "Pet House placed. Right-click it to look after your pets");
     }
 
     private boolean isKennel(Block block) {
