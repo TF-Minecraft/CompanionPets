@@ -157,7 +157,7 @@ public final class PetTicker implements Runnable {
                         if (body != null) {
                             PetFx.ambient(body);
                             PetTypeDef petType = runtime.config().type(pet.typeId());
-                            PetFx.need(body, notice.need(), petType == null ? null : petType.favoriteFood());
+                            PetFx.need(body, notice.need(), petType == null ? null : petType.foodIcon());
                         }
                     } else if (notice.kind() != CareNotice.Kind.ENTERED_LOW) {
                         PetFx.bar(owner, PetTexts.illness(pet.name(), pet.sex(), pet.illness()));
@@ -402,7 +402,7 @@ public final class PetTicker implements Runnable {
                 PetFx.particle(mob, Particle.SNEEZE, 2);
             } else {
                 PetTypeDef type = runtime.config().type(pet.typeId());
-                PetFx.need(mob, dominant, type == null ? null : type.favoriteFood());
+                PetFx.need(mob, dominant, type == null ? null : type.foodIcon());
             }
         }
         if (pet.need(Need.CLEANLINESS) < 60.0 && mob.getTicksLived() % 40 < 10) {
@@ -429,9 +429,9 @@ public final class PetTicker implements Runnable {
             }
             Pet pet = runtime.store().get(session.petId());
             PetTypeDef type = pet == null ? null : runtime.config().type(pet.typeId());
-            Material treat = type == null ? null : type.favoriteFood();
+            net.tfminecraft.companionpets.item.ItemRef treat = type == null ? null : type.foodIcon();
             Entity body = pet == null ? null : runtime.entity(pet);
-            boolean holding = treat != null && player.getInventory().getItemInMainHand().getType() == treat;
+            boolean holding = type != null && type.isTreat(player.getInventory().getItemInMainHand());
             boolean close = body != null
                     && body.getWorld().equals(player.getWorld())
                     && body.getLocation().distance(player.getLocation()) <= runtime.config().training().sessionDistance();
@@ -439,7 +439,7 @@ public final class PetTicker implements Runnable {
                 actions.endTraining(player, pet, "your pet went back to the shelter");
             } else if (!holding) {
                 String treatName = actions.treatName(pet);
-                actions.endTraining(player, pet, player.getInventory().contains(treat)
+                actions.endTraining(player, pet, type.treats().stream().anyMatch(ref -> java.util.Arrays.stream(player.getInventory().getContents()).anyMatch(ref::matches))
                         ? "you put the " + treatName + " away"
                         : "you ran out of " + treatName);
             } else if (!close) {

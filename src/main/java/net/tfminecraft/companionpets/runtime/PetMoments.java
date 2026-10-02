@@ -8,6 +8,7 @@ import java.util.WeakHashMap;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRule;
 import org.bukkit.Material;
+import net.tfminecraft.companionpets.item.ItemRef;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
@@ -26,7 +27,6 @@ import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.pet.PetOrder;
-import net.tfminecraft.companionpets.pet.PetPersonality;
 import net.tfminecraft.companionpets.session.TrainingSession;
 
 /** Occasional interactions with no effect on a pet's needs or orders. */
@@ -229,20 +229,22 @@ final class PetMoments {
                 || pet.carriedToy() != null || owner == null || !owner.isOnline()) {
             return false;
         }
-        int total = settings.digLoot().values().stream().mapToInt(Integer::intValue).sum();
+        long total = settings.digLoot().values().stream().mapToLong(Integer::longValue).sum();
         if (total <= 0) {
             return false;
         }
-        int roll = runtime.random().nextInt(total);
-        Material found = Material.STICK;
-        for (Map.Entry<Material, Integer> entry : settings.digLoot().entrySet()) {
+        long roll = runtime.random().nextLong(total);
+        ItemRef found = ItemRef.vanilla(Material.STICK);
+        for (Map.Entry<ItemRef, Integer> entry : settings.digLoot().entrySet()) {
             roll -= entry.getValue();
             if (roll < 0) {
                 found = entry.getKey();
                 break;
             }
         }
-        gifts.put(pet, new GiftJob(found, now + 5_000L, now + 25_000L));
+        ItemStack gift = found.create();
+        if (gift == null) return false;
+        gifts.put(pet, new GiftJob(gift, found.name(), now + 5_000L, now + 25_000L));
         PetFx.look(body, body.getLocation().add(0, -0.5, 0));
         PetFx.particle(body, Particle.DUST_PLUME, 8);
         body.getWorld().playSound(body.getLocation(), Sound.BLOCK_GRAVEL_BREAK, 0.7f, 1.0f);
@@ -268,19 +270,21 @@ final class PetMoments {
             body.getPathfinder().moveTo(owner.getLocation(), 1.1);
             return;
         }
-        body.getWorld().dropItem(PetRuntime.inFront(owner), new ItemStack(gift.material));
+        body.getWorld().dropItem(PetRuntime.inFront(owner), gift.item);
         PetFx.particle(body, Particle.HAPPY_VILLAGER, 5);
-        PetFx.bar(owner, pet.name() + " brought you a " + gift.material.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' '));
+        PetFx.bar(owner, pet.name() + " brought you a " + gift.name);
         gifts.remove(pet);
     }
 
     private static final class GiftJob {
-        private final Material material;
+        private final ItemStack item;
+        private final String name;
         private final long deliverAt;
         private final long expiresAt;
 
-        private GiftJob(Material material, long deliverAt, long expiresAt) {
-            this.material = material;
+        private GiftJob(ItemStack item, String name, long deliverAt, long expiresAt) {
+            this.item = item;
+            this.name = name;
             this.deliverAt = deliverAt;
             this.expiresAt = expiresAt;
         }

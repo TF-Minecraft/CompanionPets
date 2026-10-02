@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
+import net.tfminecraft.companionpets.item.ItemRef;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.entity.Pose;
@@ -107,14 +108,14 @@ public final class PetFx {
         entity.getWorld().spawnParticle(particle, entity.getLocation().add(0, 0.8, 0), count, 0.25, 0.3, 0.25, 0);
     }
 
-    public static void need(Entity entity, Need need, Material favoriteFood) {
+    public static void need(Entity entity, Need need, ItemRef favoriteFood) {
         if (need == null) {
             return;
         }
         if (need == Need.HUNGER) {
-            Material food = favoriteFood == null ? Material.COOKED_BEEF : favoriteFood;
+            ItemStack food = favoriteFood == null ? new ItemStack(Material.COOKED_BEEF) : favoriteFood.icon(Material.COOKED_BEEF);
             entity.getWorld().spawnParticle(Particle.ITEM, entity.getLocation().add(0, 0.9, 0),
-                    4, 0.2, 0.2, 0.2, 0.02, new ItemStack(food));
+                    4, 0.2, 0.2, 0.2, 0.02, food);
             return;
         }
         Particle signal = switch (need) {

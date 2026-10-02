@@ -240,8 +240,8 @@ public final class PetListener implements Listener {
         }
         Location at = ball.getLocation().clone();
         ball.remove();
-        if (pet == null || pet.fetch() == null) {
-            actions.dropPlain(at, parts[1]);
+        if (pet == null || pet.fetch() == null || !ball.getUniqueId().equals(pet.fetch().projectileId())) {
+            // A returned or superseded projectile must not create a second toy.
             return;
         }
         actions.dropToy(at, pet, parts[1]);

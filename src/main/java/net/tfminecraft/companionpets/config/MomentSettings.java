@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 import org.bukkit.Material;
+import net.tfminecraft.companionpets.item.ItemRef;
 import org.bukkit.Particle;
 import org.bukkit.configuration.ConfigurationSection;
 
@@ -46,7 +47,7 @@ public record MomentSettings(
         double juvenileDigChance,
         double adultDigChance,
         double digMinEnergy,
-        Map<Material, Integer> digLoot) {
+        Map<ItemRef, Integer> digLoot) {
 
     private static final Set<Material> SAFE_PLANTS = Set.of(
             Material.SHORT_GRASS, Material.FERN, Material.DEAD_BUSH, Material.DANDELION, Material.POPPY);
@@ -99,7 +100,8 @@ public record MomentSettings(
                 40, 8, 20, 47, true, true, SAFE_PLANTS,
                 Particle.SPLASH, 3, Particle.ANGRY_VILLAGER, 2, Particle.POOF, 5,
                 true, 15, 10, 40,
-                Map.of(Material.STICK, 45, Material.BONE, 30, Material.RABBIT, 15, Material.LEATHER_BOOTS, 10));
+                Map.of(ItemRef.vanilla(Material.STICK), 45, ItemRef.vanilla(Material.BONE), 30,
+                        ItemRef.vanilla(Material.RABBIT), 15, ItemRef.vanilla(Material.LEATHER_BOOTS), 10));
     }
 
     private static boolean bool(ConfigurationSection section, String key, boolean fallback) {
@@ -161,21 +163,31 @@ public record MomentSettings(
         return parsed.isEmpty() ? new LinkedHashSet<>(fallback) : parsed;
     }
 
-    private static Map<Material, Integer> loot(ConfigurationSection section, Logger logger, Map<Material, Integer> fallback) {
-        ConfigurationSection loot = section == null ? null : section.getConfigurationSection("dig-loot");
-        if (loot == null) {
-            return fallback;
-        }
-        Map<Material, Integer> parsed = new LinkedHashMap<>();
-        for (String key : loot.getKeys(false)) {
-            Material material = Material.matchMaterial(key.trim().toUpperCase(Locale.ROOT));
-            int weight = loot.getInt(key);
-            if (material == null || !material.isItem() || material.isAir() || weight <= 0) {
-                logger.warning("Ignoring invalid moments.dig-loot entry: " + key);
-            } else {
-                parsed.put(material, weight);
+    private static Map<ItemRef, Integer> loot(ConfigurationSection section, Logger logger, Map<ItemRef, Integer> fallback) {
+        Object loot = section == null ? null : section.get("dig-loot");
+        if (loot == null) return fallback;
+        Map<ItemRef, Integer> parsed = new LinkedHashMap<>();
+        if (loot instanceof List<?> entries) {
+            for (Object entry : entries) {
+                if (entry instanceof Map<?, ?> values && ItemRef.yamlToken(values.get("item")) != null)
+                    addLoot(parsed, ItemRef.yamlToken(values.get("item")), values.get("weight"), logger);
+                else logger.warning("Each moments.dig-loot entry must contain item and weight");
             }
+        } else if (loot instanceof ConfigurationSection values) {
+            values.getValues(false).forEach((id, weight) -> addLoot(parsed, id, weight, logger));
+        } else logger.warning("moments.dig-loot must be an item/weight list or a legacy material map");
+        return parsed;
+    }
+
+    private static void addLoot(Map<ItemRef, Integer> loot, String id, Object raw, Logger logger) {
+        ItemRef item = CompanionConfig.parseItem(id, logger);
+        if (item == null) return;
+        if (!(raw instanceof Number weight) || !Double.isFinite(weight.doubleValue())
+                || weight.doubleValue() <= 0 || weight.doubleValue() > Integer.MAX_VALUE
+                || weight.doubleValue() != weight.intValue()) {
+            logger.warning("Ignoring invalid moments.dig-loot weight: " + id);
+            return;
         }
-        return parsed.isEmpty() ? fallback : parsed;
+        loot.put(item, weight.intValue());
     }
 }

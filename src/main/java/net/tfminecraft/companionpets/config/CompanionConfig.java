@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.logging.Logger;
 
 import org.bukkit.Material;
+import net.tfminecraft.companionpets.item.ItemRef;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.EntityType;
@@ -36,7 +37,9 @@ public final class CompanionConfig {
     private final double awayRate;
     private final double followTeleportBlocks;
     private final double cryIntervalSeconds;
-    private final Material kennel;
+    private final ItemRef kennel;
+    private final Material kennelBlock;
+    private final PetItems items;
     private final Map<String, PetTypeDef> types;
     private final Map<Trick, CustomTrick> customTricks;
     private final BellySettings belly;
@@ -60,7 +63,9 @@ public final class CompanionConfig {
             double awayRate,
             double followTeleportBlocks,
             double cryIntervalSeconds,
-            Material kennel,
+            ItemRef kennel,
+            Material kennelBlock,
+            PetItems items,
             Map<String, PetTypeDef> types,
             Map<Trick, CustomTrick> customTricks,
             BellySettings belly) {
@@ -76,6 +81,8 @@ public final class CompanionConfig {
         this.followTeleportBlocks = followTeleportBlocks;
         this.cryIntervalSeconds = cryIntervalSeconds;
         this.kennel = kennel;
+        this.kennelBlock = kennelBlock;
+        this.items = items;
         this.types = types;
         this.customTricks = customTricks;
         this.belly = belly;
@@ -158,10 +165,20 @@ public final class CompanionConfig {
         double cry = num(logger, presence, "cry-interval-seconds", 45);
 
         ConfigurationSection items = config.getConfigurationSection("items");
-        Material kennel = material(items, "kennel", Material.BARREL, plugin.getLogger());
+        ItemRef kennel = item(items, "kennel", ItemRef.vanilla(Material.BARREL), logger);
+        Material kennelBlock = material(items, "kennel-block", kennel == null || kennel.material() == null ? Material.BARREL : kennel.material(), logger);
+        if (!kennelBlock.isBlock() || kennelBlock.isAir()) {
+            logger.warning("items.kennel-block must be a block; using BARREL");
+            kennelBlock = Material.BARREL;
+        }
+        PetItems interactionItems = PetItems.read(items, PetItems.defaults(), logger);
+        if (PetItems.has(items, "brush") && !PetItems.has(items, "brushes")) {
+            interactionItems = new PetItems(interactionItems.foods(), interactionItems.treats(), interactionItems.medicines(),
+                    PetItems.singleton(items.get("brush"), logger), interactionItems.toys());
+        }
         boolean mythic = plugin.getServer().getPluginManager().isPluginEnabled("MythicMobs");
         Map<Trick, CustomTrick> custom = CustomTrick.read(config.getConfigurationSection("custom-tricks"), logger);
-        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), mythic, plugin.getLogger(), custom);
+        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), mythic, plugin.getLogger(), custom, interactionItems);
         return new CompanionConfig(
                 careSettings,
                 playSettings,
@@ -175,12 +192,14 @@ public final class CompanionConfig {
                 teleport,
                 cry,
                 kennel,
+                kennelBlock,
+                interactionItems,
                 types,
                 custom,
                 BellySettings.read(config.getConfigurationSection("moments.belly-up"), logger));
     }
 
-    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom) {
+    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom, PetItems globalItems) {
         Map<String, PetTypeDef> types = new LinkedHashMap<>();
         if (pets == null) {
             return types;
@@ -208,11 +227,19 @@ public final class CompanionConfig {
                 logger.warning("Skipping pet type " + id + " because it has no entity or mythic-mob");
                 continue;
             }
-            Material egg = material(section, "egg", Material.EGG, logger);
+            ItemRef egg = parseItem(ItemRef.yamlToken(section.get("egg", "EGG")), logger);
+            if (egg == null) {
+                logger.warning("Skipping pet type " + id + " because its egg is invalid");
+                continue;
+            }
             Integer eggCustomModelData = null;
             if (section.contains("egg-custom-model-data")) {
                 if (!section.isInt("egg-custom-model-data") || section.getInt("egg-custom-model-data") < 0) {
                     logger.warning("Skipping pet type " + id + " because egg-custom-model-data must be a nonnegative integer");
+                    continue;
+                }
+                if (egg.kind() != ItemRef.Kind.VANILLA) {
+                    logger.warning("Skipping pet type " + id + ": egg-custom-model-data is only for vanilla eggs; use the custom item's ID instead");
                     continue;
                 }
                 eggCustomModelData = section.getInt("egg-custom-model-data");
@@ -243,35 +270,13 @@ public final class CompanionConfig {
                 logger.warning("Pet " + id + " will use its vanilla body: " + ex.getMessage());
                 appearance = PetAppearance.VANILLA;
             }
-            ConfigurationSection care = section.getConfigurationSection("care");
-            Map<Material, Double> foods = new LinkedHashMap<>();
-            ConfigurationSection foodSection = care == null ? null : care.getConfigurationSection("foods");
-            if (foodSection != null) {
-                for (String foodId : foodSection.getKeys(false)) {
-                    Material food = parseMaterial(foodId, logger);
-                    if (food != null) {
-                        foods.put(food, foodSection.getDouble(foodId));
-                    }
-                }
-            }
-            Material favorite = care == null ? null : parseMaterial(care.getString("favorite"), logger);
-            if (favorite != null && !foods.containsKey(favorite)) {
-                foods.put(favorite, 30.0);
-            }
-            Material medicine = care == null ? Material.HONEY_BOTTLE : material(care, "medicine", Material.HONEY_BOTTLE, logger);
-            List<Material> toys = new ArrayList<>();
-            for (String toyId : section.getStringList("toys")) {
-                Material toy = parseMaterial(toyId, logger);
-                if (toy != null && !toys.contains(toy)) {
-                    toys.add(toy);
-                }
-            }
+            PetItems petItems = PetItems.forPet(section, globalItems, logger);
             if (section.contains("animations") || section.contains("trick-animations")) {
                 logger.warning("Pet " + id + ": move animation mappings to appearance.animations");
             }
             boolean duplicateEgg = false;
             for (PetTypeDef existing : types.values()) {
-                if (existing.egg() == egg && Objects.equals(existing.eggCustomModelData(), eggCustomModelData)) {
+                if (existing.egg().equals(egg) && Objects.equals(existing.eggCustomModelData(), eggCustomModelData)) {
                     logger.warning("Skipping pet type " + id + " because its egg matches " + existing.id());
                     duplicateEgg = true;
                     break;
@@ -288,12 +293,48 @@ public final class CompanionConfig {
                     eggCustomModelData,
                     sexMode,
                     appearance,
-                    Collections.unmodifiableMap(foods),
-                    favorite,
-                    medicine,
-                    List.copyOf(toys), tricks));
+                    petItems, tricks));
         }
         return Collections.unmodifiableMap(types);
+    }
+
+    static Map<ItemRef, Double> readFoods(ConfigurationSection care, Logger logger) {
+        Map<ItemRef, Double> foods = new LinkedHashMap<>();
+        if (care == null) return foods;
+        Object raw = care.get("foods");
+        if (raw instanceof List<?> entries) {
+            for (Object entry : entries) {
+                if (entry instanceof Map<?, ?> values && ItemRef.yamlToken(values.get("item")) != null) {
+                    addFood(foods, ItemRef.yamlToken(values.get("item")), values.get("hunger"), logger);
+                } else logger.warning("Each care.foods entry must contain item and hunger");
+            }
+        } else if (raw instanceof ConfigurationSection section) {
+            // Read literal keys instead of treating dots in item IDs as YAML paths.
+            section.getValues(false).forEach((id, gain) -> addFood(foods, id, gain, logger));
+        } else if (raw != null) logger.warning("care.foods must be an item/hunger list or a legacy material map");
+        return foods;
+    }
+
+    private static void addFood(Map<ItemRef, Double> foods, String id, Object raw, Logger logger) {
+        ItemRef food = parseItem(id, logger);
+        if (food == null) return;
+        if (!(raw instanceof Number number) || !Double.isFinite(number.doubleValue()) || number.doubleValue() < 0) {
+            logger.warning("Skipping food " + id + ": hunger must be a finite nonnegative number");
+            return;
+        }
+        foods.put(food, number.doubleValue());
+    }
+
+    private static ItemRef item(ConfigurationSection section, String path, ItemRef fallback, Logger logger) {
+        if (section == null || !section.contains(path)) return fallback;
+        // Invalid selectors disable the action instead of matching another item.
+        return parseItem(ItemRef.yamlToken(section.get(path)), logger);
+    }
+
+    static ItemRef parseItem(String raw, Logger logger) {
+        if (raw == null || raw.isBlank()) return null;
+        try { return ItemRef.parse(raw); }
+        catch (IllegalArgumentException ex) { logger.warning(ex.getMessage()); return null; }
     }
 
     private static Material material(ConfigurationSection section, String path, Material fallback, Logger logger) {
@@ -383,9 +424,13 @@ public final class CompanionConfig {
         return cryIntervalSeconds;
     }
 
-    public Material kennel() {
+    public ItemRef kennel() {
         return kennel;
     }
+
+    public Material kennelBlock() { return kennelBlock; }
+
+    public PetItems items() { return items; }
 
     public Map<String, PetTypeDef> types() {
         return types;
@@ -399,6 +444,10 @@ public final class CompanionConfig {
     }
 
     public PetTypeDef byEgg(ItemStack item) {
+        // Explicit custom identity wins over legacy material + model eggs.
+        for (PetTypeDef type : types.values()) {
+            if (type.egg().kind() != ItemRef.Kind.VANILLA && type.matchesEgg(item)) return type;
+        }
         for (PetTypeDef type : types.values()) {
             if (type.matchesEgg(item)) {
                 return type;
