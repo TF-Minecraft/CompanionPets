@@ -465,6 +465,15 @@ Medicine remains an immediate boost (`care.medicine-health-bump`), but is no
 longer required for regeneration. Sick/weakened pets resume play once fully
 recovered; healthy pets with missing health can play once health is above zero.
 
+For a server where pets need less frequent care, the optional
+[relaxed care preset](config-presets/relaxed-care.yml) records the values used on
+TF Dev. Copy its values into the matching sections of your existing config;
+it is a partial preset, so preserve your pet types, models and item selectors.
+Set each existing food entry's `hunger` to 45 as indicated in the preset.
+With these settings, a fully cared-for pet walking near its owner for four
+hours retains about 62 hunger, 75 mood, 62 energy, 80 cleanliness and full
+health. Belly-up chance is 25%, replacing the 100% testing value.
+
 ## Saved data
 
 The plugin stores pets and Pet House ownership in `plugins/CompanionPets/pets.yml`.
@@ -594,7 +603,9 @@ custom tricks in configuration order. Trick inventories have three rows, with
 18 entries per page from slot 0. All nine slots in the third row are reserved
 for navigation; the nineteenth trick starts on the next page.
 Follow is available as a learned trick rather than a separate profile button.
-The Tricks button occupies the middle of the profile's bottom row.
+Direct pet profiles center Call, Tricks, Store and Release across the bottom
+row, without a Pet House back button. Profiles opened from a Pet House retain
+their back button.
 Sex uses white dye for both sexes, with neutral text and no sex symbols.
 
 Name calls own the native MOVE goal and refresh the destination from the owner's
