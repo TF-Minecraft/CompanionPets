@@ -32,7 +32,8 @@ public final class FurniturePetHouses implements Listener {
         try {
             var stackType = Class.forName("dev.lone.itemsadder.api.CustomStack", true, provider.getClass().getClassLoader());
             var stack = stackType.getMethod("getInstance", String.class).invoke(null, runtime.config().kennelFurniture());
-            if (stack != null && Boolean.TRUE.equals(stackType.getMethod("isComplexFurniture").invoke(stack)))
+            var item = stack == null ? null : stackType.getMethod("getItemStack").invoke(stack);
+            if (item != null && Boolean.TRUE.equals(stackType.getMethod("isComplexFurniture", org.bukkit.inventory.ItemStack.class).invoke(null, item)))
                 return "items.kennel-furniture must use simple ItemsAdder furniture; complex furniture is unsupported";
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
             return "Could not validate items.kennel-furniture against the ItemsAdder simple furniture API";
