@@ -41,6 +41,7 @@ public final class CompanionConfig {
     private final double cryIntervalSeconds;
     private final ItemRef kennel;
     private final Material kennelBlock;
+    private final String kennelFurniture;
     private final PetItems items;
     private final Map<String, PetTypeDef> types;
     private final Map<Trick, CustomTrick> customTricks;
@@ -68,6 +69,7 @@ public final class CompanionConfig {
             double cryIntervalSeconds,
             ItemRef kennel,
             Material kennelBlock,
+            String kennelFurniture,
             PetItems items,
             Map<String, PetTypeDef> types,
             Map<Trick, CustomTrick> customTricks,
@@ -87,6 +89,7 @@ public final class CompanionConfig {
         this.cryIntervalSeconds = cryIntervalSeconds;
         this.kennel = kennel;
         this.kennelBlock = kennelBlock;
+        this.kennelFurniture = kennelFurniture;
         this.items = items;
         this.types = types;
         this.customTricks = customTricks;
@@ -177,6 +180,15 @@ public final class CompanionConfig {
             kennelBlock = Material.BARREL;
         }
         PetItems interactionItems = PetItems.read(items, PetItems.defaults(), logger);
+        String kennelFurniture = null;
+        if (PetItems.has(items, "kennel-furniture")) {
+            ItemRef furniture = ItemRef.parse(ItemRef.yamlToken(items.get("kennel-furniture")));
+            if (furniture.kind() != ItemRef.Kind.ITEMSADDER)
+                throw new IllegalArgumentException("items.kennel-furniture must be an ItemsAdder namespaced ID");
+            kennelFurniture = furniture.id();
+            if (kennel == null || !kennel.equals(furniture))
+                throw new IllegalArgumentException("items.kennel must match items.kennel-furniture");
+        }
         if (PetItems.has(items, "brush") && !PetItems.has(items, "brushes")) {
             interactionItems = new PetItems(interactionItems.foods(), interactionItems.treats(), interactionItems.medicines(),
                     PetItems.singleton(items.get("brush"), logger), interactionItems.toys());
@@ -200,6 +212,7 @@ public final class CompanionConfig {
                 cry,
                 kennel,
                 kennelBlock,
+                kennelFurniture,
                 interactionItems,
                 types,
                 custom,
@@ -453,6 +466,7 @@ public final class CompanionConfig {
     }
 
     public Material kennelBlock() { return kennelBlock; }
+    public String kennelFurniture() { return kennelFurniture; }
 
     public PetItems items() { return items; }
 

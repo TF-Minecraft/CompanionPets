@@ -132,7 +132,7 @@ class ItemConfigTest {
         yaml.loadFromString("""
                 items:
                   brush: m.pets.caring_item
-                  kennel: 'ia.tfmc:shelter_token'
+                  kennel: 'ia.tfmc:pet_house_token'
                   kennel-block: BARREL
                 pets:
                   wolf:
@@ -161,7 +161,7 @@ class ItemConfigTest {
         var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
         assertEquals(3, config.types().size());
         assertEquals(java.util.List.of(ItemRef.parse("m.pets.caring_item")), config.items().brushes());
-        assertEquals(ItemRef.parse("ia.tfmc:shelter_token"), config.kennel());
+        assertEquals(ItemRef.parse("ia.tfmc:pet_house_token"), config.kennel());
         assertEquals(org.bukkit.Material.BARREL, config.kennelBlock());
         assertEquals(java.util.List.of(ItemRef.parse("m.pets.meat_treat")), config.type("beagle").treats());
         assertEquals(java.util.List.of(ItemRef.parse("ia.tfmc:pet_medicine")), config.type("beagle").medicines());

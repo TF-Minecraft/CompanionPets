@@ -71,6 +71,30 @@ final class PetRoaming {
         attend(pet, owner, now, returnOrder);
     }
 
+    void returnFromFetch(Pet pet, Player owner, double speed) {
+        attend(pet, owner, System.currentTimeMillis(), PetOrder.FOLLOW);
+        attention.get(pet.id()).until = System.currentTimeMillis() + 120_000L;
+        attention.get(pet.id()).fetchReturn = true;
+        attention.get(pet.id()).speed = speed;
+        if (runtime.entity(pet) instanceof Mob body) tickAttention(pet, body, System.currentTimeMillis());
+    }
+
+    Location destination(Pet pet) {
+        Attention job = attention.get(pet.id());
+        Player owner = job == null ? null : Bukkit.getPlayer(job.ownerId);
+        return owner != null && owner.isOnline() ? owner.getLocation() : null;
+    }
+
+    boolean returningFromFetch(Pet pet) {
+        Attention job = attention.get(pet.id());
+        return job != null && job.fetchReturn;
+    }
+
+    double movementSpeed(Pet pet) {
+        Attention job = attention.get(pet.id());
+        return job == null ? 1.25 : job.speed;
+    }
+
     private void attend(Pet pet, Player owner, long now, PetOrder returnOrder) {
         plans.remove(pet.id());
         if (runtime.entity(pet) instanceof Mob body) {
@@ -100,7 +124,7 @@ final class PetRoaming {
         PetFx.sit(body, false);
         PetFx.lie(body, false);
         if (job.waitUntil == 0 && body.getLocation().distanceSquared(owner.getLocation()) > 4.0) {
-            body.getPathfinder().moveTo(owner.getLocation(), 1.25);
+            body.getPathfinder().moveTo(owner.getLocation(), job.speed);
         } else {
             if (job.returnOrder != null) {
                 attention.remove(pet.id());
@@ -122,15 +146,16 @@ final class PetRoaming {
 
     private void restorePosture(Pet pet, Mob body, PetOrder order) {
         pet.order(order); pet.staying(order == PetOrder.STAY);
-        pet.activity(order == PetOrder.LAY ? Activity.SLEEPING : Activity.NONE);
+        pet.activity(Activity.NONE);
         PetFx.lie(body, order == PetOrder.LAY);
         if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT);
-        sleep.accept(body, order == PetOrder.LAY);
+        sleep.accept(body, false);
         if (order == PetOrder.FOLLOW) { PetMotion.stop(body); body.setAware(true); }
+        else if (order == PetOrder.SIT || order == PetOrder.LAY) PostureNavigationGoal.hold(runtime, pet, body);
         else PetMotion.hold(body);
         var type = runtime.config().type(pet.typeId());
         if (type != null) runtime.visual().update(body, type,
-                order == PetOrder.LAY ? PetAnimation.SLEEP : order == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE);
+                order == PetOrder.LAY ? PetAnimation.LIE : order == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE);
         runtime.store().save();
     }
 
@@ -219,6 +244,12 @@ final class PetRoaming {
     }
 
     void cancel(Pet pet) { plans.remove(pet.id()); cancelAttention(pet); }
+    void cancelWithPosture(Pet pet) {
+        Attention job = attention.get(pet.id());
+        cancel(pet);
+        if (job != null && job.returnOrder != null && runtime.entity(pet) instanceof Mob body)
+            restorePosture(pet, body, job.returnOrder);
+    }
     void cancelPlan(Pet pet) { plans.remove(pet.id()); }
 
     private void cancelAttention(Pet pet) {
@@ -262,8 +293,10 @@ final class PetRoaming {
     }
 
     private static final class Attention {
+        private boolean fetchReturn;
+        private double speed = 1.25;
         private final UUID ownerId;
-        private final long until;
+        private long until;
         private final PetOrder returnOrder;
         private long waitUntil;
         private boolean greeted;

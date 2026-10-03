@@ -24,6 +24,10 @@ public final class PetMotion {
     };
 
     public static void stop(Mob body) {
+        if (net.tfminecraft.companionpets.behavior.WaterEscape.needed(body)) {
+            net.tfminecraft.companionpets.behavior.WaterEscape.swim(body, null);
+            return;
+        }
         body.getPathfinder().stopPathfinding();
         resetNative(body);
         var velocity = body.getVelocity();
@@ -33,7 +37,7 @@ public final class PetMotion {
 
     public static void hold(Mob body) {
         stop(body);
-        body.setAware(false);
+        if (!net.tfminecraft.companionpets.behavior.WaterEscape.needed(body)) body.setAware(false);
     }
 
     public static boolean resetNative(Mob body) {

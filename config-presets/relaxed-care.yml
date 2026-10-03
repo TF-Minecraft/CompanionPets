@@ -1,0 +1,51 @@
+# Optional numeric overrides for a low-maintenance roleplay server.
+# Copy these values into the matching sections of your existing config.yml.
+# This is a partial preset, not a complete replacement config.
+# Preserve your pet types, models, item IDs, custom tricks and unrelated values.
+# For each existing items.foods entry, set hunger to 45; keep its item selector.
+care:
+  hunger-minutes-to-critical: 480
+  mood-minutes-to-critical: 720
+  energy-minutes-to-critical: 480
+  dirty-every-minutes: 120
+  dirty-loss: 10
+  minutes-until-unwell: 30
+  minutes-until-sick: 60
+  decay-while-stored: false
+  death-on-neglect: false
+  play-energy-cost: 1
+  sleeping-hunger-multiplier: 0.25
+  health-loss-per-minute: 0.5
+  health-regen-per-minute: 20
+  medicine-health-bump: 40
+  bond-loss-per-minute: 0.05
+  wake-mood-penalty: 2
+  critical-sound-seconds: 60
+  overfeed-mood-penalty: 2
+  overfeed-health-penalty: 0
+training:
+  reward-window-seconds: 5
+  attempt-energy-cost: 2
+  attempt-hunger-cost: 1
+  attempt-mood-cost: 0.5
+  rest-seconds: 45
+presence:
+  away-rate: 0.1
+  cry-interval-seconds: 180
+moments:
+  belly-up:
+    chance: 25
+    idle-seconds: 8
+  low-mood-bark-chance: 15
+  juvenile-mischief-chance: 15
+  adult-mischief-chance: 3
+  juvenile-bark-chance: 10
+  adult-bark-chance: 20
+social:
+  encounter-cooldown-seconds: 90
+  bark-seconds: 4
+  calm-cooldown-seconds: 120
+  territorial-bark-chance: 20
+  same-owner-bark-chance: 5
+  chase-chance: 30
+  calm-clicks: 2

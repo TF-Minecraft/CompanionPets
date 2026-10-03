@@ -31,7 +31,7 @@ public final class Locomotion {
         if (illness == Illness.WEAKENED || health <= 0.0) {
             return Mode.LIE;
         }
-        if (activity == Activity.SLEEPING || order == PetOrder.LAY) {
+        if (activity == Activity.SLEEPING) {
             return Mode.SLEEP;
         }
         if (activity == Activity.PLAYING && fetching) {
@@ -44,6 +44,9 @@ public final class Locomotion {
             return Mode.SIT;
         }
         if (energy < 25.0) {
+            return Mode.LIE;
+        }
+        if (order == PetOrder.LAY) {
             return Mode.LIE;
         }
         if (hunger < 25.0) {

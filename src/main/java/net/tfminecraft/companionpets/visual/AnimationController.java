@@ -30,6 +30,8 @@ public final class AnimationController {
 
     public void update(PetAnimation next) {
         if (!next.pose()) throw new IllegalArgumentException("Expected a pose: " + next);
+        if (action == PetAnimation.SHAKE && (next == PetAnimation.WALK || next == PetAnimation.RUN
+                || next == PetAnimation.CROUCH || next == PetAnimation.FLY || next == PetAnimation.HOVER)) cancelAction();
         if (next != pose && (next == PetAnimation.SLEEP || next == PetAnimation.LIE
                 || next == PetAnimation.SWIM || next == PetAnimation.JUMP || next == PetAnimation.FALL)) cancelAction();
         pose = next;

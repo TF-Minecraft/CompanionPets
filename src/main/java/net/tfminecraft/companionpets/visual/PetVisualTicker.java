@@ -38,9 +38,15 @@ public final class PetVisualTicker implements Runnable {
         for (Pet pet : runtime.store().all()) {
             if (pet.stored() || pet.dead()) continue;
             PetTypeDef type = runtime.config().type(pet.typeId());
-            if (type == null || !type.appearance().modeled() || !(runtime.entity(pet) instanceof Mob body)) continue;
+            if (type == null || !(runtime.entity(pet) instanceof Mob body)) continue;
             UUID id = body.getUniqueId();
             loaded.add(id);
+            boolean fetching = pet.fetch() != null;
+            if (body instanceof Wolf wolf) {
+                if (fetching) net.tfminecraft.companionpets.integration.WolfShake.defer(wolf);
+                else net.tfminecraft.companionpets.integration.WolfShake.restore(wolf);
+            }
+            if (!type.appearance().modeled()) continue;
             Sample previous = samples.get(id);
             Location at = body.getLocation();
             double speed = 0;
@@ -62,9 +68,10 @@ public final class PetVisualTicker implements Runnable {
                     body.getVelocity().getY(), speed, type.appearance().runSpeed(), previous == null ? null : previous.pose);
             if (body instanceof Cat && body.isSneaking()
                     && (pose == PetAnimation.WALK || pose == PetAnimation.RUN)) pose = PetAnimation.CROUCH;
+            if (fetching) runtime.visual().cancelAction(body);
             runtime.visual().update(body, type, pose);
-            if (runtime.visual().holdsMovement(body)) net.tfminecraft.companionpets.integration.PetMotion.stop(body);
-            boolean shaking = body instanceof Wolf wolf && net.tfminecraft.companionpets.integration.WolfShake.shaking(wolf);
+            if (!fetching && runtime.visual().holdsMovement(body)) net.tfminecraft.companionpets.integration.PetMotion.stop(body);
+            boolean shaking = !fetching && body instanceof Wolf wolf && net.tfminecraft.companionpets.integration.WolfShake.shaking(wolf);
             if (shaking && (previous == null || !previous.shaking)) {
                 runtime.visual().play(body, type, "SHAKE");
             }
@@ -77,6 +84,7 @@ public final class PetVisualTicker implements Runnable {
             samples.put(id, new Sample(at, body.getTicksLived(), pose, shaking));
         }
         samples.keySet().retainAll(loaded);
+        net.tfminecraft.companionpets.integration.WolfShake.retain(loaded);
         runtime.visual().retain(loaded);
     }
 

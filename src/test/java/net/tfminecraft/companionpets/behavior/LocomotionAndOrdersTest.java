@@ -23,6 +23,8 @@ class LocomotionAndOrdersTest {
         assertEquals(Locomotion.Mode.STAY, choose(Illness.NONE, 100, 100, 100, Activity.NONE, false, false, PetOrder.FOLLOW, true));
         assertEquals(Locomotion.Mode.FOLLOW, choose(Illness.NONE, 100, 100, 100, Activity.NONE, false, false, PetOrder.FOLLOW, false));
         assertEquals(Locomotion.Mode.SLEEP, choose(Illness.NONE, 100, 10, 100, Activity.SLEEPING, false, false, PetOrder.FOLLOW, false));
+        assertEquals(Locomotion.Mode.LIE, choose(Illness.NONE, 100, 100, 100, Activity.NONE, false, false, PetOrder.LAY, false));
+        assertEquals(Locomotion.Mode.SLEEP, choose(Illness.NONE, 100, 10, 100, Activity.SLEEPING, false, false, PetOrder.LAY, false));
         assertEquals(Locomotion.Mode.FETCH, choose(Illness.NONE, 100, 100, 100, Activity.PLAYING, true, false, PetOrder.FOLLOW, false));
     }
 

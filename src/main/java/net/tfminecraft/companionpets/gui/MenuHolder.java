@@ -19,12 +19,12 @@ public final class MenuHolder implements InventoryHolder {
     private Inventory inventory;
     private int page;
     private int pages = 1;
-    private boolean shelterBack;
-    private int shelterPage;
-    public boolean shelterBack() { return shelterBack; }
-    public void shelterBack(boolean value) { shelterBack = value; }
-    public int shelterPage() { return shelterPage; }
-    public void shelterPage(int value) { shelterPage = Math.max(0, value); }
+    private boolean petHouseBack;
+    private int petHousePage;
+    public boolean petHouseBack() { return petHouseBack; }
+    public void petHouseBack(boolean value) { petHouseBack = value; }
+    public int petHousePage() { return petHousePage; }
+    public void petHousePage(int value) { petHousePage = Math.max(0, value); }
     public int pages() { return pages; }
     public void pages(int pages) { this.pages = Math.max(1, pages); }
     private boolean navigating;

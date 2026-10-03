@@ -112,7 +112,7 @@ class NeedClockTest {
     }
 
     @Test
-    void unwellClearsWhenTheCauseIsFixedAndSickDoesNot() {
+    void unwellClearsAndSickRecoversNaturallyWhenPhysicalNeedsAreFixed() {
         Pet unwell = criticalPet();
         NeedClock.advance(unwell, input(Presence.NEAR, false, false, false, true, minutes(3)));
         assertEquals(Illness.UNWELL, unwell.illness());
@@ -124,9 +124,11 @@ class NeedClockTest {
         Pet sick = criticalPet();
         NeedClock.advance(sick, input(Presence.NEAR, false, false, false, true, minutes(6)));
         assertEquals(Illness.SICK, sick.illness());
+        double before = sick.need(Need.HEALTH);
         sick.need(Need.HUNGER, 80);
         NeedClock.advance(sick, input(Presence.NEAR, false, false, false, true, minutes(1)));
         assertEquals(Illness.SICK, sick.illness());
+        assertEquals(before + CareSettings.defaults().healthRegenPerMinute(), sick.need(Need.HEALTH), 0.001);
     }
 
     @Test
@@ -233,6 +235,74 @@ class NeedClockTest {
         pet.need(Need.MOOD, 10);
         NeedClock.advance(pet, input(Presence.NEAR, false, false, false, true, minutes(5)));
         assertEquals(10.0, pet.need(Need.MOOD), 0.001);
+    }
+
+    @Test
+    void healthyPetWithZeroHealthRecoversWithoutMedicineOrMood() {
+        Pet pet = pet();
+        pet.need(Need.HEALTH, 0);
+        pet.need(Need.MOOD, 0);
+        NeedClock.advance(pet, input(Presence.NEAR, false, false, false, true, minutes(1)));
+        assertEquals(20, pet.need(Need.HEALTH), 0.001);
+        assertEquals(Illness.NONE, pet.illness());
+    }
+
+    @Test void restingSickPetWithLowEnergyHealsBeforeNeglectCanKillIt() {
+        Pet pet = pet();
+        pet.illness(Illness.SICK); pet.need(Need.HEALTH, 10); pet.need(Need.ENERGY, 0);
+        var yaml = new org.bukkit.configuration.file.YamlConfiguration();
+        yaml.set("care.death-on-neglect", true);
+        org.mockbukkit.mockbukkit.MockBukkit.mock();
+        try {
+            var care = net.tfminecraft.companionpets.config.CompanionConfig.load(
+                    org.mockbukkit.mockbukkit.MockBukkit.createMockPlugin(), yaml).care();
+            NeedClock.advance(pet, new CareInput(Presence.NEAR, false, false, true, true, true, minutes(1), care, 0.25));
+        } finally { org.mockbukkit.mockbukkit.MockBukkit.unmock(); }
+        assertEquals(30, pet.need(Need.HEALTH), 0.001);
+        assertTrue(!pet.dead());
+    }
+
+    @Test
+    void weakenedPetCanRecoverFullyWithLowMoodAndNoMedicine() {
+        Pet pet = pet();
+        pet.need(Need.HEALTH, 0);
+        pet.need(Need.MOOD, 0);
+        pet.illness(Illness.WEAKENED);
+        for (int i = 0; i < 5; i++) {
+            NeedClock.advance(pet, input(Presence.NEAR, false, false, true, true, minutes(1)));
+        }
+        assertEquals(100, pet.need(Need.HEALTH), 0.001);
+        assertEquals(Illness.NONE, pet.illness());
+    }
+
+    @Test
+    void feedingAndBrushingHealOnlyTheNeedPointsActuallyRestored() {
+        Pet pet = pet();
+        pet.need(Need.HEALTH, 0);
+        pet.need(Need.HUNGER, 80);
+        HealthRecovery.improve(pet, Need.HUNGER, 115);
+        assertEquals(5, pet.need(Need.HEALTH), 0.001);
+        HealthRecovery.improve(pet, Need.HUNGER, 120);
+        HealthRecovery.improve(pet, Need.CLEANLINESS, 100);
+        assertEquals(5, pet.need(Need.HEALTH), 0.001);
+        pet.need(Need.CLEANLINESS, 0);
+        HealthRecovery.improve(pet, Need.CLEANLINESS, 100);
+        assertEquals(30, pet.need(Need.HEALTH), 0.001);
+    }
+
+    @Test
+    void missingHealthWithoutIllnessStillFreezesOfflineAndWithCriticalPhysicalNeeds() {
+        for (Need need : List.of(Need.HUNGER, Need.CLEANLINESS, Need.ENERGY)) {
+            Pet pet = pet();
+            pet.need(Need.HEALTH, 40);
+            pet.need(need, 0);
+            NeedClock.advance(pet, input(Presence.NEAR, false, false, false, true, minutes(1)));
+            assertEquals(40, pet.need(Need.HEALTH), 0.001);
+        }
+        Pet frozen = pet();
+        frozen.need(Need.HEALTH, 0);
+        NeedClock.advance(frozen, input(Presence.FROZEN, false, false, false, false, minutes(1)));
+        assertEquals(0, frozen.need(Need.HEALTH));
     }
 
     private static Pet criticalPet() {

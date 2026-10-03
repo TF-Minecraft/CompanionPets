@@ -1,18 +1,24 @@
 package net.tfminecraft.companionpets.play;
 
 import java.util.UUID;
+import java.util.Set;
+import java.util.HashSet;
 
 public final class FetchJob {
     private final String toy;
-    private final boolean favorite;
+    private final UUID id = UUID.randomUUID();
+    private final UUID throwerId;
+    private final Set<UUID> favorites = new HashSet<>();
+    private final java.util.Map<UUID, Double> speeds = new java.util.HashMap<>();
+    private UUID carrierId;
     private FetchPhase phase;
     private UUID projectileId;
     private UUID itemId;
     private long missingSince;
 
-    public FetchJob(String toy, boolean favorite) {
+    public FetchJob(String toy, UUID throwerId) {
         this.toy = toy;
-        this.favorite = favorite;
+        this.throwerId = throwerId;
         this.phase = FetchPhase.AIR;
     }
 
@@ -20,8 +26,23 @@ public final class FetchJob {
         return toy;
     }
 
-    public boolean favorite() {
-        return favorite;
+    public UUID id() { return id; }
+    public UUID throwerId() { return throwerId; }
+    public UUID carrierId() { return carrierId; }
+    public void favorite(UUID petId, boolean favorite) {
+        if (favorite) favorites.add(petId); else favorites.remove(petId);
+    }
+    public boolean favorite(UUID petId) { return favorites.contains(petId); }
+
+    public double speed(UUID petId, double initialSpeed) {
+        return speeds.computeIfAbsent(petId, ignored -> initialSpeed);
+    }
+
+    public boolean claim(UUID petId) {
+        if (phase != FetchPhase.GROUND || carrierId != null) return false;
+        carrierId = petId;
+        phase = FetchPhase.CARRY;
+        return true;
     }
 
     public FetchPhase phase() {

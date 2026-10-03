@@ -19,6 +19,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 
 import net.tfminecraft.companionpets.behavior.Locomotion;
 import net.tfminecraft.companionpets.behavior.Rest;
+import net.tfminecraft.companionpets.behavior.WaterEscape;
 import net.tfminecraft.companionpets.care.CareInput;
 import net.tfminecraft.companionpets.care.CareNotice;
 import net.tfminecraft.companionpets.care.DominantNeed;
@@ -32,8 +33,6 @@ import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.pet.Presence;
 import net.tfminecraft.companionpets.play.FavoriteToy;
-import net.tfminecraft.companionpets.play.FetchJob;
-import net.tfminecraft.companionpets.play.FetchPhase;
 import net.tfminecraft.companionpets.session.TrainingSession;
 import net.tfminecraft.companionpets.gui.StatLook;
 import net.tfminecraft.companionpets.text.PetTexts;
@@ -59,6 +58,7 @@ public final class PetTicker implements Runnable {
             care(now, elapsed);
         }
         actions.roaming().tickOwners(now);
+        actions.fetchActions().tick(now);
         actions.social().tick(now);
         move(now);
         watchTraining(now);
@@ -112,7 +112,8 @@ public final class PetTicker implements Runnable {
                             pet.order(),
                             pet.staying());
             boolean withOwner = !pet.stored() && online && distance <= runtime.config().ownerNearRadius();
-            if (!pet.stored() && Rest.shouldLieDown(
+            boolean swimming = body instanceof Mob mob && WaterEscape.needed(mob);
+            if (!pet.stored() && !swimming && Rest.shouldLieDown(
                     pet.need(Need.ENERGY),
                     pet.activity(),
                     pet.fetch() != null,
@@ -128,10 +129,10 @@ public final class PetTicker implements Runnable {
             }
             List<CareNotice> notices = NeedClock.advance(pet, new CareInput(
                     presence,
-                    mode == Locomotion.Mode.FOLLOW,
+                    swimming || mode == Locomotion.Mode.FOLLOW,
                     pet.activity() == Activity.PLAYING,
-                    pet.activity() == Activity.SLEEPING || mode == Locomotion.Mode.SLEEP,
-                    Rest.recoversEnergy(mode),
+                    !swimming && (pet.activity() == Activity.SLEEPING || mode == Locomotion.Mode.SLEEP),
+                    !swimming && Rest.recoversEnergy(mode),
                     withOwner,
                     elapsed,
                     runtime.config().care(),
@@ -221,6 +222,17 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
+            if (WaterEscape.needed(mob)) {
+                if (pet.fetch() == null && pet.activity() != Activity.ATTENDING) {
+                    actions.roaming().cancelWithPosture(pet);
+                    actions.clearInteractions(pet);
+                }
+                actions.markSleep(mob, false);
+                runtime.visual().cancelAction(mob);
+                WaterEscape.swim(mob, null);
+                WaterNavigationGoal.ensure(runtime, pet, mob, actions);
+                continue;
+            }
             Locomotion.Mode mode = Locomotion.choose(
                     pet.illness(),
                     pet.need(Need.HEALTH),
@@ -231,8 +243,15 @@ public final class PetTicker implements Runnable {
                     now < pet.forcedSitUntilMillis(),
                     pet.order(),
                     pet.staying());
+            if (mode == Locomotion.Mode.FOLLOW && pet.activity() != Activity.ATTENDING
+                    && !runtime.followingAllowed(pet, owner)) mode = Locomotion.Mode.STAY;
+            if (mode == Locomotion.Mode.FETCH) {
+                actions.fetchActions().navigate(pet, mob);
+                express(pet, mob, owner, mode, now);
+                continue;
+            }
             actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
-            if (mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP) PetFx.stopLooking(mob);
+            if (mode == Locomotion.Mode.SLEEP || pet.activity() == Activity.SLEEPING) PetFx.stopLooking(mob);
             if (actions.moments().tickBelly(pet, mob, owner)) {
                 PetFx.stopLooking(mob);
                 continue;
@@ -244,11 +263,12 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             if (held && mob.isAware()) actions.clearInteractions(pet);
-            mob.setAware(!held);
             if (held) {
                 actions.roaming().cancel(pet);
-                net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
-            }
+                if ((mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.LIE) && pet.activity() != Activity.SLEEPING)
+                    PostureNavigationGoal.hold(runtime, pet, mob);
+                else net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+            } else mob.setAware(true);
             if (!held && actions.roaming().tickAttention(pet, mob, now)) {
                 continue;
             }
@@ -259,12 +279,7 @@ public final class PetTicker implements Runnable {
                 actions.roaming().cancelPlan(pet);
                 continue;
             }
-            if (mode == Locomotion.Mode.FETCH) {
-                FetchNavigationGoal.ensure(runtime, pet, mob,
-                        () -> stepFetch(pet, mob, Bukkit.getPlayer(pet.ownerId()), System.currentTimeMillis()));
-            } else {
-                stepMode(pet, mob, owner, mode, now);
-            }
+            stepMode(pet, mob, owner, mode, now);
             express(pet, mob, owner, mode, now);
             actions.moments().tick(pet, mob, owner, mode, now);
         }
@@ -279,6 +294,10 @@ public final class PetTicker implements Runnable {
                 PetFx.lie(mob, false);
                 if (!sameWorld) {
                     mob.getPathfinder().stopPathfinding();
+                    return;
+                }
+                if (!runtime.followingAllowed(pet, owner)) {
+                    net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
                     return;
                 }
                 if (pet.illness() == Illness.SICK && now < pet.pauseUntilMillis()) {
@@ -343,65 +362,6 @@ public final class PetTicker implements Runnable {
         }
     }
 
-    private void stepFetch(Pet pet, Mob mob, Player owner, long now) {
-        FetchJob job = pet.fetch();
-        if (job == null) {
-            return;
-        }
-        if (owner == null || !owner.isOnline()) {
-            actions.releaseFetch(pet, null, false);
-            return;
-        }
-        double speed = Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), job.favorite());
-        PetFx.sit(mob, false);
-        PetFx.lie(mob, false);
-        if (job.phase() == FetchPhase.AIR) {
-            Entity projectile = job.projectileId() == null ? null : Bukkit.getEntity(job.projectileId());
-            if (projectile == null) {
-                if (job.missingSince() == 0L) {
-                    job.missingSince(now);
-                } else if (now - job.missingSince() > 1_000L) {
-                    actions.releaseFetch(pet, owner, true);
-                }
-                return;
-            }
-            job.missingSince(0L);
-            mob.getPathfinder().moveTo(projectile.getLocation(), speed);
-            return;
-        }
-        if (job.phase() == FetchPhase.GROUND) {
-            Entity item = job.itemId() == null ? null : Bukkit.getEntity(job.itemId());
-            if (item == null) {
-                actions.releaseFetch(pet, owner, true);
-                return;
-            }
-            if (mob.getLocation().distance(item.getLocation()) < 1.7) {
-                item.remove();
-                job.phase(FetchPhase.CARRY);
-                mob.getPathfinder().stopPathfinding();
-            } else {
-                mob.getPathfinder().moveTo(item.getLocation(), speed);
-            }
-            return;
-        }
-        if (!mob.getWorld().equals(owner.getWorld())) {
-            actions.releaseFetch(pet, owner, false);
-            return;
-        }
-        if (mob.getLocation().distance(owner.getLocation()) < 2.2) {
-            actions.dropPlain(PetRuntime.inFront(owner), job.toy());
-            pet.fetch(null);
-            pet.activity(Activity.NONE);
-            double mood = runtime.config().care().playMoodGain() * (job.favorite() ? runtime.config().care().favoriteMoodMultiplier() : 1.0);
-            pet.need(Need.MOOD, pet.need(Need.MOOD) + mood);
-            pet.need(Need.ENERGY, pet.need(Need.ENERGY) - runtime.config().care().playEnergyCost());
-            PetFx.hearts(mob, job.favorite() ? 6 : 3);
-            mob.getPathfinder().stopPathfinding();
-        } else {
-            mob.getPathfinder().moveTo(owner.getLocation(), speed);
-        }
-    }
-
     private void express(Pet pet, Mob mob, Player owner, Locomotion.Mode mode, long now) {
         boolean critical = pet.causeCritical() || pet.illness() != Illness.NONE;
         if (critical && now >= pet.nextCriticalSoundAtMillis()) {
@@ -446,7 +406,7 @@ public final class PetTicker implements Runnable {
                     && body.getWorld().equals(player.getWorld())
                     && body.getLocation().distance(player.getLocation()) <= runtime.config().training().sessionDistance();
             if (pet == null || pet.stored()) {
-                actions.endTraining(player, pet, "your pet went back to the shelter");
+                actions.endTraining(player, pet, "your pet went back to the Pet House");
             } else if (type == null) {
                 actions.endTraining(player, pet, "your pet type is no longer configured");
             } else if (!holding) {

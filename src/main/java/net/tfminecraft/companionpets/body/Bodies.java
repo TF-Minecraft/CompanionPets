@@ -64,7 +64,7 @@ public final class Bodies {
         }
         visual.apply(entity, type);
         keepPersistent(entity);
-        if (entity instanceof Mob mob) mob.setAware(aware(pet));
+        if (entity instanceof Mob mob) mob.setAware(aware(pet) || net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob));
     }
 
     public UUID readId(Entity entity) {
@@ -91,7 +91,7 @@ public final class Bodies {
         }
         visual.apply(entity, type);
         keepPersistent(entity);
-        if (entity instanceof Mob mob) mob.setAware(aware(pet));
+        if (entity instanceof Mob mob) mob.setAware(aware(pet) || net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob));
     }
 
     private static boolean aware(Pet pet) {

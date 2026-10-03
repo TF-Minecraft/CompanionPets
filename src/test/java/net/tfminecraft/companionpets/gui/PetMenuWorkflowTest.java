@@ -72,11 +72,11 @@ class PetMenuWorkflowTest {
         menus.refreshCare(player, pet);
         assertSame(inventory, holder().getInventory());
         assertEquals(Material.MILK_BUCKET, inventory.getItem(24).getType());
-        assertNotEquals(Material.BARREL, inventory.getItem(PetMenus.STORE_SLOT).getType(),
+        assertNotEquals(Material.BARREL, inventory.getItem(PetMenus.careSlot(PetMenus.STORE_SLOT, false)).getType(),
                 "Stored pet has a placeholder instead of the store action");
     }
 
-    @Test void shelterIncludesOnlyPlayersPetsAndCarriesStablePetIds() {
+    @Test void petHouseIncludesOnlyPlayersPetsAndCarriesStablePetIds() {
         Pet owned = pet("wolf", player.getUniqueId()); pet("wolf", UUID.randomUUID());
         menus.openKennel(player);
         var inventory = holder().getInventory();
@@ -88,7 +88,7 @@ class PetMenuWorkflowTest {
         assertEquals(Set.of(owned.id().toString()), ids);
     }
 
-    @Test void shelterPaginationIncludesEveryPetAndClampsInvalidPages() {
+    @Test void petHousePaginationIncludesEveryPetAndClampsInvalidPages() {
         Set<String> expected = new java.util.HashSet<>();
         for (int i = 0; i < 100; i++) expected.add(pet("wolf", player.getUniqueId()).id().toString());
         Set<String> shown = new java.util.HashSet<>();
@@ -170,7 +170,7 @@ class PetMenuWorkflowTest {
         Pet pet = pet("wolf", player.getUniqueId());
         menus.openCare(player, pet); assertUniformBackground();
         assertEquals(Material.WHITE_DYE, holder().getInventory().getItem(11).getType());
-        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder().getInventory().getItem(39).getType());
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder().getInventory().getItem(40).getType());
         pet.sex(PetSex.MALE); menus.refreshCare(player, pet); assertUniformBackground();
         assertEquals(Material.WHITE_DYE, holder().getInventory().getItem(11).getType());
         menus.openKennel(player); assertUniformBackground();
@@ -246,7 +246,7 @@ class PetMenuWorkflowTest {
         assertEquals(heard + 1, player.getHeardSounds().size());
     }
 
-    @Test void shelterFillsRowsInNameOrderAndReservesTheEntireFooter() {
+    @Test void petHouseFillsRowsInNameOrderAndReservesTheEntireFooter() {
         for (String name : java.util.List.of("Zulu", "Bravo", "Mike", "Alpha", "Golf", "Delta", "Charlie", "Echo", "Hotel", "India", "Foxtrot")) {
             var pet = pet("wolf", player.getUniqueId()); pet.name(name);
         }
@@ -260,38 +260,55 @@ class PetMenuWorkflowTest {
                 .getPersistentDataContainer().has(runtime.petKey(), PersistentDataType.STRING));
     }
 
-    @Test void backAlwaysReturnsToTheParentMenuAndDirectProfilesHaveNoInventedParent() {
+    @Test void directProfileHasFourCenteredActionsAndTricksKeepItsNavigation() {
+        Pet pet = pet("wolf", player.getUniqueId()); pet.stored(false); menus.openCare(player, pet);
+        var inventory = holder().getInventory();
+        assertEquals(Material.COMPASS, inventory.getItem(37).getType());
+        assertEquals(Material.BOOK, inventory.getItem(39).getType());
+        assertEquals(Material.BARREL, inventory.getItem(41).getType());
+        assertEquals(Material.BARRIER, inventory.getItem(43).getType());
+        for (int slot : new int[]{36, 38, 40, 42, 44})
+            assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, inventory.getItem(slot).getType());
+        actions.clickMenu(player, holder(), PetMenus.BACK_SLOT, null, false, false, false);
+        assertEquals(MenuHolder.Kind.CARE, holder().kind());
+        actions.clickMenu(player, holder(), 39, inventory.getItem(39), false, false, false);
+        assertEquals(MenuHolder.Kind.LEARNED, holder().kind());
+        actions.clickMenu(player, holder(), PetMenus.TRICKS_BACK_SLOT, null, false, false, false);
+        assertEquals(MenuHolder.Kind.CARE, holder().kind()); assertFalse(holder().petHouseBack());
+        assertEquals(Material.BOOK, holder().getInventory().getItem(39).getType());
+    }
+
+    @Test void profilesReachedFromPetHouseRetainTheirBackButtonAndTrickParent() {
         Pet pet = pet("wolf", player.getUniqueId()); menus.openCare(player, pet);
-        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder().getInventory().getItem(36).getType());
         menus.openKennel(player);
         actions.clickMenu(player, holder(), 0, holder().getInventory().getItem(0), false, false, false);
-        assertEquals(MenuHolder.Kind.CARE, holder().kind()); assertTrue(holder().shelterBack());
+        assertEquals(MenuHolder.Kind.CARE, holder().kind()); assertTrue(holder().petHouseBack());
         actions.clickMenu(player, holder(), PetMenus.TRICKS_SLOT, null, false, false, false);
         actions.clickMenu(player, holder(), PetMenus.TRICKS_NEXT_SLOT, null, false, false, false);
         assertEquals(1, holder().page());
         actions.clickMenu(player, holder(), PetMenus.TRICKS_BACK_SLOT, null, false, false, false);
-        assertEquals(MenuHolder.Kind.CARE, holder().kind()); assertTrue(holder().shelterBack());
+        assertEquals(MenuHolder.Kind.CARE, holder().kind()); assertTrue(holder().petHouseBack());
         actions.clickMenu(player, holder(), PetMenus.BACK_SLOT, null, false, false, false);
         assertEquals(MenuHolder.Kind.KENNEL, holder().kind());
     }
 
-    @Test void shelterPageSurvivesProfileAndBothTrickMenuRoundTrips() {
+    @Test void petHousePageSurvivesProfileAndBothTrickMenuRoundTrips() {
         for (int i = 0; i < 50; i++) pet("wolf", player.getUniqueId());
         menus.openKennel(player, 1);
         actions.clickMenu(player, holder(), 0, holder().getInventory().getItem(0), false, false, false);
         var selected = runtime.store().get(holder().petId());
-        assertEquals(1, holder().shelterPage());
+        assertEquals(1, holder().petHousePage());
         menus.refreshCare(player, selected);
-        assertEquals(1, holder().shelterPage());
+        assertEquals(1, holder().petHousePage());
         for (boolean training : java.util.List.of(false, true)) {
             if (training) menus.openTricks(player, selected, "saludar");
             else actions.clickMenu(player, holder(), PetMenus.TRICKS_SLOT, null, false, false, false);
             actions.clickMenu(player, holder(), PetMenus.TRICKS_NEXT_SLOT, null, false, false, false);
             assertEquals(1, holder().page());
-            assertEquals(1, holder().shelterPage());
+            assertEquals(1, holder().petHousePage());
             actions.clickMenu(player, holder(), PetMenus.TRICKS_BACK_SLOT, null, false, false, false);
             assertEquals(MenuHolder.Kind.CARE, holder().kind());
-            assertEquals(1, holder().shelterPage());
+            assertEquals(1, holder().petHousePage());
         }
         actions.clickMenu(player, holder(), PetMenus.BACK_SLOT, null, false, false, false);
         assertEquals(MenuHolder.Kind.KENNEL, holder().kind());
@@ -301,7 +318,7 @@ class PetMenuWorkflowTest {
     @Test void menusCancelItemTransfersAndRejectManagementOfSomeoneElsesPet() {
         Pet pet = pet("wolf", UUID.randomUUID()); menus.openCare(player, pet);
         var view = player.getOpenInventory();
-        var click = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, PetMenus.CALL_SLOT,
+        var click = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, PetMenus.careSlot(PetMenus.CALL_SLOT, false),
                 ClickType.LEFT, InventoryAction.PICKUP_ALL);
         listener.onClick(click);
         assertTrue(click.isCancelled()); assertTrue(pet.stored()); assertNull(pet.entityId());

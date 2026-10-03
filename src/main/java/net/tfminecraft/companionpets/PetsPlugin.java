@@ -92,6 +92,7 @@ public class PetsPlugin extends JavaPlugin {
         Bukkit.getScheduler().runTaskLater(this, this::validateProviders, 200L);
         petListener = new PetListener(runtime, actions);
         Bukkit.getPluginManager().registerEvents(petListener, this);
+        new net.tfminecraft.companionpets.listen.FurniturePetHouses(runtime).register();
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
         visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 2L, 2L);
@@ -164,7 +165,7 @@ public class PetsPlugin extends JavaPlugin {
                 case "testpet" -> "testpet <type> [name] - spawn a pet with all compatible tricks learned";
                 case "list" -> "list <player> [pet name] - their pets and read-only pet details";
                 case "find" -> "find <player> [pet name] - show pet locations";
-                case "create" -> "create <player> type=<type> name=<name> [tricks=all] [hunger=100 ...] - create in shelter";
+                case "create" -> "create <player> type=<type> name=<name> [tricks=all] [hunger=100 ...] - create in Pet House";
                 case "egg" -> "egg <type|all> [player] [amount] - give configured eggs";
                 default -> available;
             };
