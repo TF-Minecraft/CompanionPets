@@ -71,9 +71,10 @@ final class PetRoaming {
         attend(pet, owner, now, returnOrder);
     }
 
-    void returnFromFetch(Pet pet, Player owner) {
+    void returnFromFetch(Pet pet, Player owner, double speed) {
         attend(pet, owner, System.currentTimeMillis(), PetOrder.FOLLOW);
         attention.get(pet.id()).until = Long.MAX_VALUE;
+        attention.get(pet.id()).speed = speed;
         if (runtime.entity(pet) instanceof Mob body) tickAttention(pet, body, System.currentTimeMillis());
     }
 
@@ -86,6 +87,11 @@ final class PetRoaming {
     boolean returningFromFetch(Pet pet) {
         Attention job = attention.get(pet.id());
         return job != null && job.until == Long.MAX_VALUE;
+    }
+
+    double movementSpeed(Pet pet) {
+        Attention job = attention.get(pet.id());
+        return job == null ? 1.25 : job.speed;
     }
 
     private void attend(Pet pet, Player owner, long now, PetOrder returnOrder) {
@@ -117,7 +123,7 @@ final class PetRoaming {
         PetFx.sit(body, false);
         PetFx.lie(body, false);
         if (job.waitUntil == 0 && body.getLocation().distanceSquared(owner.getLocation()) > 4.0) {
-            body.getPathfinder().moveTo(owner.getLocation(), 1.25);
+            body.getPathfinder().moveTo(owner.getLocation(), job.speed);
         } else {
             if (job.returnOrder != null) {
                 attention.remove(pet.id());
@@ -285,6 +291,7 @@ final class PetRoaming {
     }
 
     private static final class Attention {
+        private double speed = 1.25;
         private final UUID ownerId;
         private long until;
         private final PetOrder returnOrder;

@@ -407,6 +407,9 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   collects it and returns it to the player who threw it; the others run back
   to their own owners without teleporting. Their return continues independently
   after the winning pet delivers the toy.
+  Each pet keeps the same movement speed for chasing and returning, including
+  losing the race and swimming. Fetch movement is 30% faster than normal movement;
+  bond, cleanliness, illness and favorite-toy differences still apply between pets.
   Each subsequent throw gives chasing pets a 35% chance to switch targets;
   pets already carrying a toy finish their return. Each throw remains a separate
   physical toy. Unclaimed toys can be picked up normally. Ground toys also

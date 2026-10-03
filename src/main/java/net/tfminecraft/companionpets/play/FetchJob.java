@@ -9,6 +9,7 @@ public final class FetchJob {
     private final UUID id = UUID.randomUUID();
     private final UUID throwerId;
     private final Set<UUID> favorites = new HashSet<>();
+    private final java.util.Map<UUID, Double> speeds = new java.util.HashMap<>();
     private UUID carrierId;
     private FetchPhase phase;
     private UUID projectileId;
@@ -32,6 +33,10 @@ public final class FetchJob {
         if (favorite) favorites.add(petId); else favorites.remove(petId);
     }
     public boolean favorite(UUID petId) { return favorites.contains(petId); }
+
+    public double speed(UUID petId, double initialSpeed) {
+        return speeds.computeIfAbsent(petId, ignored -> initialSpeed);
+    }
 
     public boolean claim(UUID petId) {
         if (phase != FetchPhase.GROUND || carrierId != null) return false;

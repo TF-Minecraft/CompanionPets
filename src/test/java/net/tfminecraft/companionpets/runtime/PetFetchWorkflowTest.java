@@ -39,6 +39,7 @@ class PetFetchWorkflowTest {
     private WorldMock world;
     private ItemStack toy;
     private final java.util.Map<UUID, Location> navigationTargets = new java.util.HashMap<>();
+    private final java.util.Map<UUID, Double> navigationSpeeds = new java.util.HashMap<>();
 
     @BeforeEach void setup() throws Exception {
         var goals = new java.util.HashMap<String, com.destroystokyo.paper.entity.ai.Goal<?>>();
@@ -79,7 +80,7 @@ class PetFetchWorkflowTest {
     private Pet outsidePet(UUID ownerId, String name, double x) {
         Pet result = new Pet(UUID.randomUUID(), ownerId, "wolf", name, PetSex.MALE);
         runtime.store().add(result);
-        var body = new FetchWolf(server, UUID.randomUUID(), navigationTargets);
+        var body = new FetchWolf(server, UUID.randomUUID(), navigationTargets, navigationSpeeds);
         server.registerEntity(body);
         body.teleport(new Location(world, x, 64, 0)); result.stored(false); runtime.remember(result, body);
         return result;
@@ -88,13 +89,17 @@ class PetFetchWorkflowTest {
     public static class FetchWolf extends WolfMock {
             boolean inWater;
             final NativeClock clock = new NativeClock();
-            public FetchWolf(ServerMock server, UUID id, java.util.Map<UUID, Location> navigationTargets) {
+            public FetchWolf(ServerMock server, UUID id, java.util.Map<UUID, Location> navigationTargets,
+                    java.util.Map<UUID, Double> navigationSpeeds) {
                 super(server, id);
                 pathfinder =
                     (com.destroystokyo.paper.entity.Pathfinder) java.lang.reflect.Proxy.newProxyInstance(
                             getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class},
                             (proxy, method, args) -> switch (method.getName()) {
-                                case "moveTo" -> { navigationTargets.put(getUniqueId(), ((Location) args[0]).clone()); yield true; }
+                                case "moveTo" -> {
+                                    navigationTargets.put(getUniqueId(), ((Location) args[0]).clone());
+                                    navigationSpeeds.put(getUniqueId(), ((Number) args[1]).doubleValue()); yield true;
+                                }
                                 case "stopPathfinding" -> { navigationTargets.remove(getUniqueId()); yield null; }
                                 case "hasPath" -> navigationTargets.containsKey(getUniqueId());
                                 case "getEntity" -> this;
@@ -270,6 +275,39 @@ class PetFetchWorkflowTest {
         assertEquals(Activity.NONE, other.activity()); assertFalse(goal.shouldActivate());
         var afterReturn = new org.bukkit.event.entity.EntityTeleportEvent(loser, loser.getLocation(), owner.getLocation());
         listener.onTeleport(afterReturn); assertFalse(afterReturn.isCancelled());
+    }
+
+    @Test void winnerAndLoserKeepTheirOwnFasterOutboundSpeedOnLandAndInWater() {
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
+        pet.bond(0); pet.favoriteToy(null); other.bond(80); other.favoriteToy("STICK");
+        double oldSpeed = net.tfminecraft.companionpets.behavior.Locomotion.speed(
+                pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), false);
+        Snowball ball = throwToy();
+        var winner = (FetchWolf) runtime.entity(pet); var loser = (FetchWolf) runtime.entity(other);
+        double winnerOutbound = navigationSpeeds.get(winner.getUniqueId());
+        double loserOutbound = navigationSpeeds.get(loser.getUniqueId());
+        assertTrue(winnerOutbound > oldSpeed); assertTrue(loserOutbound > winnerOutbound);
+        land(ball); items().getFirst().teleport(new Location(world, 30, 64, 0));
+        loser.teleport(new Location(world, 4, 64, 0));
+        loser.inWater = true; new PetTicker(runtime, actions).run();
+        var water = server.getMobGoals().getGoal(loser, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
+        water.start(); assertEquals(loserOutbound, navigationSpeeds.get(loser.getUniqueId()));
+        double outboundSwim = loser.getVelocity().clone().setY(0).length();
+        // Care changes during the trip do not alter its return pace.
+        pet.bond(100); other.bond(0); other.need(Need.CLEANLINESS, 0);
+        winner.teleport(items().getFirst().getLocation()); assertTrue(actions.fetchActions().claim(pet));
+        assertEquals(loserOutbound, navigationSpeeds.get(loser.getUniqueId()));
+        water.start();
+        assertEquals(loserOutbound, navigationSpeeds.get(loser.getUniqueId()));
+        assertEquals(outboundSwim, loser.getVelocity().clone().setY(0).length(), 1e-9);
+        assertTrue(loser.getVelocity().getX() < 0);
+        actions.fetchActions().step(pet, winner);
+        assertEquals(winnerOutbound, navigationSpeeds.get(winner.getUniqueId()));
+        winner.inWater = true; new PetTicker(runtime, actions).run();
+        var winnerWater = server.getMobGoals().getGoal(winner, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
+        winnerWater.start(); assertEquals(winnerOutbound, navigationSpeeds.get(winner.getUniqueId()));
     }
 
     @Test void crossingWaterKeepsToyDestinationThenUsesThrowerDestinationWhileCarrying() {

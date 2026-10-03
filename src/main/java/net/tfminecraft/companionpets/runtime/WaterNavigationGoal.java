@@ -18,6 +18,7 @@ final class WaterNavigationGoal implements Goal<Mob> {
     private final PetActions actions;
     private Location exit;
     private long searchAt;
+    private double speed = 1.1;
 
     private WaterNavigationGoal(GoalKey<Mob> key, PetRuntime runtime, Pet pet, Mob body, PetActions actions) {
         this.key = key; this.runtime = runtime; this.pet = pet; this.body = body; this.actions = actions;
@@ -48,10 +49,12 @@ final class WaterNavigationGoal implements Goal<Mob> {
                     && runtime.followingAllowed(pet, owner) ? owner.getLocation() : null;
             exit = preferred != null && body.getWorld().equals(preferred.getWorld())
                     ? preferred : WaterEscape.exit(body.getLocation(), null);
-            if (exit != null) body.getPathfinder().moveTo(exit, 1.1);
+            speed = pet.fetch() != null ? actions.fetchActions().movementSpeed(pet)
+                    : actions.roaming().returningFromFetch(pet) ? actions.roaming().movementSpeed(pet) : 1.1;
+            if (exit != null) body.getPathfinder().moveTo(exit, speed);
             searchAt = now + 500L;
         }
-        WaterEscape.swim(body, exit);
+        WaterEscape.swim(body, exit, speed);
     }
     @Override public void stop() { exit = null; body.getPathfinder().stopPathfinding(); }
     @Override public GoalKey<Mob> getKey() { return key; }

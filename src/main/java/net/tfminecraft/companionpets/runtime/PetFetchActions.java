@@ -134,7 +134,7 @@ final class PetFetchActions {
             return;
         }
         boolean favorite = job.favorite(pet.id());
-        double speed = Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), favorite);
+        double speed = movementSpeed(pet);
         PetFx.sit(mob, false);
         PetFx.lie(mob, false);
         if (job.phase() == FetchPhase.AIR) {
@@ -213,10 +213,11 @@ final class PetFetchActions {
         item.remove();
         job.itemId(null);
         for (Pet other : chasers(job)) if (other != pet) {
+            double speed = movementSpeed(other);
             detach(other);
             Player owner = Bukkit.getPlayer(other.ownerId());
             if (owner != null && owner.isOnline() && body.getWorld().equals(owner.getWorld()))
-                actions.roaming().returnFromFetch(other, owner);
+                actions.roaming().returnFromFetch(other, owner, speed);
         }
         return true;
     }
@@ -230,6 +231,12 @@ final class PetFetchActions {
             case CARRY -> Bukkit.getPlayer(job.throwerId());
         };
         return target == null ? null : target.getLocation();
+    }
+
+    double movementSpeed(Pet pet) {
+        FetchJob job = pet.fetch();
+        return job.speed(pet.id(), 1.30 * Locomotion.speed(pet.illness(), pet.bond(),
+                pet.need(Need.CLEANLINESS), job.favorite(pet.id())));
     }
 
     void releaseFetch(Pet pet, boolean toOwner) {

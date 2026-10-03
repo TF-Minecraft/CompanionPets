@@ -22,6 +22,10 @@ public final class WaterEscape {
     }
 
     public static void swim(Mob body, Location exit) {
+        swim(body, exit, 1.1);
+    }
+
+    public static void swim(Mob body, Location exit, double navigationSpeed) {
         body.setAware(true);
         PetFx.sit(body, false);
         PetFx.lie(body, false);
@@ -30,7 +34,7 @@ public final class WaterEscape {
         if (exit != null && exit.getWorld().equals(body.getWorld())) {
             Vector direction = exit.toVector().subtract(body.getLocation().toVector()).setY(0);
             if (direction.lengthSquared() > 0.04) {
-                direction.normalize().multiply(0.10);
+                direction.normalize().multiply(0.10 * navigationSpeed / 1.1);
                 velocity.setX(direction.getX());
                 velocity.setZ(direction.getZ());
             }
