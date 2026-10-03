@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -29,6 +28,7 @@ import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -60,8 +60,9 @@ public final class PetListener implements Listener {
     public void onTeleport(EntityTeleportEvent event) {
         Pet pet = runtime.byEntity(event.getEntity());
         if (pet == null || pet.stored() || pet.dead()) return;
-        if (pet.staying() || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW
+        if (actions.fetchingOrReturning(pet) || pet.staying() || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW
                 || pet.activity() == net.tfminecraft.companionpets.pet.Activity.SLEEPING
+                || !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId()))
                 || System.currentTimeMillis() < pet.forcedSitUntilMillis()) event.setCancelled(true);
     }
 
@@ -227,7 +228,13 @@ public final class PetListener implements Listener {
     }
 
     @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        actions.ownerSessionChanged(event.getPlayer());
+    }
+
+    @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        actions.ownerSessionChanged(event.getPlayer());
         lastClicks.remove(event.getPlayer().getUniqueId());
         runtime.sessions().clearPlayer(event.getPlayer().getUniqueId());
         PetFx.clearPlayer(event.getPlayer().getUniqueId());
@@ -242,26 +249,7 @@ public final class PetListener implements Listener {
         if (data == null) {
             return;
         }
-        String[] parts = data.split("\\|", 2);
-        if (parts.length != 2) {
-            ball.remove();
-            return;
-        }
-        Pet pet;
-        try {
-            pet = runtime.store().get(UUID.fromString(parts[0]));
-        } catch (IllegalArgumentException ex) {
-            ball.remove();
-            return;
-        }
-        Location at = ball.getLocation().clone();
-        ball.remove();
-        if (pet == null || pet.fetch() == null || !ball.getUniqueId().equals(pet.fetch().projectileId())) {
-            // A returned or superseded projectile must not create a second toy.
-            return;
-        }
-        actions.dropToy(at, pet, parts[1]);
-        actions.toyLanded(pet, pet.fetch().itemId());
+        actions.toyLanded(ball);
     }
 
     @EventHandler(ignoreCancelled = true)

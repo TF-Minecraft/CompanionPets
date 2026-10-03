@@ -29,6 +29,7 @@ public final class PetRuntime {
     private final NamespacedKey petKey;
     private final NamespacedKey toyKey;
     private final Random random = new Random();
+    private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
 
     public PetRuntime(
             JavaPlugin plugin,
@@ -47,6 +48,8 @@ public final class PetRuntime {
         this.visual = visual;
         this.petKey = petKey;
         this.toyKey = toyKey;
+        // Loading a saved Follow order must not summon distant pets into a new session.
+        for (Pet pet : store.all()) suspendedFollowing.add(pet.id());
         applyDefaultTricks();
     }
 
@@ -95,6 +98,20 @@ public final class PetRuntime {
 
     public Random random() {
         return random;
+    }
+
+    public void suspendFollowing(UUID ownerId) {
+        for (Pet pet : store.of(ownerId)) suspendedFollowing.add(pet.id());
+    }
+
+    public void resumeFollowing(Pet pet) { suspendedFollowing.remove(pet.id()); }
+
+    public boolean followingAllowed(Pet pet, Player owner) {
+        if (owner == null || !owner.isOnline() || distance(owner, pet) == Double.POSITIVE_INFINITY) return false;
+        if (suspendedFollowing.contains(pet.id())
+                && distance(owner, pet) <= Math.min(config.ownerNearRadius(), config.followTeleportBlocks()))
+            suspendedFollowing.remove(pet.id());
+        return !suspendedFollowing.contains(pet.id());
     }
 
     public Entity entity(Pet pet) {

@@ -101,7 +101,7 @@ public final class StaffCommands {
         } else if (sender instanceof Player player) menus.list(player, owner, 0);
         else {
             sender.sendMessage("Pets belonging to " + ownerName(owner) + ":");
-            owned(owner).forEach(p -> sender.sendMessage(p.name() + " (" + p.typeId() + ") - " + (p.stored() ? "in shelter" : "outside")));
+            owned(owner).forEach(p -> sender.sendMessage(p.name() + " (" + p.typeId() + ") - " + (p.stored() ? "in Pet House" : "outside")));
         }
     }
 
@@ -125,7 +125,7 @@ public final class StaffCommands {
 
     public void info(CommandSender sender, Pet pet) {
         sender.sendMessage(pet.name() + " (" + pet.typeId() + "), owner: " + ownerName(pet.ownerId()));
-        sender.sendMessage("State: " + (pet.stored() ? "in shelter" : "outside") + "; order: " + pet.order() + "; illness: " + pet.illness());
+        sender.sendMessage("State: " + (pet.stored() ? "in Pet House" : "outside") + "; order: " + pet.order() + "; illness: " + pet.illness());
         sender.sendMessage("Needs: " + Arrays.stream(Need.values()).map(n -> n.name().toLowerCase(Locale.ROOT) + "=" + Math.round(pet.need(n))).toList());
         sender.sendMessage("Tricks: " + pet.words().keySet());
     }
@@ -135,7 +135,7 @@ public final class StaffCommands {
         require(runtime.store().canRestoreBodies(), "Pet persistence is unavailable; creation refused.");
         UUID owner = resolveOwner(args[1]);
         Pet pet = PetCreation.parse(runtime, owner, args);
-        require(runtime.store().countStored(owner) < runtime.config().limits().maxStored(), "The player's shelter is full.");
+        require(runtime.store().countStored(owner) < runtime.config().limits().maxStored(), "The player's Pet House is full.");
         if (!audit.append(sender, "create-requested", pet, "none", StaffAudit.snapshot(pet))) return;
         runtime.store().add(pet);
         if (!runtime.store().save()) {
@@ -146,7 +146,7 @@ public final class StaffCommands {
             return;
         }
         audit.append(sender, "create", pet, "none", StaffAudit.snapshot(pet));
-        sender.sendMessage("Created " + pet.name() + " (" + pet.typeId() + ") in " + ownerName(owner) + "'s shelter.");
+        sender.sendMessage("Created " + pet.name() + " (" + pet.typeId() + ") in " + ownerName(owner) + "'s Pet House.");
     }
 
     private void giveEgg(CommandSender sender, String[] args) {

@@ -119,7 +119,7 @@ final class PetHatching {
         Entity entity = runtime.bodies().spawn(pet, type, PetRuntime.beside(player), player);
         if (entity == null) {
             pet.stored(true);
-            PetFx.tell(player, "There was no room out here, so " + name + " is waiting for you in the shelter.");
+            PetFx.tell(player, "There was no room out here, so " + name + " is waiting for you in the Pet House.");
         } else {
             pet.stored(false);
             runtime.remember(pet, entity);

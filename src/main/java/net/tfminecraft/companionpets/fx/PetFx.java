@@ -130,6 +130,7 @@ public final class PetFx {
     }
 
     public static void sit(Entity entity, boolean sitting) {
+        if (entity instanceof Mob mob && net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob)) sitting = false;
         if (entity instanceof Sittable sittable) {
             sittable.setSitting(sitting);
         }
@@ -139,6 +140,7 @@ public final class PetFx {
     }
 
     public static void lie(Entity entity, boolean lying) {
+        if (entity instanceof Mob mob && net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob)) lying = false;
         if (entity instanceof Fox fox) {
             fox.setSleeping(lying);
             fox.setSitting(false);
@@ -152,22 +154,6 @@ public final class PetFx {
 
     public static void hurt(Entity entity) {
         entity.getWorld().playSound(entity.getLocation(), hurtSound(entity.getType()), 1.0f, 1.0f);
-    }
-
-    public static void beg(Entity entity) {
-        if (entity instanceof Wolf wolf) {
-            wolf.setInterested(true);
-        }
-        if (entity instanceof LivingEntity living) {
-            Location above = living.getLocation().add(0, 2, 0);
-            look(living, above);
-        }
-    }
-
-    public static void stopBeg(Entity entity) {
-        if (entity instanceof Wolf wolf && wolf.isValid()) {
-            wolf.setInterested(false);
-        }
     }
 
     public static void jump(Entity entity, boolean partial) {

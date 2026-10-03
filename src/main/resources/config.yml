@@ -19,6 +19,9 @@ care:
   # Only sleep slows hunger; sitting uses the normal hunger rate.
   sleeping-hunger-multiplier: 0.5
   health-loss-per-minute: 12
+  # Natural recovery, including healthy pets with missing health. Requires food,
+  # cleanliness and energy >= 25 (or resting); mood and medicine do not gate it.
+  # Feeding/brushing also heal 25% of the hunger/cleanliness points restored.
   health-regen-per-minute: 20
   medicine-health-bump: 20
   bond-gain-per-minute: 0.4
@@ -39,7 +42,7 @@ training:
   # Applies to new pets and grants missing defaults to saved pets on startup/reload.
   # Removing an entry never erases previously learned tricks or words.
   # Default tricks are enabled even if omitted from pets.<type>.tricks.
-  # IDs: follow, sit, stay, speak, jump, lay, paw, beg, or a custom-tricks ID.
+  # IDs: follow, sit, stay, speak, jump, lay, paw, or a custom-tricks ID.
   default-tricks: [follow]
   attempts-before-bored: 6
   reward-gain: 20
@@ -189,9 +192,12 @@ orders:
 # Omitted category = inherit. Explicit [] = disable it for that pet.
 # Other categories continue inheriting. See the commented example under pets.
 items:
-  # Shelter placement is global; eggs belong to each pet type, not these lists.
+  # Pet House placement is global; eggs belong to each pet type, not these lists.
   kennel: BARREL
   kennel-block: BARREL
+  # Optional ItemsAdder furniture: set kennel to "itemsadder:tfmc:pet_house"
+  # and uncomment the matching ID. ItemsAdder handles placement and drops.
+  # kennel-furniture: "tfmc:pet_house"
   # Both treats work for ALL species. Hold either to train; rewards consume one.
   # Switching between accepted treats keeps the training session active.
   # As before, a hungry pet can eat a treat for 30 hunger points and a mood bonus.
@@ -257,7 +263,6 @@ pets:
   # come = get up, walk to the owner, then resume the previous sit/lay/stay posture.
   # jump = jump; lay = lie down to sleep until told to follow; paw = give a paw;
   # Legacy sleep trick IDs are accepted as lay, keeping saved words/progress.
-  # beg = ask for a treat using the vanilla sitting/attention behaviour.
   # Add custom-tricks IDs to the same list, e.g. [sit, follow, paw, salute].
   # IDs are case-insensitive. Unknown IDs are skipped with a warning. A non-list
   # disables tricks for that type, but the pet still loads. Saved progress/words
@@ -301,7 +306,7 @@ pets:
   #   sex: random
   #   # Interaction items are inherited from the global items lists.
 
-  # VANILLA FROG EXAMPLE: no ModelEngine needed; no paw or beg tricks.
+  # VANILLA FROG EXAMPLE: no ModelEngine needed; no paw trick.
   # frog:
   #   entity: FROG
   #   appearance:
@@ -316,7 +321,7 @@ pets:
   # You can OMIT animations entirely when clips use the default names.
   # ALL animations are optional and automatically used IF present:
   # idle, walk, run, crouch, sit, lie, sleep, jump, fall, swim, head_tilt, shake,
-  # paw, beg, pet, fly, hover, attack, hurt, death, eat, speak, spawn,
+  # paw, pet, fly, hover, attack, hurt, death, eat, speak, spawn,
   # lie_back, belly_up, get_up. Missing clips do not prevent model attachment.
   # idle/walk are recommended to avoid a static model. If lie is absent, the
   # original lay clip is recognized automatically unless lie was disabled.

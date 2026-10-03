@@ -95,10 +95,24 @@ works with vanilla material selectors; those material/model combinations also
 accept provider-created eggs for compatibility. Explicit provider IDs take
 priority. Confirmation rechecks the held item before consuming it.
 
-Shelter placement stays global: `items.kennel` selects the consumed held item;
+Pet House placement stays global: `items.kennel` selects the consumed held item;
 `items.kennel-block` selects the actual vanilla block (BARREL for custom tokens).
-This places an ordinary shelter, not ItemsAdder furniture. Plant/block settings
-continue to use vanilla materials.
+Without `items.kennel-furniture`, this places a regular Pet House. For ItemsAdder
+furniture, configure the held item and matching placed furniture ID:
+
+```yaml
+items:
+  kennel: "itemsadder:tfmc:pet_house"
+  kennel-furniture: "tfmc:pet_house"
+  kennel-block: BARREL
+```
+
+ItemsAdder handles normal placement, protection checks, consumption and drops.
+CompanionPets records the owner after successful placement. Right-clicking opens
+the owner's Pet House menu; other players cannot open it. Breaking the furniture
+removes its ownership record without deleting pets. Registered barrel Pet Houses
+remain usable, and vanilla-only configurations retain sneak/right-click placement.
+Plant/block settings continue to use vanilla materials.
 
 ## Learnable tricks per pet type
 
@@ -111,7 +125,7 @@ tricks: [follow, stay, speak, jump]
 ```
 
 Available IDs: `sit`, `follow`, `come`, `stay`, `speak`, `jump`, `lay`, `paw`,
-`beg`, plus IDs defined under `custom-tricks`. Names are case-insensitive and
+plus IDs defined under `custom-tricks`. Names are case-insensitive and
 duplicates are ignored. Omitting `tricks` enables all compatible base/custom
 tricks. `tricks: []` disables additional tricks; configured default tricks are
 always enabled. Unknown IDs are skipped with a warning. A malformed list
@@ -293,7 +307,7 @@ mapped. Set a mapping to `""` to disable an optional clip.
 | `shake` | Begins when the native wolf shake clock starts, alongside its vanilla sound. Play once. |
 | `pet` | Normal petting reaction. Does not interrupt a belly moment or another gesture. |
 | `jump`, `fall`, `swim` | Optional air/water motions. Jump plays once and holds until landing or the fall pose; swim loops. Missing clips use normal movement/idle fallbacks. |
-| `beg`, `attack`, `hurt`, `eat`, `speak`, `spawn` | Automatically used when present for their corresponding behaviour. Missing clips do not prevent the behaviour. |
+| `attack`, `hurt`, `eat`, `speak`, `spawn` | Automatically used when present for their corresponding behaviour. Missing clips do not prevent the behaviour. |
 | `lie_back`, `belly_up`, `get_up` | The optional belly rub moment described above. |
 
 No clip is required. Missing idle/walk logs a warning about a potentially static
@@ -309,8 +323,7 @@ Head tracking belongs to the model's head bone behaviour, not a look animation.
 Without jump/swim, dogs and cats use `idle` in the air and `walk` in water;
 jumping and falling remain physical movements. The current frog can
 use its `jump` and `swim` clips without overrides to retain its
-species-specific motions. `beg` remains a learned command using its vanilla
-sitting/attention behaviour when no `beg` clip is present.
+species-specific motions.
 `pet1`, `pet2`, and `despawn` have no automatic hooks. Map `pet: pet1` to use
 an older petting clip. Custom tricks may also refer to arbitrary model clips.
 
@@ -361,8 +374,8 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   pet lies down on its own when exhausted, and the learned Lay trick puts it to rest sooner. Food past a
   full stomach makes it feel worse. A hit makes it yelp and flinch. Food, a
   brush, and medicine act immediately. Anyone nearby can feed, clean, and heal. Play
-  and tricks belong to the owner.
-- Sneak and right-click with a barrel to place a shelter. Right-click it to
+  directly with a pet and tricks belong to the owner. Thrown toys can attract anyone's pets.
+- Sneak and right-click with a barrel to place a Pet House. Right-click it to
   open the list. Click a pet to open its sheet, the same
   one as sneak-right-clicking it in the world. From the sheet you bring it
   out, call it, store it, let it go, or look up the tricks it has learned.
@@ -376,12 +389,31 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   resumed, and survive restarts. Lay stays asleep even at full energy. Automatic
   exhaustion sleep can still end when recovered. Sitting and sleeping recover
   energy. Needs and illness can prevent a pet from moving even after release.
+  In water, land pets float and seek a nearby dry bank even when hungry,
+  weakened, sitting or sleeping. Their saved order resumes on land. This does
+  not apply to aquatic bodies such as fish, axolotls, tadpoles or turtles.
+  Fetching, calls and active following keep their destinations while swimming;
+  they do not turn back toward the nearest bank instead of crossing the water.
 - Follow is one trick, learned at 100% by default and shown with its command
   words on the Tricks page. Say `follow` while looking or `<name> follow`.
   Come is a separate trick; saved Come words and progress stay with Come.
   Existing custom word bindings are never overwritten.
-- Right-click the air with a listed toy to throw it. The summoned pet fetches
-  that item and drops it in front of the owner.
+- Right-click the air with a listed toy to throw it, even if nearby pets are
+  unwell or there are no pets nearby. All nearby, available pets that accept
+  that toy can chase it, regardless of ownership. Sick, weakened, hungry,
+  exhausted, sleeping or training pets stay out. Only pets with the Follow order
+  can join; pets ordered to Sit, Stay or Lay stay in place. Every
+  participant gets its own navigation to the shared toy. The first pet to reach it
+  collects it and returns it to the player who threw it; the others run back
+  to their own owners without teleporting. Their return continues independently
+  after the winning pet delivers the toy.
+  Each pet keeps the same movement speed for chasing and returning, including
+  losing the race and swimming. Fetch movement is 30% faster than normal movement;
+  bond, cleanliness, illness and favorite-toy differences still apply between pets.
+  Each subsequent throw gives chasing pets a 35% chance to switch targets;
+  pets already carrying a toy finish their return. Each throw remains a separate
+  physical toy. Unclaimed toys can be picked up normally. Ground toys also
+  become pickable after a minute if the pets cannot reach them.
 - Several pets can be outside at once. Look at one and say its learned word,
   or say its name and word nearby.
 - Say a following pet's exact name in chat to call it close. It then waits quietly
@@ -417,13 +449,34 @@ underlying entity type takes effect when that pet is summoned again. Existing
 sections such as `moments.belly-up` manually when you want to tune them.
 Staff can browse players and pets with /companionpets list and locate them by player and pet name with /companionpets find.
 
-Needs stay still in the shelter and while the owner is offline. Outside, they
+Needs stay still in the Pet House and while the owner is offline. Outside, they
 fall at the normal rate when the owner is nearby and at the away rate when the
 owner is online but far.
 
+Missing health regenerates naturally, including when the pet has no illness
+and when health is zero. Recovery requires hunger and cleanliness at least 25,
+and energy at least 25 or resting. Low mood does not block recovery or keep
+draining an otherwise cared-for pet's health. The default rate is 20 health
+points per minute (`care.health-regen-per-minute`); Pet House/offline care stays
+frozen. Feeding and brushing also immediately restore health equal to 25% of
+the hunger/cleanliness points actually restored, capped at 100. Overfeeding
+still hurts, and brushing an already clean pet grants no extra health.
+Medicine remains an immediate boost (`care.medicine-health-bump`), but is no
+longer required for regeneration. Sick/weakened pets resume play once fully
+recovered; healthy pets with missing health can play once health is above zero.
+
+For a server where pets need less frequent care, the optional
+[relaxed care preset](config-presets/relaxed-care.yml) records the values used on
+TF Dev. Copy its values into the matching sections of your existing config;
+it is a partial preset, so preserve your pet types, models and item selectors.
+Set each existing food entry's `hunger` to 45 as indicated in the preset.
+With these settings, a fully cared-for pet walking near its owner for four
+hours retains about 62 hunger, 75 mood, 62 energy, 80 cleanliness and full
+health. Belly-up chance is 25%, replacing the 100% testing value.
+
 ## Saved data
 
-The plugin stores pets and shelter ownership in `plugins/CompanionPets/pets.yml`.
+The plugin stores pets and Pet House ownership in `plugins/CompanionPets/pets.yml`.
 It saves immediately after important changes, every five minutes, and when the
 plugin stops. Each save writes a temporary file and replaces the main file;
 `pets.yml.bak` holds the previous valid save. If the main file is damaged or
@@ -451,8 +504,14 @@ Pets left outside retain their last position and identity across restarts. When
 their chunk's entities have loaded, the plugin reconnects to the tagged body or
 recreates it at the saved position if it is missing. Missing or unloaded bodies
 do not delete pet records; care pauses until the body is available. Actual deaths
-still remove the pet normally. Calling an outside pet from its shelter also
+still remove the pet normally. Calling an outside pet from its Pet House also
 loads its saved chunk and attempts to recover its body.
+
+Restarting or reconnecting does not teleport distant pets with a saved Follow
+order to their owner. They wait at their existing position until the owner
+approaches, explicitly asks them to follow, or calls them from the Pet House.
+Pets already following during the current session retain their usual catch-up
+teleport when the owner moves too far away.
 Sitting, lying from weakness/exhaustion and sleeping all recover energy at the
 `care.sleep-minutes-to-full` rate (default: 12.5 points per minute), without idle
 energy loss. Away recovery uses the same away rate; frozen presence pauses it.
@@ -471,8 +530,8 @@ root aliases. Running /companionpets shows help and examples.
 | moment <affection/bark/mischief/dig/belly> | Trigger a moment while looking at your pet; normal care and animation conditions apply. |
 | testpet <type> [name...] | Spawn a normal pet with every compatible trick learned. No special marker, pause state or cleanup category. |
 | list <player> [pet name...] | Open that player's pets or a selected pet's read-only profile. Console gets readable names. |
-| find <player> [pet name...] | Show shelter/current/last-known location and missing or duplicate bodies for that player's pets, without loading chunks. |
-| create <player> type=<type> name=<name...> [option=value ...] | Create a new saved replacement in the owner's shelter. |
+| find <player> [pet name...] | Show Pet House/current/last-known location and missing or duplicate bodies for that player's pets, without loading chunks. |
+| create <player> type=<type> name=<name...> [option=value ...] | Create a new saved replacement in the owner's Pet House. |
 | egg <type/all> [online-player] [1..64] | Give configured eggs; omit recipient in game to receive them yourself. |
 
 Tab completion suggests player names first, then only that player's pet names.
@@ -481,7 +540,7 @@ select the pet from list to view its identity internally. Pet lists have 45
 entries per page. There is no player inventory: select the owner using command
 completion. The footer is reserved for navigation. Back uses an item frame in
 the bottom left corner and always returns to the parent menu, independently of
-the current page. Pet lists and the shelter have no Back button. Their pets fill rows from left to
+the current page. Pet lists and the Pet House have no Back button. Their pets fill rows from left to
 right, top to bottom, sorted by name, with a stable identity tie-breaker.
 An arrow always occupies the bottom right corner, with the page counter in its
 title (1/1, 1/2, etc.). Left-click opens the next nonempty page; right-click opens
@@ -491,10 +550,12 @@ page indicator or previous-page arrow.
 All empty slots use light gray glass. The selected pet's staff inventory shares
 the normal pet profile: species, name, sex, age, needs, bond, personality,
 favorite toy and learned tricks. It is read-only, including its trick inventory;
-renaming, calling, shelter and release actions are omitted. No UUIDs or audit
+renaming, calling, Pet House and release actions are omitted. No UUIDs or audit
 snapshots are required or shown in command help, completion or pet cards.
-Profiles opened directly from the animal have no Back button; profiles reached
-from the shelter return there, and keep that parent when browsing their tricks.
+Profiles opened directly from the animal have four centered footer icons and
+no Back button. Profiles reached from the Pet House return there and keep that
+parent when browsing their tricks. A stored pet shows an inactive storage icon
+in the same position.
 
     /companionpets list Nowko
     /companionpets find Nowko Toby
@@ -518,8 +579,8 @@ tricks=none adds no extra tricks.
 Defaults: needs 100, bond 0, male, new age, generated personality.
 An explicitly supplied owner UUID is still accepted for reconstruction of an
 unknown/offline player; ordinary browsing and completion use player names.
-Creation validates options before writing and checks shelter capacity.
-The owner takes the created pet out through their shelter menu.
+Creation validates options before writing and checks Pet House capacity.
+The owner takes the created pet out through their Pet House menu.
 
 The companionpets.staff permission grants all staff commands and inventory
 browsing; petcompanions.staff is retained for existing permission assignments.
@@ -537,12 +598,14 @@ Plugin replies and egg/rename/release dialogue inputs are private. Ordinary
 spoken pet orders remain roleplay chat.
 
 Trick menus show learned tricks, then tricks in practice, then unknown tricks.
-Within each group: Follow, Come, Sit, Stay, Lay, Paw, Speak, Beg, Jump, followed by
+Within each group: Follow, Come, Sit, Stay, Lay, Paw, Speak, Jump, followed by
 custom tricks in configuration order. Trick inventories have three rows, with
 18 entries per page from slot 0. All nine slots in the third row are reserved
 for navigation; the nineteenth trick starts on the next page.
 Follow is available as a learned trick rather than a separate profile button.
-The Tricks button occupies the middle of the profile's bottom row.
+Direct pet profiles center Call, Tricks, Store and Release across the bottom
+row, without a Pet House back button. Profiles opened from a Pet House retain
+their back button.
 Sex uses white dye for both sexes, with neutral text and no sex symbols.
 
 Name calls own the native MOVE goal and refresh the destination from the owner's
@@ -551,7 +614,8 @@ Sit, Stay and Lay cancel the call and clear both pathfinding and native travel
 inputs immediately, preserving vertical physics. Their holds also apply during
 model animations, so a posture cannot slide along an old movement route.
 Stay uses the standing idle pose, independently of stale vanilla sitting flags.
-Native entity teleports are cancelled while a pet has a hold order, including
+Native entity teleports are cancelled while fetching, returning from a lost
+fetch race, or while a pet has a hold order, including
 the tameable mob's built-in teleport to its owner. Follow and temporary Come
 movement remain permitted; an explicit profile Call switches to Follow before
 teleporting.
@@ -559,6 +623,9 @@ teleporting.
 Modeled wolves emit water splash particles throughout their native shake clock,
 alongside the shake animation and vanilla sound. Vanilla fallback wolves retain
 their original particles.
+Fetching postpones both the native and modeled shake until the pet finishes
+the race or returns the toy. Shaking never holds navigation, and movement
+interrupts its modeled gesture automatically.
 
 MMOItems eggs dispatch mi give TYPE ID PLAYER AMOUNT from console;
 they are not also inserted via API. Vanilla/ItemsAdder eggs retain their identity.

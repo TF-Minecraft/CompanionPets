@@ -26,7 +26,7 @@ type's body, egg identity, model attachment and available mapped/custom clips;
 native AI pause/resume and frozen needs; adoption and body restoration without
 losing learning; persistent postures and default learned Follow;
 modeled wolves starting shake with the native shake clock; duplicate removal,
-owner/staff shelter, confirmed
+owner/staff Pet House, confirmed
 release and heal; deletion keeps the vanilla body hidden and clears the
 ModelEngine registration and modeled owner; toy landing,
 offline return with original data, and rejection of stale projectiles. The final

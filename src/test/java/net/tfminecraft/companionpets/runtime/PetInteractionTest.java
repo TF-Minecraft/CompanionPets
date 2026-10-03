@@ -32,6 +32,7 @@ class PetInteractionTest {
     private int bodyRemovals;
     private int navigationStops;
     private Location navigationTarget;
+    private boolean inWater;
 
     @BeforeEach void setup() throws Exception {
         var goals = new java.util.HashMap<String, com.destroystokyo.paper.entity.ai.Goal<?>>();
@@ -57,6 +58,7 @@ class PetInteractionTest {
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
                 if (type != org.bukkit.entity.Wolf.class) return super.spawn(at, type);
                 var wolf = new WolfMock(server, UUID.randomUUID()) {
+                    @Override public boolean isInWater() { return inWater; }
                     @Override public void setRemoveWhenFarAway(boolean remove) { }
                     @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() {
                         return (com.destroystokyo.paper.entity.Pathfinder) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
@@ -124,6 +126,84 @@ class PetInteractionTest {
         return store;
     }
     @AfterEach void teardown() { MockBukkit.unmock(); }
+
+    @Test void restartingWithADistantFollowingPetKeepsItsSavedPositionAndBlocksNativeTeleport() {
+        body.teleport(player.getLocation().add(40, 0, 0)); runtime.remember(pet, body);
+        var at = body.getLocation().clone();
+        var recovered = new PetRuntime(runtime.plugin(), runtime.config(), runtime.store(), new Sessions(),
+                runtime.bodies(), runtime.visual(), runtime.petKey(), runtime.toyKey());
+        var recoveredActions = new PetActions(recovered);
+        recoveredActions.reattach(body);
+        new PetTicker(recovered, recoveredActions).run();
+        assertEquals(at, body.getLocation()); assertFalse(body.isAware());
+        assertEquals(PetOrder.FOLLOW, pet.order(), "The saved order is retained while its session is paused");
+        var event = new org.bukkit.event.entity.EntityTeleportEvent(body, at, player.getLocation());
+        new net.tfminecraft.companionpets.listen.PetListener(recovered, recoveredActions).onTeleport(event);
+        assertTrue(event.isCancelled());
+        player.teleport(at.clone().add(1, 0, 0));
+        new PetTicker(recovered, recoveredActions).run();
+        assertTrue(body.isAware()); assertTrue(recovered.followingAllowed(pet, player));
+    }
+
+    @Test void reconnectDoesNotSummonADistantPetAndExplicitFollowResumesIt() {
+        var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
+        listener.onQuit(new org.bukkit.event.player.PlayerQuitEvent(player, (net.kyori.adventure.text.Component) null));
+        player.teleport(player.getLocation().add(40, 0, 0));
+        listener.onJoin(new org.bukkit.event.player.PlayerJoinEvent(player, (net.kyori.adventure.text.Component) null));
+        var at = body.getLocation().clone();
+        new PetTicker(runtime, actions).run();
+        assertEquals(at, body.getLocation()); assertFalse(body.isAware());
+        var event = new org.bukkit.event.entity.EntityTeleportEvent(body, at, player.getLocation());
+        listener.onTeleport(event); assertTrue(event.isCancelled());
+        player.teleport(at.clone().add(8, 0, 0));
+        actions.onChat(player, "Toby follow");
+        assertTrue(body.isAware()); assertTrue(runtime.followingAllowed(pet, player));
+        player.teleport(at.clone().add(40, 0, 0));
+        new PetTicker(runtime, actions).run();
+        assertTrue(body.getLocation().distance(player.getLocation()) < 3, "Active following still catches up normally");
+    }
+
+    @Test void hungryWeakenedOrRestingPetStaysMobileAndFloatsInWaterWithoutChangingItsOrder() {
+        inWater = true;
+        for (PetOrder order : PetOrder.values()) {
+            pet.order(order); pet.staying(order == PetOrder.STAY);
+            pet.activity(order == PetOrder.LAY ? Activity.SLEEPING : Activity.NONE);
+            pet.illness(Illness.WEAKENED); pet.need(Need.HEALTH, 0); pet.need(Need.ENERGY, 0); pet.need(Need.HUNGER, 0);
+            body.setAware(false); body.setSitting(true); body.setVelocity(new org.bukkit.util.Vector(0, -0.3, 0));
+            new PetTicker(runtime, actions).run();
+            assertTrue(body.isAware()); assertFalse(body.isSitting()); assertTrue(body.getVelocity().getY() > 0);
+            assertEquals(order, pet.order());
+            var key = com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
+                    new NamespacedKey(runtime.plugin(), "water_navigation"));
+            var goal = org.bukkit.Bukkit.getMobGoals().getGoal(body, key);
+            assertNotNull(goal); assertTrue(goal.shouldActivate());
+            goal.tick(); assertTrue(body.getVelocity().getY() > 0);
+            net.tfminecraft.companionpets.integration.PetMotion.hold(body);
+            net.tfminecraft.companionpets.fx.PetFx.sit(body, true);
+            net.tfminecraft.companionpets.fx.PetFx.lie(body, true);
+            assertTrue(body.isAware()); assertFalse(body.isSitting()); assertTrue(body.getVelocity().getY() > 0);
+            inWater = false;
+            new PetTicker(runtime, actions).run();
+            assertFalse(body.isAware()); assertEquals(order, pet.order()); assertFalse(goal.shouldActivate());
+            inWater = true;
+        }
+    }
+
+    @Test void followInWaterAndTemporaryComeBothRespectWaterSafety() {
+        inWater = true; pet.order(PetOrder.LAY); pet.activity(Activity.SLEEPING); body.setAware(false);
+        actions.onChat(player, "Toby follow");
+        new PetTicker(runtime, actions).run();
+        assertEquals(PetOrder.FOLLOW, pet.order()); assertTrue(body.isAware()); assertFalse(body.isSitting());
+        pet.order(PetOrder.SIT); pet.bindWord("come", Trick.COME); pet.progress(Trick.COME, 100);
+        actions.onChat(player, "Toby come"); assertEquals(Activity.ATTENDING, pet.activity());
+        new PetTicker(runtime, actions).run();
+        assertEquals(PetOrder.FOLLOW, pet.order(), "Come keeps moving toward its owner across water");
+        assertEquals(Activity.ATTENDING, pet.activity());
+        assertTrue(body.isAware()); assertFalse(body.isSitting());
+        inWater = false; body.teleport(player.getLocation());
+        new PetTicker(runtime, actions).run();
+        assertEquals(PetOrder.SIT, pet.order(), "Come restores the original posture after arrival");
+    }
 
     private ItemStack hold(Material material, int amount) {
         player.getInventory().setItemInMainHand(new ItemStack(material, amount));
@@ -262,11 +342,12 @@ class PetInteractionTest {
         assertFalse(runtime.store().isDeleted(pet.id()));
     }
 
-    @Test void shelterDeletesVisualAndBodyButPreservesLearningAndNeeds() {
+    @Test void petHouseDeletesVisualAndBodyButPreservesLearningAndNeeds() {
         pet.progress(Trick.FOLLOW, 73); pet.bindWord("here", Trick.FOLLOW); pet.need(Need.HUNGER, 55);
         var holder = new net.tfminecraft.companionpets.gui.MenuHolder(net.tfminecraft.companionpets.gui.MenuHolder.Kind.CARE, pet.id(), null);
-        actions.clickMenu(player, holder, net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, null, false, false, false);
-        assertEquals(1, bodyRemovals, "Shelter must not detach by revealing the vanilla mob");
+        actions.clickMenu(player, holder, net.tfminecraft.companionpets.gui.PetMenus.careSlot(
+                net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, false), null, false, false, false);
+        assertEquals(1, bodyRemovals, "Pet House must not detach by revealing the vanilla mob");
         assertFalse(body.isValid());
         assertTrue(pet.stored()); assertNull(pet.entityId());
         assertEquals(55, pet.need(Need.HUNGER)); assertEquals(73, pet.progress(Trick.FOLLOW)); assertEquals(Trick.FOLLOW, pet.trickFor("here"));
@@ -425,8 +506,8 @@ class PetInteractionTest {
     @Test void profileHasNoDedicatedFollowButton() {
         actions.menus().openCare(player, pet);
         var holder = (net.tfminecraft.companionpets.gui.MenuHolder) player.getOpenInventory().getTopInventory().getHolder();
-        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder.getInventory().getItem(39).getType());
-        pet.order(PetOrder.SIT); actions.clickMenu(player, holder, 39, null, false, false, false);
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder.getInventory().getItem(40).getType());
+        pet.order(PetOrder.SIT); actions.clickMenu(player, holder, 40, null, false, false, false);
         assertEquals(PetOrder.SIT, pet.order());
     }
 
