@@ -247,6 +247,21 @@ class NeedClockTest {
         assertEquals(Illness.NONE, pet.illness());
     }
 
+    @Test void restingSickPetWithLowEnergyHealsBeforeNeglectCanKillIt() {
+        Pet pet = pet();
+        pet.illness(Illness.SICK); pet.need(Need.HEALTH, 10); pet.need(Need.ENERGY, 0);
+        var yaml = new org.bukkit.configuration.file.YamlConfiguration();
+        yaml.set("care.death-on-neglect", true);
+        org.mockbukkit.mockbukkit.MockBukkit.mock();
+        try {
+            var care = net.tfminecraft.companionpets.config.CompanionConfig.load(
+                    org.mockbukkit.mockbukkit.MockBukkit.createMockPlugin(), yaml).care();
+            NeedClock.advance(pet, new CareInput(Presence.NEAR, false, false, true, true, true, minutes(1), care, 0.25));
+        } finally { org.mockbukkit.mockbukkit.MockBukkit.unmock(); }
+        assertEquals(30, pet.need(Need.HEALTH), 0.001);
+        assertTrue(!pet.dead());
+    }
+
     @Test
     void weakenedPetCanRecoverFullyWithLowMoodAndNoMedicine() {
         Pet pet = pet();

@@ -17,6 +17,8 @@ public final class PetDiagnostics {
 
     public List<String> validate() {
         List<String> issues = new ArrayList<>();
+        String furnitureIssue = net.tfminecraft.companionpets.listen.FurniturePetHouses.configurationIssue(runtime);
+        if (furnitureIssue != null) issues.add(furnitureIssue);
         Set<ItemRef> items = new LinkedHashSet<>();
         if (runtime.config().kennel() != null) items.add(runtime.config().kennel());
         items.addAll(runtime.config().moments().digLoot().keySet());

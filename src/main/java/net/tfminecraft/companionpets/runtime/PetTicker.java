@@ -251,7 +251,7 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
-            if (mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP) PetFx.stopLooking(mob);
+            if (mode == Locomotion.Mode.SLEEP || pet.activity() == Activity.SLEEPING) PetFx.stopLooking(mob);
             if (actions.moments().tickBelly(pet, mob, owner)) {
                 PetFx.stopLooking(mob);
                 continue;
@@ -263,11 +263,12 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             if (held && mob.isAware()) actions.clearInteractions(pet);
-            mob.setAware(!held);
             if (held) {
                 actions.roaming().cancel(pet);
-                net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
-            }
+                if ((mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.LIE) && pet.activity() != Activity.SLEEPING)
+                    PostureNavigationGoal.hold(runtime, pet, mob);
+                else net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+            } else mob.setAware(true);
             if (!held && actions.roaming().tickAttention(pet, mob, now)) {
                 continue;
             }

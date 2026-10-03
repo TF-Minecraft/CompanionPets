@@ -175,7 +175,7 @@ public final class PetTexts {
             case SPEAK -> "Barks, meows or yips on cue";
             case JUMP -> "Leaps up into the air";
             case SPIN -> "Twirls around in a circle";
-            case LAY -> "Lies down to sleep until you say follow";
+            case LAY -> "Lies down awake until you give another order";
             case PAW -> "Gives you a paw";
         };
     }
@@ -190,7 +190,7 @@ public final class PetTexts {
             case SPEAK -> name + " speaks up proudly";
             case JUMP -> name + " leaps into the air";
             case SPIN -> name + " chases " + his(sex) + " own tail in a circle";
-            case LAY -> name + " lies down to sleep";
+            case LAY -> name + " lies down";
             case PAW -> name + " lifts a paw and gives it to you";
         };
     }

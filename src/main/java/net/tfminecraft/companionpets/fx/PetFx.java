@@ -142,8 +142,8 @@ public final class PetFx {
     public static void lie(Entity entity, boolean lying) {
         if (entity instanceof Mob mob && net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob)) lying = false;
         if (entity instanceof Fox fox) {
-            fox.setSleeping(lying);
-            fox.setSitting(false);
+            fox.setSleeping(false);
+            fox.setSitting(lying);
             return;
         }
         if (entity instanceof LivingEntity living && living.getPose() == Pose.SLEEPING) {

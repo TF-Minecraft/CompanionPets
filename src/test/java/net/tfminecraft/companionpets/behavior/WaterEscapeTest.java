@@ -14,10 +14,15 @@ import org.mockbukkit.mockbukkit.world.WorldMock;
 class WaterEscapeTest {
     private final Map<String, Material> terrain = new HashMap<>();
     private WorldMock world;
+    private boolean blockedSwim;
 
     @BeforeEach void setup() {
         var server = MockBukkit.mock();
         world = new WorldMock() {
+            @Override public org.bukkit.util.RayTraceResult rayTraceBlocks(Location from, org.bukkit.util.Vector direction,
+                    double distance, org.bukkit.FluidCollisionMode fluid, boolean ignorePassable) {
+                return blockedSwim ? new org.bukkit.util.RayTraceResult(from.toVector()) : null;
+            }
             @Override public boolean isChunkLoaded(int x, int z) { return x == 0 && z == 0; }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
                 return new BlockMock(new Location(this, x, y, z)) {
@@ -57,5 +62,38 @@ class WaterEscapeTest {
         block(4, 63, 2, Material.MAGMA_BLOCK); assertFalse(WaterEscape.safe(at));
         block(20, 63, 2, Material.STONE); assertFalse(WaterEscape.safe(new Location(world, 20.5, 64, 2.5)));
         assertNull(WaterEscape.exit(new Location(world, 2.5, 62, 2.5), null));
+    }
+
+    @Test void skipsAnUnreachablePreferredAndNearestExitForAnotherBank() {
+        var from = new Location(world, 2.5, 62, 2.5);
+        block(4, 63, 2, Material.STONE);
+        block(7, 63, 2, Material.STONE);
+        var enclosed = new Location(world, 4.5, 64, 2.5);
+        var reachable = new Location(world, 7.5, 64, 2.5);
+        assertEquals(reachable, WaterEscape.exit(from, enclosed, reachable::equals));
+        assertNull(WaterEscape.exit(from, enclosed, candidate -> false));
+    }
+
+    @Test void partialNativePathFallsBackToClearSwimmingButCannotReachRaisedPlatformOrWall() {
+        var server = (org.mockbukkit.mockbukkit.ServerMock) org.bukkit.Bukkit.getServer();
+        var body = new org.mockbukkit.mockbukkit.entity.WolfMock(server, java.util.UUID.randomUUID()) {
+            @Override public boolean isInWater() { return true; }
+            @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() {
+                return (com.destroystokyo.paper.entity.Pathfinder) java.lang.reflect.Proxy.newProxyInstance(
+                        getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class},
+                        (p, m, a) -> (com.destroystokyo.paper.entity.Pathfinder.PathResult) java.lang.reflect.Proxy.newProxyInstance(
+                                getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.PathResult.class},
+                                (path, method, args) -> method.getName().equals("canReachFinalPoint") ? false : null));
+            }
+        };
+        body.teleport(new Location(world, 2.5, 64, 2.5));
+        block(4, 63, 2, Material.STONE); block(2, 67, 2, Material.STONE);
+        var shore = new Location(world, 4.5, 64, 2.5);
+        var platform = new Location(world, 2.5, 68, 2.5);
+        assertTrue(WaterEscape.reachable(body, shore));
+        assertFalse(WaterEscape.reachable(body, platform));
+        assertEquals(shore, WaterEscape.exit(body.getLocation(), platform, at -> WaterEscape.reachable(body, at)));
+        blockedSwim = true;
+        assertFalse(WaterEscape.reachable(body, shore));
     }
 }

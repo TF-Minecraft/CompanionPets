@@ -181,13 +181,13 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                 Object modeledOwner = modeledOwner(restored);
                 var ownerFixture = ownerFixture(owner, at);
                 var care = new net.tfminecraft.companionpets.gui.MenuHolder(net.tfminecraft.companionpets.gui.MenuHolder.Kind.CARE, pet.id(), null);
-                actions.clickMenu(ownerFixture, care, net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, null, false, false, false);
+                actions.clickMenu(ownerFixture, care, net.tfminecraft.companionpets.gui.PetMenus.careSlot(net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, false), null, false, false, false);
                 check(pet.stored() && pet.entityId() == null && !restored.isValid(), type.id() + " owner's Pet House removes body");
                 checkRemovedVisual(restored, modeledOwner, type.id() + " owner's Pet House");
                 pet.stored(false);
                 restored = actions.restoreBody(pet); check(restored != null, type.id() + " Pet House pet can be restored"); entities.add(restored);
                 modeledOwner = modeledOwner(restored);
-                actions.clickMenu(ownerFixture, care, net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, null, false, false, false);
+                actions.clickMenu(ownerFixture, care, net.tfminecraft.companionpets.gui.PetMenus.careSlot(net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, false), null, false, false, false);
                 check(pet.stored() && runtime.entity(pet) == null && !restored.isValid(), type.id() + " second Pet House entry removes body");
                 checkRemovedVisual(restored, modeledOwner, type.id() + " second Pet House entry");
 

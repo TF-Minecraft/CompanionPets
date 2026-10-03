@@ -709,12 +709,12 @@ public final class PetActions {
                 if (partial) {
                     clearInteractions(pet);
                     pet.forcedSitUntilMillis(now + 800L);
-                    if (entity instanceof Mob mob) net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+                    if (entity instanceof Mob mob) PostureNavigationGoal.hold(runtime, pet, mob);
                 } else {
                     clearInteractions(pet); releaseFetch(pet, player, true); wakeToFollow(pet, now);
                     pet.order(PetOrder.SIT);
                     pet.staying(false);
-                    if (entity instanceof Mob mob) { net.tfminecraft.companionpets.integration.PetMotion.hold(mob); PetFx.sit(mob, true); }
+                    if (entity instanceof Mob mob) { PostureNavigationGoal.hold(runtime, pet, mob); PetFx.sit(mob, true); }
                 }
             }
             case FOLLOW -> {
@@ -750,10 +750,12 @@ public final class PetActions {
                 clearInteractions(pet);
                 releaseFetch(pet, player, true);
                 pet.order(PetOrder.LAY);
-                pet.activity(Activity.SLEEPING);
+                wakeToFollow(pet, now);
                 pet.staying(false);
-                if (entity instanceof Mob mob) { net.tfminecraft.companionpets.integration.PetMotion.hold(mob); }
-                markSleep(entity, true);
+                pet.forcedSitUntilMillis(0L);
+                PetFx.lie(entity, true);
+                if (entity instanceof Mob mob) PostureNavigationGoal.hold(runtime, pet, mob);
+                markSleep(entity, false);
             }
             case PAW -> {
                 if (entity != null) {
@@ -781,7 +783,7 @@ public final class PetActions {
             } else if (trick == Trick.STAY) {
                 runtime.visual().update(entity, type, net.tfminecraft.companionpets.visual.PetAnimation.IDLE);
             } else if (trick == Trick.LAY) {
-                runtime.visual().update(entity, type, net.tfminecraft.companionpets.visual.PetAnimation.SLEEP);
+                runtime.visual().update(entity, type, net.tfminecraft.companionpets.visual.PetAnimation.LIE);
             } else runtime.visual().play(entity, type, trick.name());
         }
     }

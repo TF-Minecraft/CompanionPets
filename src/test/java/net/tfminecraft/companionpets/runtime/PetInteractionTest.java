@@ -33,6 +33,7 @@ class PetInteractionTest {
     private int navigationStops;
     private Location navigationTarget;
     private boolean inWater;
+    private Location lookedAt;
 
     @BeforeEach void setup() throws Exception {
         var goals = new java.util.HashMap<String, com.destroystokyo.paper.entity.ai.Goal<?>>();
@@ -58,6 +59,11 @@ class PetInteractionTest {
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
                 if (type != org.bukkit.entity.Wolf.class) return super.spawn(at, type);
                 var wolf = new WolfMock(server, UUID.randomUUID()) {
+                    @Override public int getHeadRotationSpeed() { return 40; }
+                    @Override public int getMaxHeadPitch() { return 30; }
+                    @Override public void lookAt(Entity target, float speed, float pitch) {
+                        lookedAt = target instanceof org.bukkit.entity.LivingEntity living ? living.getEyeLocation() : target.getLocation();
+                    }
                     @Override public boolean isInWater() { return inWater; }
                     @Override public void setRemoveWhenFarAway(boolean remove) { }
                     @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() {
@@ -67,6 +73,9 @@ class PetInteractionTest {
                                     case "moveTo" -> { navigationTarget = ((Location) args[0]).clone(); yield true; }
                                     case "hasPath" -> false;
                                     case "getEntity" -> this;
+                                    case "findPath" -> (com.destroystokyo.paper.entity.Pathfinder.PathResult) java.lang.reflect.Proxy.newProxyInstance(
+                                            getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.PathResult.class},
+                                            (p, m, a) -> m.getName().equals("canReachFinalPoint") ? true : null);
                                     default -> throw new AssertionError("Unexpected navigation call: " + method.getName());
                                 });
                     }
@@ -184,7 +193,8 @@ class PetInteractionTest {
             assertTrue(body.isAware()); assertFalse(body.isSitting()); assertTrue(body.getVelocity().getY() > 0);
             inWater = false;
             new PetTicker(runtime, actions).run();
-            assertFalse(body.isAware()); assertEquals(order, pet.order()); assertFalse(goal.shouldActivate());
+            assertEquals(pet.activity() != Activity.SLEEPING, body.isAware());
+            assertEquals(order, pet.order()); assertFalse(goal.shouldActivate());
             inWater = true;
         }
     }
@@ -367,7 +377,7 @@ class PetInteractionTest {
 
     @Test void namedOrdersWorkInEitherOrderWithoutAiming() {
         pet.bindWord("sit down", Trick.SIT); pet.progress(Trick.SIT, 100);
-        actions.onChat(player, "Toby, sit down!"); assertEquals(PetOrder.SIT, pet.order()); assertTrue(body.isSitting()); assertFalse(body.isAware());
+        actions.onChat(player, "Toby, sit down!"); assertEquals(PetOrder.SIT, pet.order()); assertTrue(body.isSitting()); assertTrue(body.isAware());
         actions.onChat(player, "follow Toby"); assertEquals(PetOrder.FOLLOW, pet.order());
         actions.onChat(player, "sit down Toby"); assertEquals(PetOrder.SIT, pet.order());
         pet.bindWord("stay", Trick.STAY); pet.progress(Trick.STAY, 100);
@@ -443,7 +453,7 @@ class PetInteractionTest {
             assertEquals(player.getLocation(), navigationTarget, "A name call uses the owner's current position");
             body.setVelocity(new org.bukkit.util.Vector(0.4, -0.2, 0.3));
             actions.onChat(player, "Toby " + posture.name().toLowerCase());
-            assertEquals(posture.name(), pet.order().name()); assertFalse(body.isAware());
+            assertEquals(posture.name(), pet.order().name()); assertEquals(posture != Trick.STAY, body.isAware());
             assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
             assertEquals(-0.2, body.getVelocity().getY(), "Holding keeps gravity");
             assertFalse(actions.roaming().tickAttention(pet, body, now + 2), "The previous call must be cancelled");
@@ -474,8 +484,8 @@ class PetInteractionTest {
             body.teleport(player.getLocation().add(1, 0, 0)); body.setVelocity(new org.bukkit.util.Vector(0.3, 0, 0.2));
             assertTrue(actions.roaming().tickAttention(pet, body, now + 2));
             assertEquals(previous, pet.order()); assertEquals(previous == PetOrder.STAY, pet.staying());
-            assertEquals(previous == PetOrder.LAY ? Activity.SLEEPING : Activity.NONE, pet.activity());
-            assertEquals(previous == PetOrder.FOLLOW, body.isAware());
+            assertEquals(Activity.NONE, pet.activity());
+            assertEquals(previous != PetOrder.STAY, body.isAware());
             assertEquals(previous == PetOrder.SIT || previous == PetOrder.LAY, body.isSitting());
             assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
             assertFalse(actions.roaming().tickAttention(pet, body, now + 3));
@@ -491,6 +501,32 @@ class PetInteractionTest {
         actions.onChat(player, "Toby come"); actions.onChat(player, "Toby follow");
         assertFalse(actions.roaming().tickAttention(pet, body, System.currentTimeMillis()));
         assertEquals(PetOrder.FOLLOW, pet.order()); assertTrue(body.isAware());
+    }
+
+    @Test void sittingAndLyingStayAwakeAndTrackNearbyMovementWithoutWalking() {
+        for (Trick posture : new Trick[]{Trick.SIT, Trick.LAY}) {
+            pet.bindWord(posture.name().toLowerCase(), posture); pet.progress(posture, 100);
+            actions.onChat(player, "Toby " + posture.name().toLowerCase());
+            assertEquals(Activity.NONE, pet.activity()); assertTrue(body.isAware()); assertTrue(body.isSitting());
+            var hold = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                    org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "posture_navigation")));
+            assertTrue(hold.shouldActivate());
+            assertFalse(hold.getTypes().contains(com.destroystokyo.paper.entity.ai.GoalType.LOOK));
+            var position = body.getLocation();
+            body.setVelocity(new org.bukkit.util.Vector(0.3, -0.2, 0.4)); hold.tick();
+            var look = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                    org.bukkit.entity.Mob.class, new NamespacedKey("companionpets", "look")));
+            assertNotNull(look); look.tick(); assertEquals(player.getEyeLocation(), lookedAt);
+            player.teleport(player.getLocation().add(0.2, 0, 0)); look.tick();
+            assertEquals(player.getEyeLocation(), lookedAt); assertEquals(position, body.getLocation());
+            assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
+            assertFalse(body.getWorld().getEntities().stream().anyMatch(e ->
+                    e.customName() != null && net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                            .serialize(e.customName()).equals("Sleeping")));
+            inWater = true; assertFalse(hold.shouldActivate()); inWater = false;
+            pet.activity(Activity.SLEEPING); assertFalse(hold.shouldActivate()); pet.activity(Activity.NONE);
+            actions.onChat(player, "Toby follow"); assertFalse(hold.shouldActivate());
+        }
     }
 
     @Test void expiredComeAndReloadRestoreTheHeldPostureInsteadOfLeavingThePetFollowing() {

@@ -17,7 +17,11 @@ public final class HealthRecovery {
     }
 
     public static boolean physicalNeedsCritical(Pet pet) {
-        return pet.need(Need.HUNGER) < 25 || pet.need(Need.ENERGY) < 25 || pet.need(Need.CLEANLINESS) < 25;
+        return physicalNeedsCritical(pet, false);
+    }
+
+    public static boolean physicalNeedsCritical(Pet pet, boolean resting) {
+        return pet.need(Need.HUNGER) < 25 || (!resting && pet.need(Need.ENERGY) < 25) || pet.need(Need.CLEANLINESS) < 25;
     }
 
     public static boolean canRecover(Pet pet, boolean resting) {

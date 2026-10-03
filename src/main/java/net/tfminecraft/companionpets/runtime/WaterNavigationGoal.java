@@ -47,8 +47,8 @@ final class WaterNavigationGoal implements Goal<Mob> {
                     : pet.activity() == net.tfminecraft.companionpets.pet.Activity.ATTENDING ? actions.roaming().destination(pet)
                     : pet.order() == net.tfminecraft.companionpets.pet.PetOrder.FOLLOW && !pet.staying()
                     && runtime.followingAllowed(pet, owner) ? owner.getLocation() : null;
-            exit = preferred != null && body.getWorld().equals(preferred.getWorld())
-                    ? preferred : WaterEscape.exit(body.getLocation(), null);
+            exit = WaterEscape.reachable(body, preferred) ? preferred
+                    : WaterEscape.exit(body.getLocation(), preferred, candidate -> WaterEscape.reachable(body, candidate));
             speed = pet.fetch() != null ? actions.fetchActions().movementSpeed(pet)
                     : actions.roaming().returningFromFetch(pet) ? actions.roaming().movementSpeed(pet) : 1.1;
             if (exit != null) body.getPathfinder().moveTo(exit, speed);

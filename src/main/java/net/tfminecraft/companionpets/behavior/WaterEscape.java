@@ -43,23 +43,44 @@ public final class WaterEscape {
     }
 
     public static Location exit(Location from, Location preferred) {
+        return exit(from, preferred, candidate -> true);
+    }
+
+    public static Location exit(Location from, Location preferred, java.util.function.Predicate<Location> reachable) {
         if (preferred != null && preferred.getWorld().equals(from.getWorld())
-                && preferred.distanceSquared(from) <= 144 && safe(preferred)) return preferred.clone();
+                && preferred.distanceSquared(from) <= 144 && safe(preferred) && reachable.test(preferred)) return preferred.clone();
         World world = from.getWorld();
-        Location best = null;
-        double closest = Double.MAX_VALUE;
+        var candidates = new java.util.ArrayList<Location>();
         for (int x = from.getBlockX() - 8; x <= from.getBlockX() + 8; x++) {
             for (int z = from.getBlockZ() - 8; z <= from.getBlockZ() + 8; z++) {
                 if (!world.isChunkLoaded(x >> 4, z >> 4)) continue;
                 for (int y = Math.max(world.getMinHeight() + 1, from.getBlockY() - 2);
                         y <= Math.min(world.getMaxHeight() - 2, from.getBlockY() + 8); y++) {
                     Location candidate = new Location(world, x + 0.5, y, z + 0.5);
-                    double distance = candidate.distanceSquared(from);
-                    if (distance < closest && safe(candidate)) { best = candidate; closest = distance; }
+                    if (safe(candidate)) candidates.add(candidate);
                 }
             }
         }
-        return best;
+        return candidates.stream().sorted(java.util.Comparator.comparingDouble(candidate ->
+                candidate.distanceSquared(from) + (preferred != null && world.equals(preferred.getWorld())
+                        ? candidate.distanceSquared(preferred) : 0)))
+                .filter(reachable).findFirst().orElse(null);
+    }
+
+    /** Native land routes or an unobstructed swim to water/a low, dry bank. */
+    public static boolean reachable(Mob body, Location target) {
+        if (target == null || !body.getWorld().equals(target.getWorld())
+                || !body.getWorld().isChunkLoaded(target.getBlockX() >> 4, target.getBlockZ() >> 4)
+                || !body.getWorld().getWorldBorder().isInside(target)) return false;
+        var path = body.getPathfinder().findPath(target);
+        if (path != null && path.canReachFinalPoint()) return true;
+        if (!needed(body) || Math.abs(target.getY() - body.getLocation().getY()) > 1.5
+                || !(target.getBlock().getType() == Material.WATER || safe(target))) return false;
+        var from = body.getEyeLocation();
+        var direction = target.clone().add(0, body.getEyeHeight(), 0).toVector().subtract(from.toVector());
+        double distance = direction.length();
+        return distance > 0.01 && body.getWorld().rayTraceBlocks(from, direction.normalize(), distance,
+                org.bukkit.FluidCollisionMode.NEVER, true) == null;
     }
 
     public static boolean safe(Location at) {

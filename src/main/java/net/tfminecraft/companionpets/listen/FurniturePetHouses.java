@@ -25,6 +25,21 @@ public final class FurniturePetHouses implements Listener {
         this.menus = new PetMenus(runtime);
     }
 
+    public static String configurationIssue(PetRuntime runtime) {
+        if (runtime.config().kennelFurniture() == null) return null;
+        var provider = runtime.plugin().getServer().getPluginManager().getPlugin("ItemsAdder");
+        if (provider == null || !provider.isEnabled()) return null;
+        try {
+            var stackType = Class.forName("dev.lone.itemsadder.api.CustomStack", true, provider.getClass().getClassLoader());
+            var stack = stackType.getMethod("getInstance", String.class).invoke(null, runtime.config().kennelFurniture());
+            if (stack != null && Boolean.TRUE.equals(stackType.getMethod("isComplexFurniture").invoke(stack)))
+                return "items.kennel-furniture must use simple ItemsAdder furniture; complex furniture is unsupported";
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
+            return "Could not validate items.kennel-furniture against the ItemsAdder simple furniture API";
+        }
+        return null;
+    }
+
     public void register() {
         var provider = runtime.plugin().getServer().getPluginManager().getPlugin("ItemsAdder");
         if (provider == null || !provider.isEnabled()) return;

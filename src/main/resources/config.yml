@@ -195,7 +195,8 @@ items:
   # Pet House placement is global; eggs belong to each pet type, not these lists.
   kennel: BARREL
   kennel-block: BARREL
-  # Optional ItemsAdder furniture: set kennel to "itemsadder:tfmc:pet_house"
+  # Optional simple ItemsAdder furniture (complex furniture is unsupported):
+  # set kennel to "itemsadder:tfmc:pet_house"
   # and uncomment the matching ID. ItemsAdder handles placement and drops.
   # kennel-furniture: "tfmc:pet_house"
   # Both treats work for ALL species. Hold either to train; rewards consume one.
@@ -261,7 +262,7 @@ pets:
   # Omitted = all compatible base/custom tricks. [] = none. A list restricts them.
   # sit = sit down; follow = resume following; stay = stay in place; speak = make its sound;
   # come = get up, walk to the owner, then resume the previous sit/lay/stay posture.
-  # jump = jump; lay = lie down to sleep until told to follow; paw = give a paw;
+  # jump = jump; lay = lie down awake until given another order; paw = give a paw;
   # Legacy sleep trick IDs are accepted as lay, keeping saved words/progress.
   # Add custom-tricks IDs to the same list, e.g. [sit, follow, paw, salute].
   # IDs are case-insensitive. Unknown IDs are skipped with a warning. A non-list

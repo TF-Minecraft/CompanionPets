@@ -57,6 +57,7 @@ class PetFetchWorkflowTest {
             }
         }); var plugin = MockBukkit.createMockPlugin();
         world = new WorldMock() {
+            @Override public boolean isChunkLoaded(int x, int z) { return true; }
             @Override public void spawnParticle(org.bukkit.Particle particle, Location at, int count,
                     double x, double y, double z, double extra) { }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
@@ -103,6 +104,9 @@ class PetFetchWorkflowTest {
                                 case "stopPathfinding" -> { navigationTargets.remove(getUniqueId()); yield null; }
                                 case "hasPath" -> navigationTargets.containsKey(getUniqueId());
                                 case "getEntity" -> this;
+                                case "findPath" -> (com.destroystokyo.paper.entity.Pathfinder.PathResult) java.lang.reflect.Proxy.newProxyInstance(
+                                        getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.PathResult.class},
+                                        (p, m, a) -> m.getName().equals("canReachFinalPoint") ? true : null);
                                 default -> throw new AssertionError("Unexpected navigation call: " + method.getName());
                             });
             }
@@ -308,6 +312,19 @@ class PetFetchWorkflowTest {
         var winnerWater = server.getMobGoals().getGoal(winner, com.destroystokyo.paper.entity.ai.GoalKey.of(
                 org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
         winnerWater.start(); assertEquals(winnerOutbound, navigationSpeeds.get(winner.getUniqueId()));
+    }
+
+    @Test void losingPetReturnExpiresWithoutTeleportingWhenOwnerIsUnreachable() {
+        var body = (FetchWolf) runtime.entity(pet);
+        body.teleport(new Location(world, 30, 64, 0));
+        var before = body.getLocation();
+        long now = System.currentTimeMillis();
+        actions.roaming().returnFromFetch(pet, owner, 1.3);
+        assertTrue(actions.roaming().returningFromFetch(pet));
+        actions.roaming().tickAttention(pet, body, now + 121_000);
+        assertFalse(actions.roaming().returningFromFetch(pet));
+        assertEquals(Activity.NONE, pet.activity()); assertEquals(PetOrder.FOLLOW, pet.order());
+        assertEquals(before, body.getLocation());
     }
 
     @Test void crossingWaterKeepsToyDestinationThenUsesThrowerDestinationWhileCarrying() {

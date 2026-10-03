@@ -98,7 +98,9 @@ priority. Confirmation rechecks the held item before consuming it.
 Pet House placement stays global: `items.kennel` selects the consumed held item;
 `items.kennel-block` selects the actual vanilla block (BARREL for custom tokens).
 Without `items.kennel-furniture`, this places a regular Pet House. For ItemsAdder
-furniture, configure the held item and matching placed furniture ID:
+simple furniture, configure the held item and matching placed furniture ID.
+Complex furniture is unsupported: its events do not expose the player needed
+to record ownership and enforce owner-only access. Use a simple furniture ID:
 
 ```yaml
 items:
@@ -161,7 +163,10 @@ from birth. Saved COME learning remains separate from FOLLOW. The literal
 word come that an earlier dev build assigned to FOLLOW is restored to COME,
 preserving its progress; other Follow words retain their bindings.
 
-`lay` replaces the former Rest trick (`sleep` ID) and uses the `sleep` animation.
+`lay` replaces the former Rest trick (`sleep` ID). It lies down awake, uses the
+`lie` pose and does not display the Sleeping label. Sitting and lying pets can
+look at nearby players and animals without walking. Only automatic sleep uses
+the sleep state and label.
 Legacy `sleep` entries in configuration and saved words/progress are accepted as
 `lay`; subsequent saves use `LAY`. Existing spoken words remain bound, and the
 highest progress is retained if both old and new IDs are present. Pets created with testpet
@@ -385,8 +390,8 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   contain spaces. Only your own loaded pets in the same world and within
   `orders.hearing-radius` (12 blocks) hear named orders. Duplicate names require
   aiming to choose the intended pet. Jump makes a sitting pet stand first.
-- Sit, Stay (standing) and Lay (sleeping) remain in place until following is
-  resumed, and survive restarts. Lay stays asleep even at full energy. Automatic
+- Sit, Stay (standing) and Lay (lying awake) remain in place until following is
+  resumed, and survive restarts. Lay remains in place at full energy. Automatic
   exhaustion sleep can still end when recovered. Sitting and sleeping recover
   energy. Needs and illness can prevent a pet from moving even after release.
   In water, land pets float and seek a nearby dry bank even when hungry,

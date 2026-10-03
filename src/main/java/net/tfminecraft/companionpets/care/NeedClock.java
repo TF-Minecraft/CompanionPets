@@ -72,7 +72,7 @@ public final class NeedClock {
             notices.add(CareNotice.of(CareNotice.Kind.SICK));
         }
 
-        if (!frozen && HealthRecovery.physicalNeedsCritical(pet)
+        if (!frozen && HealthRecovery.physicalNeedsCritical(pet, input.sleeping() || input.resting())
                 && (pet.illness() == Illness.UNWELL || pet.illness() == Illness.SICK)) {
             double minutes = input.elapsedMillis() / 60000.0;
             pet.need(Need.HEALTH, pet.need(Need.HEALTH) - care.healthLossPerMinute() * minutes);
