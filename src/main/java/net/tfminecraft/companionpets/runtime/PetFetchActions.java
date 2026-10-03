@@ -19,7 +19,6 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
 import net.tfminecraft.companionpets.behavior.Locomotion;
-import net.tfminecraft.companionpets.behavior.WaterEscape;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.item.HandItems;
@@ -121,7 +120,6 @@ final class PetFetchActions {
     }
 
     void step(Pet pet, Mob mob) {
-        if (WaterEscape.needed(mob)) return;
         FetchJob job = pet.fetch();
         if (job == null) {
             return;
@@ -214,8 +212,24 @@ final class PetFetchActions {
                 || body.getLocation().distance(item.getLocation()) >= 1.7 || !job.claim(pet.id())) return false;
         item.remove();
         job.itemId(null);
-        for (Pet other : chasers(job)) if (other != pet) detach(other);
+        for (Pet other : chasers(job)) if (other != pet) {
+            detach(other);
+            Player owner = Bukkit.getPlayer(other.ownerId());
+            if (owner != null && owner.isOnline() && body.getWorld().equals(owner.getWorld()))
+                actions.roaming().returnFromFetch(other, owner);
+        }
         return true;
+    }
+
+    Location destination(Pet pet) {
+        FetchJob job = pet.fetch();
+        if (job == null) return null;
+        Entity target = switch (job.phase()) {
+            case AIR -> entity(job.projectileId());
+            case GROUND -> entity(job.itemId());
+            case CARRY -> Bukkit.getPlayer(job.throwerId());
+        };
+        return target == null ? null : target.getLocation();
     }
 
     void releaseFetch(Pet pet, boolean toOwner) {

@@ -392,6 +392,8 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   In water, land pets float and seek a nearby dry bank even when hungry,
   weakened, sitting or sleeping. Their saved order resumes on land. This does
   not apply to aquatic bodies such as fish, axolotls, tadpoles or turtles.
+  Fetching, calls and active following keep their destinations while swimming;
+  they do not turn back toward the nearest bank instead of crossing the water.
 - Follow is one trick, learned at 100% by default and shown with its command
   words on the Tricks page. Say `follow` while looking or `<name> follow`.
   Come is a separate trick; saved Come words and progress stay with Come.
@@ -402,7 +404,9 @@ and was checked against the ModelEngine 4.1.1 API available in the workspace.
   exhausted, sleeping or training pets stay out. Only pets with the Follow order
   can join; pets ordered to Sit, Stay or Lay stay in place. Every
   participant gets its own navigation to the shared toy. The first pet to reach it
-  collects it and returns it to the player who threw it; the others stop chasing.
+  collects it and returns it to the player who threw it; the others run back
+  to their own owners without teleporting. Their return continues independently
+  after the winning pet delivers the toy.
   Each subsequent throw gives chasing pets a 35% chance to switch targets;
   pets already carrying a toy finish their return. Each throw remains a separate
   physical toy. Unclaimed toys can be picked up normally. Ground toys also
@@ -536,10 +540,10 @@ the normal pet profile: species, name, sex, age, needs, bond, personality,
 favorite toy and learned tricks. It is read-only, including its trick inventory;
 renaming, calling, Pet House and release actions are omitted. No UUIDs or audit
 snapshots are required or shown in command help, completion or pet cards.
-Profiles opened directly from the animal include a Pet House shortcut on the
-left. Profiles reached from the Pet House return there and keep that parent
-when browsing their tricks. The five footer icons are evenly spaced; a stored
-pet shows an inactive storage icon in the same position.
+Profiles opened directly from the animal have four centered footer icons and
+no Back button. Profiles reached from the Pet House return there and keep that
+parent when browsing their tricks. A stored pet shows an inactive storage icon
+in the same position.
 
     /companionpets list Nowko
     /companionpets find Nowko Toby
@@ -596,7 +600,8 @@ Sit, Stay and Lay cancel the call and clear both pathfinding and native travel
 inputs immediately, preserving vertical physics. Their holds also apply during
 model animations, so a posture cannot slide along an old movement route.
 Stay uses the standing idle pose, independently of stale vanilla sitting flags.
-Native entity teleports are cancelled while a pet has a hold order, including
+Native entity teleports are cancelled while fetching, returning from a lost
+fetch race, or while a pet has a hold order, including
 the tameable mob's built-in teleport to its owner. Follow and temporary Come
 movement remain permitted; an explicit profile Call switches to Follow before
 teleporting.

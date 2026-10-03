@@ -71,6 +71,23 @@ final class PetRoaming {
         attend(pet, owner, now, returnOrder);
     }
 
+    void returnFromFetch(Pet pet, Player owner) {
+        attend(pet, owner, System.currentTimeMillis(), PetOrder.FOLLOW);
+        attention.get(pet.id()).until = Long.MAX_VALUE;
+        if (runtime.entity(pet) instanceof Mob body) tickAttention(pet, body, System.currentTimeMillis());
+    }
+
+    Location destination(Pet pet) {
+        Attention job = attention.get(pet.id());
+        Player owner = job == null ? null : Bukkit.getPlayer(job.ownerId);
+        return owner != null && owner.isOnline() ? owner.getLocation() : null;
+    }
+
+    boolean returningFromFetch(Pet pet) {
+        Attention job = attention.get(pet.id());
+        return job != null && job.until == Long.MAX_VALUE;
+    }
+
     private void attend(Pet pet, Player owner, long now, PetOrder returnOrder) {
         plans.remove(pet.id());
         if (runtime.entity(pet) instanceof Mob body) {
@@ -269,7 +286,7 @@ final class PetRoaming {
 
     private static final class Attention {
         private final UUID ownerId;
-        private final long until;
+        private long until;
         private final PetOrder returnOrder;
         private long waitUntil;
         private boolean greeted;

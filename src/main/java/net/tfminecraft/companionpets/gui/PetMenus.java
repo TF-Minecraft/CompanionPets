@@ -38,6 +38,10 @@ public final class PetMenus {
     public static final int STORE_SLOT = 42;
     public static final int TRICKS_SLOT = 40;
     public static final int RELEASE_SLOT = 44;
+
+    public static int careSlot(int slot, boolean petHouseBack) {
+        return petHouseBack || slot == BACK_SLOT ? slot : slot - 1;
+    }
     private final PetRuntime runtime;
 
     public PetMenus(PetRuntime runtime) {
@@ -122,20 +126,18 @@ public final class PetMenus {
                 sick ? line(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED) : null));
 
         if (back) MenuNavigation.back(inventory, management ? "Return to the Pet House list" : "Return to this player's pets");
-        else if (management) inventory.setItem(BACK_SLOT, action(Material.ITEM_FRAME, "Pet House",
-                line("Open your Pet House", NamedTextColor.GRAY)));
-        inventory.setItem(TRICKS_SLOT, action(Material.BOOK, "Tricks",
+        inventory.setItem(careSlot(TRICKS_SLOT, back), action(Material.BOOK, "Tricks",
                 line("See what " + pet.name() + " has learned", NamedTextColor.GRAY)));
         if (management) {
             boolean stored = pet.stored();
-            inventory.setItem(CALL_SLOT, action(stored ? Material.LEAD : Material.COMPASS,
+            inventory.setItem(careSlot(CALL_SLOT, back), action(stored ? Material.LEAD : Material.COMPASS,
                     stored ? "Bring out" : "Call",
                     line(stored ? "Bring " + PetTexts.him(pet.sex()) + " out beside you" : "Call " + PetTexts.him(pet.sex()) + " to your side", NamedTextColor.GRAY)));
-            if (!stored) inventory.setItem(STORE_SLOT, action(Material.BARREL, "Send to Pet House",
+            if (!stored) inventory.setItem(careSlot(STORE_SLOT, back), action(Material.BARREL, "Send to Pet House",
                     line("Take " + PetTexts.him(pet.sex()) + " out of the world", NamedTextColor.GRAY)));
-            else inventory.setItem(STORE_SLOT, named(Material.GRAY_DYE, "In Pet House", NamedTextColor.GRAY,
+            else inventory.setItem(careSlot(STORE_SLOT, back), named(Material.GRAY_DYE, "In Pet House", NamedTextColor.GRAY,
                     line(pet.name() + " is already resting here", NamedTextColor.GRAY)));
-            inventory.setItem(RELEASE_SLOT, action(Material.BARRIER, "Release forever",
+            inventory.setItem(careSlot(RELEASE_SLOT, back), action(Material.BARRIER, "Release forever",
                     line(pet.name() + " leaves for good and cannot come back", NamedTextColor.GRAY)));
         }
         inventory.setItem(30, named(Material.LEAD, "Bond", NamedTextColor.WHITE,

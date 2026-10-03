@@ -223,12 +223,14 @@ public final class PetTicker implements Runnable {
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
             if (WaterEscape.needed(mob)) {
-                actions.roaming().cancelWithPosture(pet);
-                actions.clearInteractions(pet);
+                if (pet.fetch() == null && pet.activity() != Activity.ATTENDING) {
+                    actions.roaming().cancelWithPosture(pet);
+                    actions.clearInteractions(pet);
+                }
                 actions.markSleep(mob, false);
                 runtime.visual().cancelAction(mob);
                 WaterEscape.swim(mob, null);
-                WaterNavigationGoal.ensure(runtime, pet, mob);
+                WaterNavigationGoal.ensure(runtime, pet, mob, actions);
                 continue;
             }
             Locomotion.Mode mode = Locomotion.choose(

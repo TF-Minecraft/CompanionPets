@@ -151,7 +151,7 @@ class StaffCommandsTest {
 
     @Test void staffProfileSharesThePlayerLayoutAndTricksButContainsNoManagementActions() {
         var playerMenus = new net.tfminecraft.companionpets.gui.PetMenus(runtime);
-        playerMenus.openCare(owner, pet);
+        playerMenus.openCare(owner, pet, true);
         var normal = owner.getOpenInventory().getTopInventory();
         command("list", "Owner", "Toby"); var info = menu().getInventory();
         assertEquals(normal.getSize(), info.getSize()); assertEquals(45, info.getSize());

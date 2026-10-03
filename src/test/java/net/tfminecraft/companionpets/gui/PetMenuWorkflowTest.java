@@ -72,7 +72,7 @@ class PetMenuWorkflowTest {
         menus.refreshCare(player, pet);
         assertSame(inventory, holder().getInventory());
         assertEquals(Material.MILK_BUCKET, inventory.getItem(24).getType());
-        assertNotEquals(Material.BARREL, inventory.getItem(PetMenus.STORE_SLOT).getType(),
+        assertNotEquals(Material.BARREL, inventory.getItem(PetMenus.careSlot(PetMenus.STORE_SLOT, false)).getType(),
                 "Stored pet has a placeholder instead of the store action");
     }
 
@@ -170,7 +170,7 @@ class PetMenuWorkflowTest {
         Pet pet = pet("wolf", player.getUniqueId());
         menus.openCare(player, pet); assertUniformBackground();
         assertEquals(Material.WHITE_DYE, holder().getInventory().getItem(11).getType());
-        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder().getInventory().getItem(39).getType());
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder().getInventory().getItem(40).getType());
         pet.sex(PetSex.MALE); menus.refreshCare(player, pet); assertUniformBackground();
         assertEquals(Material.WHITE_DYE, holder().getInventory().getItem(11).getType());
         menus.openKennel(player); assertUniformBackground();
@@ -260,11 +260,27 @@ class PetMenuWorkflowTest {
                 .getPersistentDataContainer().has(runtime.petKey(), PersistentDataType.STRING));
     }
 
-    @Test void profileProvidesPetHouseAccessAndTricksReturnToTheParentMenu() {
-        Pet pet = pet("wolf", player.getUniqueId()); menus.openCare(player, pet);
-        assertEquals(Material.ITEM_FRAME, holder().getInventory().getItem(36).getType());
+    @Test void directProfileHasFourCenteredActionsAndTricksKeepItsNavigation() {
+        Pet pet = pet("wolf", player.getUniqueId()); pet.stored(false); menus.openCare(player, pet);
+        var inventory = holder().getInventory();
+        assertEquals(Material.COMPASS, inventory.getItem(37).getType());
+        assertEquals(Material.BOOK, inventory.getItem(39).getType());
+        assertEquals(Material.BARREL, inventory.getItem(41).getType());
+        assertEquals(Material.BARRIER, inventory.getItem(43).getType());
+        for (int slot : new int[]{36, 38, 40, 42, 44})
+            assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, inventory.getItem(slot).getType());
         actions.clickMenu(player, holder(), PetMenus.BACK_SLOT, null, false, false, false);
-        assertEquals(MenuHolder.Kind.KENNEL, holder().kind());
+        assertEquals(MenuHolder.Kind.CARE, holder().kind());
+        actions.clickMenu(player, holder(), 39, inventory.getItem(39), false, false, false);
+        assertEquals(MenuHolder.Kind.LEARNED, holder().kind());
+        actions.clickMenu(player, holder(), PetMenus.TRICKS_BACK_SLOT, null, false, false, false);
+        assertEquals(MenuHolder.Kind.CARE, holder().kind()); assertFalse(holder().petHouseBack());
+        assertEquals(Material.BOOK, holder().getInventory().getItem(39).getType());
+    }
+
+    @Test void profilesReachedFromPetHouseRetainTheirBackButtonAndTrickParent() {
+        Pet pet = pet("wolf", player.getUniqueId()); menus.openCare(player, pet);
+        menus.openKennel(player);
         actions.clickMenu(player, holder(), 0, holder().getInventory().getItem(0), false, false, false);
         assertEquals(MenuHolder.Kind.CARE, holder().kind()); assertTrue(holder().petHouseBack());
         actions.clickMenu(player, holder(), PetMenus.TRICKS_SLOT, null, false, false, false);
@@ -302,7 +318,7 @@ class PetMenuWorkflowTest {
     @Test void menusCancelItemTransfersAndRejectManagementOfSomeoneElsesPet() {
         Pet pet = pet("wolf", UUID.randomUUID()); menus.openCare(player, pet);
         var view = player.getOpenInventory();
-        var click = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, PetMenus.CALL_SLOT,
+        var click = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, PetMenus.careSlot(PetMenus.CALL_SLOT, false),
                 ClickType.LEFT, InventoryAction.PICKUP_ALL);
         listener.onClick(click);
         assertTrue(click.isCancelled()); assertTrue(pet.stored()); assertNull(pet.entityId());

@@ -95,6 +95,7 @@ public final class PetActions {
     public void toyLanded(org.bukkit.entity.Snowball ball) { fetchActions.toyLanded(ball); }
     PetFetchActions fetchActions() { return fetchActions; }
     public void releaseFetch(Pet pet, Player owner, boolean toOwner) { fetchActions.releaseFetch(pet, toOwner); }
+    public boolean fetchingOrReturning(Pet pet) { return pet.fetch() != null || roaming.returningFromFetch(pet); }
     public void dropPlain(Location location, String toy) { fetchActions.dropPlain(location, toy); }
 
     public PetMenus menus() {
@@ -473,18 +474,18 @@ public final class PetActions {
             return;
         }
         if (slot == PetMenus.BACK_SLOT) {
-            menus.openKennel(player, holder.petHousePage());
+            if (holder.petHouseBack()) menus.openKennel(player, holder.petHousePage());
             return;
         }
-        if (slot == PetMenus.TRICKS_SLOT) {
+        if (slot == PetMenus.careSlot(PetMenus.TRICKS_SLOT, holder.petHouseBack())) {
             menus.openLearned(player, pet);
             return;
         }
-        if (slot == PetMenus.RELEASE_SLOT) {
+        if (slot == PetMenus.careSlot(PetMenus.RELEASE_SLOT, holder.petHouseBack())) {
             beginRelease(player, pet);
             return;
         }
-        if (slot == PetMenus.CALL_SLOT) {
+        if (slot == PetMenus.careSlot(PetMenus.CALL_SLOT, holder.petHouseBack())) {
             if (pet.stored()) {
                 takeOut(player, pet);
             } else {
@@ -493,7 +494,7 @@ public final class PetActions {
             menus.openCare(player, pet, holder.petHouseBack(), holder.petHousePage());
             return;
         }
-        if (slot == PetMenus.STORE_SLOT && !pet.stored()) {
+        if (slot == PetMenus.careSlot(PetMenus.STORE_SLOT, holder.petHouseBack()) && !pet.stored()) {
             storePet(player, pet);
             player.closeInventory();
         }

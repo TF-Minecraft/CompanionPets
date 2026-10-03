@@ -86,6 +86,7 @@ class PetFetchWorkflowTest {
     }
 
     public static class FetchWolf extends WolfMock {
+            boolean inWater;
             final NativeClock clock = new NativeClock();
             public FetchWolf(ServerMock server, UUID id, java.util.Map<UUID, Location> navigationTargets) {
                 super(server, id);
@@ -102,7 +103,7 @@ class PetFetchWorkflowTest {
             }
             private final com.destroystokyo.paper.entity.Pathfinder pathfinder;
             @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() { return pathfinder; }
-            @Override public boolean isInWater() { return false; }
+            @Override public boolean isInWater() { return inWater; }
             @Override public boolean isOnGround() { return true; }
             public NativeClock getHandle() { return clock; }
     }
@@ -211,7 +212,7 @@ class PetFetchWorkflowTest {
         otherBody.teleport(target);
         actions.fetchActions().step(other, otherBody);
         assertEquals(FetchPhase.CARRY, other.fetch().phase());
-        assertNull(pet.fetch()); assertFalse(navigationTargets.containsKey(firstBody.getUniqueId()));
+        assertNull(pet.fetch());
     }
 
     @Test void wetWolfKeepsFetchingAndCanShakeOnlyAfterReturningTheToy() {
@@ -240,6 +241,77 @@ class PetFetchWorkflowTest {
         body.clock.isWet = false;
         net.tfminecraft.companionpets.integration.WolfShake.restore(body);
         assertFalse(body.clock.isWet);
+    }
+
+    @Test void losingPetRunsBackWithoutTeleportEvenAfterWinnerReturnsAndCallTimeoutPasses() {
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
+        land(throwToy());
+        Location far = new Location(world, 30, 64, 0);
+        items().getFirst().teleport(far);
+        var winner = (FetchWolf) runtime.entity(pet);
+        var loser = (FetchWolf) runtime.entity(other);
+        winner.teleport(far); loser.teleport(far.clone().add(0, 0, 1));
+        assertTrue(actions.fetchActions().claim(pet));
+        assertNull(other.fetch()); assertEquals(Activity.ATTENDING, other.activity());
+        assertEquals(owner.getLocation(), navigationTargets.get(loser.getUniqueId()));
+        var teleport = new org.bukkit.event.entity.EntityTeleportEvent(loser, loser.getLocation(), owner.getLocation());
+        listener.onTeleport(teleport); assertTrue(teleport.isCancelled());
+        var goal = server.getMobGoals().getGoal(loser, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "call_navigation")));
+        assertNotNull(goal); assertTrue(goal.shouldActivate());
+        Location before = loser.getLocation();
+        winner.teleport(owner.getLocation()); actions.fetchActions().step(pet, winner);
+        assertNull(pet.fetch()); assertEquals(Activity.ATTENDING, other.activity());
+        new PetTicker(runtime, actions).run(); goal.tick();
+        actions.roaming().tickAttention(other, loser, System.currentTimeMillis() + 60_000);
+        assertEquals(before, loser.getLocation()); assertTrue(goal.shouldActivate());
+        assertEquals(owner.getLocation(), navigationTargets.get(loser.getUniqueId()));
+        loser.teleport(owner.getLocation()); goal.tick();
+        assertEquals(Activity.NONE, other.activity()); assertFalse(goal.shouldActivate());
+        var afterReturn = new org.bukkit.event.entity.EntityTeleportEvent(loser, loser.getLocation(), owner.getLocation());
+        listener.onTeleport(afterReturn); assertFalse(afterReturn.isCancelled());
+    }
+
+    @Test void crossingWaterKeepsToyDestinationThenUsesThrowerDestinationWhileCarrying() {
+        land(throwToy()); var job = pet.fetch();
+        var body = (FetchWolf) runtime.entity(pet);
+        body.teleport(new Location(world, 2, 64, 0)); body.inWater = true;
+        body.clock.isWet = true; body.clock.progress = 0.5F;
+        new PetTicker(runtime, actions).run();
+        var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
+        assertNotNull(goal); assertTrue(goal.shouldActivate()); goal.start();
+        assertSame(job, pet.fetch());
+        var teleport = new org.bukkit.event.entity.EntityTeleportEvent(body, body.getLocation(), owner.getLocation());
+        listener.onTeleport(teleport); assertTrue(teleport.isCancelled());
+        assertEquals(items().getFirst().getLocation(), navigationTargets.get(body.getUniqueId()));
+        assertTrue(body.getVelocity().getX() > 0); assertTrue(body.getVelocity().getY() > 0);
+        assertEquals(0, body.clock.progress); assertFalse(body.clock.isWet);
+        for (int i = 0; i < 3; i++) { new PetTicker(runtime, actions).run(); goal.start(); }
+        assertSame(job, pet.fetch()); assertTrue(body.getVelocity().getX() > 0);
+        body.teleport(items().getFirst().getLocation()); goal.start();
+        assertEquals(FetchPhase.CARRY, job.phase());
+        assertEquals(owner.getLocation(), navigationTargets.get(body.getUniqueId()));
+        assertTrue(body.getVelocity().getX() < 0);
+        body.inWater = false; goal.stop();
+        actions.fetchActions().step(pet, body);
+        assertSame(job, pet.fetch()); assertEquals(owner.getLocation(), navigationTargets.get(body.getUniqueId()));
+    }
+
+    @Test void losingPetAlsoKeepsItsReturnRouteWhileSwimming() {
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
+        land(throwToy());
+        var body = (FetchWolf) runtime.entity(other);
+        body.teleport(new Location(world, 4, 64, 0)); body.inWater = true;
+        runtime.entity(pet).teleport(items().getFirst().getLocation());
+        assertTrue(actions.fetchActions().claim(pet));
+        new PetTicker(runtime, actions).run();
+        assertEquals(Activity.ATTENDING, other.activity());
+        var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
+        goal.start();
+        assertEquals(owner.getLocation(), navigationTargets.get(body.getUniqueId()));
+        assertTrue(body.getVelocity().getX() < 0); assertEquals(Activity.ATTENDING, other.activity());
     }
 
     @Test void visualTickerDoesNotStopFetchingOrPlayShakeForAModeledWetWolf() throws Exception {

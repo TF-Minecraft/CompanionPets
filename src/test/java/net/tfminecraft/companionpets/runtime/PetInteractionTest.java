@@ -197,8 +197,12 @@ class PetInteractionTest {
         pet.order(PetOrder.SIT); pet.bindWord("come", Trick.COME); pet.progress(Trick.COME, 100);
         actions.onChat(player, "Toby come"); assertEquals(Activity.ATTENDING, pet.activity());
         new PetTicker(runtime, actions).run();
-        assertEquals(PetOrder.SIT, pet.order(), "Interrupted Come retains the posture for when the pet reaches land");
+        assertEquals(PetOrder.FOLLOW, pet.order(), "Come keeps moving toward its owner across water");
+        assertEquals(Activity.ATTENDING, pet.activity());
         assertTrue(body.isAware()); assertFalse(body.isSitting());
+        inWater = false; body.teleport(player.getLocation());
+        new PetTicker(runtime, actions).run();
+        assertEquals(PetOrder.SIT, pet.order(), "Come restores the original posture after arrival");
     }
 
     private ItemStack hold(Material material, int amount) {
@@ -341,7 +345,8 @@ class PetInteractionTest {
     @Test void petHouseDeletesVisualAndBodyButPreservesLearningAndNeeds() {
         pet.progress(Trick.FOLLOW, 73); pet.bindWord("here", Trick.FOLLOW); pet.need(Need.HUNGER, 55);
         var holder = new net.tfminecraft.companionpets.gui.MenuHolder(net.tfminecraft.companionpets.gui.MenuHolder.Kind.CARE, pet.id(), null);
-        actions.clickMenu(player, holder, net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, null, false, false, false);
+        actions.clickMenu(player, holder, net.tfminecraft.companionpets.gui.PetMenus.careSlot(
+                net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, false), null, false, false, false);
         assertEquals(1, bodyRemovals, "Pet House must not detach by revealing the vanilla mob");
         assertFalse(body.isValid());
         assertTrue(pet.stored()); assertNull(pet.entityId());
@@ -501,8 +506,8 @@ class PetInteractionTest {
     @Test void profileHasNoDedicatedFollowButton() {
         actions.menus().openCare(player, pet);
         var holder = (net.tfminecraft.companionpets.gui.MenuHolder) player.getOpenInventory().getTopInventory().getHolder();
-        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder.getInventory().getItem(39).getType());
-        pet.order(PetOrder.SIT); actions.clickMenu(player, holder, 39, null, false, false, false);
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder.getInventory().getItem(40).getType());
+        pet.order(PetOrder.SIT); actions.clickMenu(player, holder, 40, null, false, false, false);
         assertEquals(PetOrder.SIT, pet.order());
     }
 
