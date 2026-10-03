@@ -79,8 +79,17 @@ class PetFetchWorkflowTest {
     private Pet outsidePet(UUID ownerId, String name, double x) {
         Pet result = new Pet(UUID.randomUUID(), ownerId, "wolf", name, PetSex.MALE);
         runtime.store().add(result);
-        var body = new WolfMock(server, UUID.randomUUID()) {
-            private final com.destroystokyo.paper.entity.Pathfinder pathfinder =
+        var body = new FetchWolf(server, UUID.randomUUID(), navigationTargets);
+        server.registerEntity(body);
+        body.teleport(new Location(world, x, 64, 0)); result.stored(false); runtime.remember(result, body);
+        return result;
+    }
+
+    public static class FetchWolf extends WolfMock {
+            final NativeClock clock = new NativeClock();
+            public FetchWolf(ServerMock server, UUID id, java.util.Map<UUID, Location> navigationTargets) {
+                super(server, id);
+                pathfinder =
                     (com.destroystokyo.paper.entity.Pathfinder) java.lang.reflect.Proxy.newProxyInstance(
                             getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class},
                             (proxy, method, args) -> switch (method.getName()) {
@@ -90,11 +99,25 @@ class PetFetchWorkflowTest {
                                 case "getEntity" -> this;
                                 default -> throw new AssertionError("Unexpected navigation call: " + method.getName());
                             });
+            }
+            private final com.destroystokyo.paper.entity.Pathfinder pathfinder;
             @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() { return pathfinder; }
             @Override public boolean isInWater() { return false; }
-        }; server.registerEntity(body);
-        body.teleport(new Location(world, x, 64, 0)); result.stored(false); runtime.remember(result, body);
-        return result;
+            @Override public boolean isOnGround() { return true; }
+            public NativeClock getHandle() { return clock; }
+    }
+
+    public static class NativeClock {
+        public boolean isWet;
+        float progress;
+        final NativeLevel level = new NativeLevel();
+        public float getShakeAnim(float partial) { return progress; }
+        public void handleEntityEvent(byte event) { if (event == 56) progress = 0; }
+        public NativeLevel level() { return level; }
+    }
+
+    public static class NativeLevel {
+        public void broadcastEntityEvent(NativeClock wolf, byte event) { }
     }
 
     private Snowball throwToy() {
@@ -189,6 +212,60 @@ class PetFetchWorkflowTest {
         actions.fetchActions().step(other, otherBody);
         assertEquals(FetchPhase.CARRY, other.fetch().phase());
         assertNull(pet.fetch()); assertFalse(navigationTargets.containsKey(firstBody.getUniqueId()));
+    }
+
+    @Test void wetWolfKeepsFetchingAndCanShakeOnlyAfterReturningTheToy() {
+        var body = (FetchWolf) runtime.entity(pet);
+        body.clock.isWet = true; body.clock.progress = 0.5F;
+        Snowball ball = throwToy(); var job = pet.fetch();
+        assertFalse(body.clock.isWet); assertEquals(0, body.clock.progress);
+        assertEquals(ball.getLocation(), navigationTargets.get(body.getUniqueId()));
+        land(ball);
+        var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "fetch_navigation")));
+        body.clock.isWet = true; body.clock.progress = 0.5F;
+        goal.tick();
+        assertSame(job, pet.fetch()); assertFalse(body.clock.isWet); assertEquals(0, body.clock.progress);
+        assertEquals(items().getFirst().getLocation(), navigationTargets.get(body.getUniqueId()));
+        body.teleport(items().getFirst().getLocation());
+        actions.fetchActions().step(pet, body);
+        assertEquals(FetchPhase.CARRY, job.phase());
+        body.clock.isWet = true; body.clock.progress = 0.5F;
+        goal.tick(); // Shake suppression also runs inside the navigation throttle.
+        assertFalse(body.clock.isWet); assertEquals(0, body.clock.progress);
+        assertSame(job, pet.fetch());
+        body.teleport(owner.getLocation()); actions.fetchActions().step(pet, body);
+        assertNull(pet.fetch()); assertTrue(body.clock.isWet);
+        assertEquals(1, items().size()); assertTrue(toy.isSimilar(items().getFirst().getItemStack()));
+        body.clock.isWet = false;
+        net.tfminecraft.companionpets.integration.WolfShake.restore(body);
+        assertFalse(body.clock.isWet);
+    }
+
+    @Test void visualTickerDoesNotStopFetchingOrPlayShakeForAModeledWetWolf() throws Exception {
+        land(throwToy());
+        var body = (FetchWolf) runtime.entity(pet);
+        Location target = navigationTargets.get(body.getUniqueId());
+        var yaml = new YamlConfiguration();
+        yaml.loadFromString("pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, appearance: {type: modelengine, model: beagle}}}\n");
+        var plays = new java.util.ArrayList<String>();
+        var cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        var visual = new net.tfminecraft.companionpets.visual.PetVisual() {
+            @Override public void apply(org.bukkit.entity.Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type) { }
+            @Override public boolean play(org.bukkit.entity.Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, String action) {
+                plays.add(action); return true;
+            }
+            @Override public boolean holdsMovement(org.bukkit.entity.Entity entity) { return true; }
+            @Override public boolean attached(org.bukkit.entity.Entity entity) { return true; }
+            @Override public void cancelAction(org.bukkit.entity.Entity entity) { cancelled.set(true); }
+        };
+        var modeled = new PetRuntime(runtime.plugin(), CompanionConfig.load(runtime.plugin(), yaml), runtime.store(),
+                runtime.sessions(), runtime.bodies(), visual, runtime.petKey(), runtime.toyKey());
+        body.clock.isWet = true; body.clock.progress = 0.5F;
+        new net.tfminecraft.companionpets.visual.PetVisualTicker(modeled).run();
+        assertTrue(cancelled.get()); assertTrue(plays.isEmpty());
+        assertEquals(0, body.clock.progress); assertFalse(body.clock.isWet);
+        assertEquals(target, navigationTargets.get(body.getUniqueId())); assertNotNull(pet.fetch());
     }
 
     @Test void onlyFollowingPetsChaseWhileAwakeSittingAndStayingPetsRemainInPlace() {

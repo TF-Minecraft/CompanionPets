@@ -5,6 +5,7 @@ import java.util.EnumSet;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Mob;
+import org.bukkit.entity.Wolf;
 
 import com.destroystokyo.paper.entity.ai.Goal;
 import com.destroystokyo.paper.entity.ai.GoalKey;
@@ -17,12 +18,14 @@ import net.tfminecraft.companionpets.pet.Pet;
 final class FetchNavigationGoal implements Goal<Mob> {
     private final GoalKey<Mob> key;
     private final Pet pet;
+    private final Mob body;
     private Runnable fetchStep;
     private long nextStepAt;
 
-    private FetchNavigationGoal(GoalKey<Mob> key, Pet pet, Runnable fetchStep) {
+    private FetchNavigationGoal(GoalKey<Mob> key, Pet pet, Mob body, Runnable fetchStep) {
         this.key = key;
         this.pet = pet;
+        this.body = body;
         this.fetchStep = fetchStep;
     }
 
@@ -32,7 +35,7 @@ final class FetchNavigationGoal implements Goal<Mob> {
         if (registered instanceof FetchNavigationGoal goal) {
             goal.fetchStep = fetchStep;
         } else {
-            Bukkit.getMobGoals().addGoal(body, 1, new FetchNavigationGoal(key, pet, fetchStep));
+            Bukkit.getMobGoals().addGoal(body, 1, new FetchNavigationGoal(key, pet, body, fetchStep));
         }
     }
 
@@ -48,6 +51,8 @@ final class FetchNavigationGoal implements Goal<Mob> {
 
     @Override
     public void tick() {
+        if (!shouldActivate()) return;
+        if (body instanceof Wolf wolf) net.tfminecraft.companionpets.integration.WolfShake.defer(wolf);
         long now = System.currentTimeMillis();
         if (now >= nextStepAt) {
             fetchStep.run();

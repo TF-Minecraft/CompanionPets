@@ -13,6 +13,7 @@ import org.bukkit.entity.Item;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Snowball;
+import org.bukkit.entity.Wolf;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
@@ -108,6 +109,7 @@ final class PetFetchActions {
     }
 
     void navigate(Pet pet, Mob mob) {
+        if (mob instanceof Wolf wolf) net.tfminecraft.companionpets.integration.WolfShake.defer(wolf);
         // Release the physical pose before the native goal selector runs. Otherwise
         // a sitting goal can prevent the fetch callback that would make it stand.
         actions.markSleep(mob, false);
@@ -286,7 +288,10 @@ final class PetFetchActions {
     private void detach(Pet pet) {
         pet.fetch(null);
         if (pet.activity() == Activity.PLAYING) pet.activity(Activity.NONE);
-        if (runtime.entity(pet) instanceof Mob mob) mob.getPathfinder().stopPathfinding();
+        if (runtime.entity(pet) instanceof Mob mob) {
+            mob.getPathfinder().stopPathfinding();
+            if (mob instanceof Wolf wolf) net.tfminecraft.companionpets.integration.WolfShake.restore(wolf);
+        }
     }
 
     private void unprotect(FetchJob job) {

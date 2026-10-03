@@ -14,6 +14,16 @@ import org.junit.jupiter.api.Test;
 import net.tfminecraft.companionpets.config.PetAppearance.Clip;
 
 class AnimationControllerTest {
+    @Test void shakingNeverStopsNavigationAndWalkingInterruptsTheGesture() {
+        Player player = new Player();
+        AnimationController controller = new AnimationController(player, clips());
+        controller.update(PetAnimation.IDLE);
+        assertTrue(controller.play(PetAnimation.SHAKE));
+        assertFalse(controller.holdsMovement());
+        controller.update(PetAnimation.WALK);
+        assertFalse(player.active.contains("shake"));
+        assertEquals("play:walk:true", player.events.getLast());
+    }
     @Test
     void currentModelsUseIdleInAirWalkInWaterAndSleepWhenLyingDown() {
         Player player = new Player();
@@ -70,7 +80,7 @@ class AnimationControllerTest {
         controller.play(PetAnimation.PAW);
         controller.update(PetAnimation.SLEEP);
         assertEquals(List.of("play:paw:false", "stop:paw", "play:sleep:true"), player.events);
-        controller.play(PetAnimation.BEG);
+        controller.play(PetAnimation.PAW);
         controller.cancelAction();
         controller.update(PetAnimation.IDLE);
         assertEquals("play:idle:true", player.events.getLast());

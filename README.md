@@ -125,7 +125,7 @@ tricks: [follow, stay, speak, jump]
 ```
 
 Available IDs: `sit`, `follow`, `come`, `stay`, `speak`, `jump`, `lay`, `paw`,
-`beg`, plus IDs defined under `custom-tricks`. Names are case-insensitive and
+plus IDs defined under `custom-tricks`. Names are case-insensitive and
 duplicates are ignored. Omitting `tricks` enables all compatible base/custom
 tricks. `tricks: []` disables additional tricks; configured default tricks are
 always enabled. Unknown IDs are skipped with a warning. A malformed list
@@ -307,7 +307,7 @@ mapped. Set a mapping to `""` to disable an optional clip.
 | `shake` | Begins when the native wolf shake clock starts, alongside its vanilla sound. Play once. |
 | `pet` | Normal petting reaction. Does not interrupt a belly moment or another gesture. |
 | `jump`, `fall`, `swim` | Optional air/water motions. Jump plays once and holds until landing or the fall pose; swim loops. Missing clips use normal movement/idle fallbacks. |
-| `beg`, `attack`, `hurt`, `eat`, `speak`, `spawn` | Automatically used when present for their corresponding behaviour. Missing clips do not prevent the behaviour. |
+| `attack`, `hurt`, `eat`, `speak`, `spawn` | Automatically used when present for their corresponding behaviour. Missing clips do not prevent the behaviour. |
 | `lie_back`, `belly_up`, `get_up` | The optional belly rub moment described above. |
 
 No clip is required. Missing idle/walk logs a warning about a potentially static
@@ -323,8 +323,7 @@ Head tracking belongs to the model's head bone behaviour, not a look animation.
 Without jump/swim, dogs and cats use `idle` in the air and `walk` in water;
 jumping and falling remain physical movements. The current frog can
 use its `jump` and `swim` clips without overrides to retain its
-species-specific motions. `beg` remains a learned command using its vanilla
-sitting/attention behaviour when no `beg` clip is present.
+species-specific motions.
 `pet1`, `pet2`, and `despawn` have no automatic hooks. Map `pet: pet1` to use
 an older petting clip. Custom tricks may also refer to arbitrary model clips.
 
@@ -537,8 +536,10 @@ the normal pet profile: species, name, sex, age, needs, bond, personality,
 favorite toy and learned tricks. It is read-only, including its trick inventory;
 renaming, calling, Pet House and release actions are omitted. No UUIDs or audit
 snapshots are required or shown in command help, completion or pet cards.
-Profiles opened directly from the animal have no Back button; profiles reached
-from the Pet House return there, and keep that parent when browsing their tricks.
+Profiles opened directly from the animal include a Pet House shortcut on the
+left. Profiles reached from the Pet House return there and keep that parent
+when browsing their tricks. The five footer icons are evenly spaced; a stored
+pet shows an inactive storage icon in the same position.
 
     /companionpets list Nowko
     /companionpets find Nowko Toby
@@ -581,7 +582,7 @@ Plugin replies and egg/rename/release dialogue inputs are private. Ordinary
 spoken pet orders remain roleplay chat.
 
 Trick menus show learned tricks, then tricks in practice, then unknown tricks.
-Within each group: Follow, Come, Sit, Stay, Lay, Paw, Speak, Beg, Jump, followed by
+Within each group: Follow, Come, Sit, Stay, Lay, Paw, Speak, Jump, followed by
 custom tricks in configuration order. Trick inventories have three rows, with
 18 entries per page from slot 0. All nine slots in the third row are reserved
 for navigation; the nineteenth trick starts on the next page.
@@ -603,6 +604,9 @@ teleporting.
 Modeled wolves emit water splash particles throughout their native shake clock,
 alongside the shake animation and vanilla sound. Vanilla fallback wolves retain
 their original particles.
+Fetching postpones both the native and modeled shake until the pet finishes
+the race or returns the toy. Shaking never holds navigation, and movement
+interrupts its modeled gesture automatically.
 
 MMOItems eggs dispatch mi give TYPE ID PLAYER AMOUNT from console;
 they are not also inserted via API. Vanilla/ItemsAdder eggs retain their identity.

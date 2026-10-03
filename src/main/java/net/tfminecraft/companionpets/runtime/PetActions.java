@@ -473,7 +473,7 @@ public final class PetActions {
             return;
         }
         if (slot == PetMenus.BACK_SLOT) {
-            if (holder.petHouseBack()) menus.openKennel(player, holder.petHousePage());
+            menus.openKennel(player, holder.petHousePage());
             return;
         }
         if (slot == PetMenus.TRICKS_SLOT) {
@@ -758,15 +758,6 @@ public final class PetActions {
                 if (entity != null) {
                     PetFx.look(entity, player);
                     PetFx.particle(entity, Particle.HEART, 2);
-                }
-            }
-            case BEG -> {
-                clearInteractions(pet);
-                if (entity instanceof Mob mob) net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
-                pet.forcedSitUntilMillis(now + (partial ? 800L : 2_000L));
-                if (entity != null) {
-                    PetFx.beg(entity);
-                    Bukkit.getScheduler().runTaskLater(runtime.plugin(), () -> PetFx.stopBeg(entity), partial ? 16L : 40L);
                 }
             }
             default -> {

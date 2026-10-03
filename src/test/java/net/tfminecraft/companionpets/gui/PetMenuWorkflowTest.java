@@ -260,10 +260,11 @@ class PetMenuWorkflowTest {
                 .getPersistentDataContainer().has(runtime.petKey(), PersistentDataType.STRING));
     }
 
-    @Test void backAlwaysReturnsToTheParentMenuAndDirectProfilesHaveNoInventedParent() {
+    @Test void profileProvidesPetHouseAccessAndTricksReturnToTheParentMenu() {
         Pet pet = pet("wolf", player.getUniqueId()); menus.openCare(player, pet);
-        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder().getInventory().getItem(36).getType());
-        menus.openKennel(player);
+        assertEquals(Material.ITEM_FRAME, holder().getInventory().getItem(36).getType());
+        actions.clickMenu(player, holder(), PetMenus.BACK_SLOT, null, false, false, false);
+        assertEquals(MenuHolder.Kind.KENNEL, holder().kind());
         actions.clickMenu(player, holder(), 0, holder().getInventory().getItem(0), false, false, false);
         assertEquals(MenuHolder.Kind.CARE, holder().kind()); assertTrue(holder().petHouseBack());
         actions.clickMenu(player, holder(), PetMenus.TRICKS_SLOT, null, false, false, false);

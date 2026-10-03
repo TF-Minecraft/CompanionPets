@@ -6,7 +6,7 @@ public enum PetAnimation {
     LIE(true), SLEEP(true), FLY(true), HOVER(true),
     ATTACK(false), HURT(false), DEATH(false), HEAD_TILT(false),
     SPAWN(false), EAT(false), SPEAK(false), SHAKE(false),
-    PAW(false), BEG(false), SPIN(false), PET(false),
+    PAW(false), SPIN(false), PET(false),
     LIE_BACK(false), BELLY_UP(true), GET_UP(false);
 
     private final boolean pose;
@@ -18,7 +18,7 @@ public enum PetAnimation {
     public boolean pose() { return pose; }
 
     public boolean holdsMovement() {
-        return this == PAW || this == BEG || this == SPIN || this == EAT || this == SHAKE || this == PET;
+        return this == PAW || this == SPIN || this == EAT || this == PET;
     }
 
     public PetAnimation fallback() {

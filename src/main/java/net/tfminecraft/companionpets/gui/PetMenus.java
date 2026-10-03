@@ -122,6 +122,8 @@ public final class PetMenus {
                 sick ? line(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED) : null));
 
         if (back) MenuNavigation.back(inventory, management ? "Return to the Pet House list" : "Return to this player's pets");
+        else if (management) inventory.setItem(BACK_SLOT, action(Material.ITEM_FRAME, "Pet House",
+                line("Open your Pet House", NamedTextColor.GRAY)));
         inventory.setItem(TRICKS_SLOT, action(Material.BOOK, "Tricks",
                 line("See what " + pet.name() + " has learned", NamedTextColor.GRAY)));
         if (management) {
@@ -131,6 +133,8 @@ public final class PetMenus {
                     line(stored ? "Bring " + PetTexts.him(pet.sex()) + " out beside you" : "Call " + PetTexts.him(pet.sex()) + " to your side", NamedTextColor.GRAY)));
             if (!stored) inventory.setItem(STORE_SLOT, action(Material.BARREL, "Send to Pet House",
                     line("Take " + PetTexts.him(pet.sex()) + " out of the world", NamedTextColor.GRAY)));
+            else inventory.setItem(STORE_SLOT, named(Material.GRAY_DYE, "In Pet House", NamedTextColor.GRAY,
+                    line(pet.name() + " is already resting here", NamedTextColor.GRAY)));
             inventory.setItem(RELEASE_SLOT, action(Material.BARRIER, "Release forever",
                     line(pet.name() + " leaves for good and cannot come back", NamedTextColor.GRAY)));
         }
@@ -352,7 +356,6 @@ public final class PetMenus {
             case SPIN -> Material.WIND_CHARGE;
             case LAY -> Material.RED_BED;
             case PAW -> Material.RABBIT_FOOT;
-            case BEG -> Material.COOKIE;
         };
     }
 
