@@ -11,9 +11,11 @@ class SocialSettingsTest {
         var settings = SocialSettings.load(config, Logger.getAnonymousLogger());
         assertEquals(3, settings.greetingRadius()); assertEquals(3, settings.greetingSeconds());
         assertEquals(10, settings.separationSeconds()); assertEquals(12, settings.maxFriendshipGainPerMinute());
-        assertEquals(2, settings.searchIntervalSeconds()); assertEquals(60, settings.encounterCooldownSeconds());
-        config.set("search-interval-seconds", 0.1);
+        assertEquals(3, settings.searchIntervalSeconds()); assertEquals(60, settings.encounterCooldownSeconds());
+        assertEquals(20, settings.encounterChance());
+        config.set("search-interval-seconds", 0.1); config.set("encounter-chance", 150);
         assertEquals(0.5, SocialSettings.load(config, Logger.getAnonymousLogger()).searchIntervalSeconds());
+        assertEquals(100, SocialSettings.load(config, Logger.getAnonymousLogger()).encounterChance());
         config.set("greeting-radius", 99); config.set("greeting-seconds", -10);
         config.set("separation-seconds", Double.NaN); config.set("greeting-friendship-gain", -10);
         config.set("sniff-friendship-gain", 2); config.set("chase-friendship-gain", 3);

@@ -160,6 +160,7 @@ class PetInteractionTest {
                     entity: WOLF
                     egg: CAT_SPAWN_EGG
                     items: {foods: [], treats: [], medicines: [], brushes: [], toys: []}
+                social: {search-interval-seconds: 2, encounter-chance: 100}
                 """);
         var visual = new PetVisual() {
             @Override public void trainingAttention(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, boolean focused) {
@@ -938,6 +939,22 @@ class PetInteractionTest {
         actions.social().tick(now + 2000); assertTrue(actions.social().engaged(pet));
     }
 
+    @Test void laterPetMeetingsAreLeftToTheConfiguredChanceButFirstGreetingsAreNot() {
+        testConfig.set("social.encounter-chance", 0); runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; eagerGreeting(); var other = secondPet(body.getLocation().add(0, 0, 1.2));
+        long now = System.currentTimeMillis();
+        actions.roaming().tickOwners(now); actions.social().tick(now);
+        assertTrue(actions.social().engaged(pet), "The first greeting is not left to chance");
+        actions.social().tick(now + 500); actions.social().tick(now + 3100); assertFalse(actions.social().engaged(pet));
+        for (long at = now + 70_000; at <= now + 130_000; at += 2000) {
+            actions.roaming().tickOwners(at); actions.social().tick(at);
+            assertFalse(actions.social().engaged(pet), "No later meeting at 0% chance");
+        }
+        testConfig.set("social.encounter-chance", 100); runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        actions.roaming().tickOwners(now + 132_000); actions.social().tick(now + 132_000);
+        assertTrue(actions.social().engaged(pet)); assertTrue(actions.social().engaged(other));
+    }
+
     @Test void separationRenewsGreetingButBriefDistanceAndInterruptionsDoNotAddFriendship() {
         greetingGround = true; eagerGreeting(); var other = secondPet(body.getLocation().add(0, 0, 1.2));
         var otherBody = runtime.entity(other); long now = System.currentTimeMillis();
@@ -945,7 +962,7 @@ class PetInteractionTest {
         assertEquals(2, actions.social().friendship(pet, other));
         otherBody.teleport(body.getLocation().add(9, 0, 0)); actions.social().tick(now + 4000);
         actions.social().tick(now + 11000); otherBody.teleport(body.getLocation().add(0, 0, 1.2));
-        // New meetings are searched every two seconds; this tick is a search.
+        // The tests search for new meetings every two seconds; this tick is a search.
         actions.social().tick(now + 13000); assertFalse(actions.social().engaged(pet));
         otherBody.teleport(body.getLocation().add(9, 0, 0)); actions.social().tick(now + 14000);
         actions.social().tick(now + 25000); otherBody.teleport(body.getLocation().add(0, 0, 1.2));

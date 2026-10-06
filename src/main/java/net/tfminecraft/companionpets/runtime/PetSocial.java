@@ -68,6 +68,8 @@ final class PetSocial {
                     }
                 } else if ((visit.greeted || !both(pet, other, PetBehavior.SOCIAL_GREETING))
                         && now >= nextAllowed.getOrDefault(pair, 0L) && ownersStationary(pet, other, now)
+                        // First greetings always happen; later meetings are left to chance, so they stay occasional.
+                        && runtime.random().nextDouble() * 100 < settings.encounterChance()
                         && begin(pair, pet, other, body, otherBody, now, null, true)) break;
             }
         }

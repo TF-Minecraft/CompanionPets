@@ -183,9 +183,13 @@ social:
   bark-radius: 6
   owner-radius: 16
   # Pets look for a new meeting this often. Meetings already started stay smooth.
-  search-interval-seconds: 2
+  search-interval-seconds: 3
   # After a meeting, the same pair waits this long before another sniff or chase.
   encounter-cooldown-seconds: 60
+  # Once that wait is over, each search has this % chance to start a sniff, chase
+  # or bark, while both owners stand still. The first greeting is not left to chance.
+  # Average extra wait: search-interval-seconds * 100 / encounter-chance (15 s here).
+  encounter-chance: 20
   bark-seconds: 8
   calm-cooldown-seconds: 30
   territorial-bark-chance: 80
