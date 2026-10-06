@@ -464,12 +464,12 @@ class PetInteractionTest {
         assertNotNull(hold); assertTrue(hold.shouldActivate()); assertNotNull(look);
         player.teleport(body.getLocation().add(3, 0, 3));
         new PetTicker(runtime, actions).run();
-        for (int i = 0; i < 20; i++) { hold.tick(); look.tick(); }
+        for (int i = 0; i < 20; i++) { if (i % 10 == 0) actions.moments().tickBelly(pet, body, player); hold.tick(); look.tick(); }
         assertTrue(headHolds > 0); assertEquals(0, heldBodyYaw); assertEquals(0, body.getBodyYaw());
         assertTrue(Math.abs(heldHeadYaw) <= 50); assertTrue(Math.abs(heldPitch) <= 30);
         assertTrue(Math.abs(heldHeadYaw) > 10, "Head can follow a visible front-side target");
         player.teleport(body.getLocation().add(0, 0, -3));
-        for (int i = 0; i < 20; i++) { hold.tick(); look.tick(); }
+        for (int i = 0; i < 20; i++) { if (i % 10 == 0) actions.moments().tickBelly(pet, body, player); hold.tick(); look.tick(); }
         assertEquals(0, heldHeadYaw, 0.001, "A target behind cannot twist the resting head");
         bellyActive = false; assertFalse(actions.moments().tickBelly(pet, body, player));
         assertTrue(headReleases > 0); assertFalse(hold.shouldActivate());
@@ -1406,7 +1406,7 @@ class PetInteractionTest {
             assertTrue(body.isAware()); assertFalse(body.isSitting()); assertTrue(body.getVelocity().getY() > 0);
             inWater = false;
             new PetTicker(runtime, actions).run();
-            assertEquals(pet.activity() != Activity.SLEEPING, body.isAware());
+            assertTrue(body.isAware(), "Sleeping pets keep native AI awake while sitting");
             assertEquals(order, pet.order()); assertFalse(goal.shouldActivate());
             inWater = true;
         }
@@ -1716,7 +1716,7 @@ class PetInteractionTest {
         assertEquals(PetOrder.FOLLOW, pet.order()); assertTrue(body.isAware());
     }
 
-    @Test void sittingAndLyingStayAwakeAndTrackNearbyMovementWithoutWalking() {
+    @Test void sittingLyingAndSleepingStayAwakeWithNativeLookingWithoutWalking() {
         for (Trick posture : new Trick[]{Trick.SIT, Trick.LAY}) {
             pet.bindWord(posture.name().toLowerCase(), posture); pet.progress(posture, 100);
             actions.onChat(player, "Toby " + posture.name().toLowerCase());
@@ -1727,20 +1727,19 @@ class PetInteractionTest {
             assertFalse(hold.getTypes().contains(com.destroystokyo.paper.entity.ai.GoalType.LOOK));
             var position = body.getLocation();
             body.setVelocity(new org.bukkit.util.Vector(0.3, -0.2, 0.4)); hold.tick();
-            var look = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
-                    org.bukkit.entity.Mob.class, new NamespacedKey("companionpets", "look")));
-            assertNotNull(look); look.tick();
-            assertNotNull(lookedAt);
-            assertTrue(Math.abs(lookedAt.getYaw() - body.getBodyYaw()) <= 60);
-            player.teleport(player.getLocation().add(0.2, 0, 0)); look.tick();
-            assertTrue(Math.abs(lookedAt.getYaw() - body.getBodyYaw()) <= 60);
+            var sleepingLook = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                    org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "sleeping_look")));
+            assertNotNull(sleepingLook); assertFalse(sleepingLook.shouldActivate(), "Awake postures look around natively");
             assertEquals(position, body.getLocation());
             assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
             assertFalse(body.getWorld().getEntities().stream().anyMatch(e ->
                     e.customName() != null && net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
                             .serialize(e.customName()).equals("Sleeping")));
             inWater = true; assertFalse(hold.shouldActivate()); inWater = false;
-            pet.activity(Activity.SLEEPING); assertFalse(hold.shouldActivate()); pet.activity(Activity.NONE);
+            pet.activity(Activity.SLEEPING); assertTrue(hold.shouldActivate());
+            assertTrue(sleepingLook.shouldActivate(), "A sleeping head ignores native look goals");
+            assertTrue(sleepingLook.getTypes().contains(com.destroystokyo.paper.entity.ai.GoalType.LOOK));
+            pet.activity(Activity.NONE);
             actions.onChat(player, "Toby follow"); assertFalse(hold.shouldActivate());
         }
     }

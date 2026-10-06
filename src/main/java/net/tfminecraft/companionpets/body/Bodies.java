@@ -123,8 +123,8 @@ public final class Bodies {
         var mode = net.tfminecraft.companionpets.behavior.Locomotion.choose(pet.illness(), pet.need(net.tfminecraft.companionpets.pet.Need.HEALTH),
                 pet.need(net.tfminecraft.companionpets.pet.Need.ENERGY), pet.need(net.tfminecraft.companionpets.pet.Need.HUNGER), pet.activity(),
                 pet.fetch() != null, System.currentTimeMillis() < pet.forcedSitUntilMillis(), pet.order(), pet.staying());
-        return (mode == net.tfminecraft.companionpets.behavior.Locomotion.Mode.FOLLOW
-                || mode == net.tfminecraft.companionpets.behavior.Locomotion.Mode.PLAY || mode == net.tfminecraft.companionpets.behavior.Locomotion.Mode.FETCH);
+        // Only Stay freezes native AI; sitting, lying and sleeping stay awake in the sitting state.
+        return mode != net.tfminecraft.companionpets.behavior.Locomotion.Mode.STAY;
     }
 
     private static void keepPersistent(Entity entity) {

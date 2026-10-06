@@ -278,9 +278,9 @@ public final class PetTicker implements Runnable {
             if (held && mob.isAware()) actions.clearInteractions(pet);
             if (held) {
                 actions.roaming().cancel(pet);
-                if ((mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.LIE) && pet.activity() != Activity.SLEEPING)
-                    PostureNavigationGoal.hold(runtime, pet, mob);
-                else net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+                // Sitting, lying and sleeping keep native AI awake in the sitting state.
+                if (mode == Locomotion.Mode.STAY) net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+                else PostureNavigationGoal.hold(runtime, pet, mob);
             } else {
                 if (previous != null && previous != mode || !mob.isAware()) {
                     PetFx.sit(mob, false); PetFx.lie(mob, false); PetFx.stopLooking(mob);
