@@ -167,14 +167,14 @@ public final class PetActions {
             roaming.cancelWithPosture(pet);
             clearInteractions(pet);
             if (runtime.entity(pet) instanceof Mob mob && pet.order() == PetOrder.FOLLOW)
-                net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+                PostureNavigationGoal.hold(runtime, pet, mob);
         }
     }
 
     private void pauseRestoredFollowing(Pet pet, Entity entity) {
         if (entity instanceof Mob mob && pet.order() == PetOrder.FOLLOW
                 && !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId())))
-            net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+            PostureNavigationGoal.hold(runtime, pet, mob);
     }
 
     private boolean calmInteraction(Player player, Pet pet) {
@@ -583,7 +583,7 @@ public final class PetActions {
                 clearInteractions(pet); releaseFetch(pet, player, true);
                 if (coming) roaming.come(pet, player, now, previous);
                 else roaming.attend(pet, player, now);
-            }
+            } else roaming.listen(pet, player, now);
             PetFx.bar(player, pet.name() + " heard its name. You can say \"" + pet.name() + " <command>\"");
             answered = true;
         }
@@ -781,7 +781,7 @@ public final class PetActions {
                 pet.staying(true);
                 pet.order(PetOrder.STAY);
                 pet.forcedSitUntilMillis(0);
-                if (entity instanceof Mob mob) { net.tfminecraft.companionpets.integration.PetMotion.hold(mob); PetFx.sit(mob, false); PetFx.lie(mob, false); }
+                if (entity instanceof Mob mob) { PostureNavigationGoal.hold(runtime, pet, mob); PetFx.sit(mob, false); PetFx.lie(mob, false); }
             }
             case SPEAK -> {
                 if (entity != null) {

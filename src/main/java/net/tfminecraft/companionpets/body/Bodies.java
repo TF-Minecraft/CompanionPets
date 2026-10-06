@@ -123,7 +123,7 @@ public final class Bodies {
         var mode = net.tfminecraft.companionpets.behavior.Locomotion.choose(pet.illness(), pet.need(net.tfminecraft.companionpets.pet.Need.HEALTH),
                 pet.need(net.tfminecraft.companionpets.pet.Need.ENERGY), pet.need(net.tfminecraft.companionpets.pet.Need.HUNGER), pet.activity(),
                 pet.fetch() != null, System.currentTimeMillis() < pet.forcedSitUntilMillis(), pet.order(), pet.staying());
-        // Only Stay freezes native AI; sitting, lying and sleeping stay awake in the sitting state.
+        // A staying body waits frozen until the ticker gives it the posture goal, so it cannot wander first.
         return mode != net.tfminecraft.companionpets.behavior.Locomotion.Mode.STAY;
     }
 

@@ -262,7 +262,8 @@ public final class PetTicker implements Runnable {
             }
             Locomotion.Mode previous = previousModes.put(pet.id(), mode);
             actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
-            if (mode == Locomotion.Mode.SLEEP || pet.activity() == Activity.SLEEPING) PetFx.stopLooking(mob);
+            if ((mode == Locomotion.Mode.SLEEP || pet.activity() == Activity.SLEEPING)
+                    && now >= pet.listeningUntilMillis()) PetFx.stopLooking(mob);
             if (actions.moments().tickBelly(pet, mob, owner)) {
                 continue;
             }
@@ -275,9 +276,9 @@ public final class PetTicker implements Runnable {
             if (held && mob.isAware()) actions.clearInteractions(pet);
             if (held) {
                 actions.roaming().cancel(pet);
-                // Sitting, lying and sleeping keep native AI awake in the sitting state.
-                if (mode == Locomotion.Mode.STAY) net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
-                else PostureNavigationGoal.hold(runtime, pet, mob);
+                // Staying, sitting, lying and sleeping keep native AI awake, so the head looks around natively.
+                PostureNavigationGoal.hold(runtime, pet, mob);
+                actions.roaming().tickListening(pet, mob, now);
             } else {
                 if (previous != null && previous != mode || !mob.isAware()) {
                     PetFx.sit(mob, false); PetFx.lie(mob, false); PetFx.stopLooking(mob);

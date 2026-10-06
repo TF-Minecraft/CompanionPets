@@ -505,7 +505,10 @@ class PetFetchWorkflowTest {
         land(ball); new PetTicker(runtime, actions).run();
         assertEquals(1, navigationTargets.size());
         assertEquals(PetOrder.SIT, sitting.order()); assertTrue(sittingBody.isSitting());
-        assertEquals(PetOrder.STAY, staying.order()); assertFalse(((WolfMock) runtime.entity(staying)).isAware());
+        assertEquals(PetOrder.STAY, staying.order()); var stayingBody = (WolfMock) runtime.entity(staying);
+        assertTrue(stayingBody.isAware(), "Staying keeps native AI awake");
+        assertTrue(server.getMobGoals().getGoal(stayingBody, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new org.bukkit.NamespacedKey(runtime.plugin(), "posture_navigation"))).shouldActivate());
         assertEquals(PetOrder.FOLLOW, anchored.order()); assertTrue(anchored.staying());
     }
 

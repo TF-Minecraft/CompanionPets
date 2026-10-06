@@ -50,6 +50,10 @@ public final class Pet {
     public void socialTailHz(double value) { socialTailHz = Double.isFinite(value) ? Math.max(0, value) : 0; }
     public long toyExcitedUntilMillis() { return toyExcitedUntilMillis; }
     public void toyExcitedUntilMillis(long value) { toyExcitedUntilMillis = Math.max(0, value); }
+    private long listeningUntilMillis;
+    /** After hearing its name, the pet keeps looking at whoever called until this time. */
+    public long listeningUntilMillis() { return listeningUntilMillis; }
+    public void listeningUntilMillis(long value) { listeningUntilMillis = Math.max(0, value); }
     private String carriedToy;
     private final Map<String, Trick> words = new LinkedHashMap<>();
     private final Map<Trick, Double> progress = new java.util.LinkedHashMap<>();

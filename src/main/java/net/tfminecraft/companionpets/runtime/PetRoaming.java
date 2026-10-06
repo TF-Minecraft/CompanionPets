@@ -23,6 +23,7 @@ final class PetRoaming {
     private final java.util.function.BiConsumer<Entity, Boolean> sleep;
     private final Map<UUID, OwnerMotion> owners = new HashMap<>();
     private final Map<UUID, Attention> attention = new HashMap<>();
+    private final Map<UUID, UUID> listeners = new HashMap<>();
 
     PetRoaming(PetRuntime runtime, java.util.function.BiConsumer<Entity, Boolean> sleep) { this.runtime = runtime; this.sleep = sleep; }
 
@@ -49,6 +50,25 @@ final class PetRoaming {
 
     void attend(Pet pet, Player owner, long now) {
         attend(pet, owner, now, null);
+    }
+
+    /** A pet that does not come when called still turns to whoever said its name, whatever its pose. */
+    void listen(Pet pet, Player player, long now) {
+        listeners.put(pet.id(), player.getUniqueId());
+        pet.listeningUntilMillis(now + Math.round(runtime.config().roaming().nameAttentionSeconds() * 1000.0));
+        if (runtime.entity(pet) instanceof Mob body) PetFx.look(body, player);
+    }
+
+    void tickListening(Pet pet, Mob body, long now) {
+        UUID listener = listeners.get(pet.id());
+        if (listener == null) return;
+        Player player = Bukkit.getPlayer(listener);
+        if (now >= pet.listeningUntilMillis() || player == null || !player.getWorld().equals(body.getWorld())) {
+            listeners.remove(pet.id());
+            pet.listeningUntilMillis(0);
+            return;
+        }
+        PetFx.look(body, player);
     }
 
     PetOrder returnOrder(Pet pet) {
@@ -128,7 +148,8 @@ final class PetRoaming {
                 return true;
             }
             if (job.waitUntil == 0) job.waitUntil = now + Math.round(runtime.config().roaming().nameAttentionSeconds() * 1000.0);
-            net.tfminecraft.companionpets.integration.PetMotion.hold(body);
+            // The call goal owns MOVE, so the pet waits with native AI awake and its head on the owner.
+            PetMotion.stop(body);
             PetFx.look(body, owner);
             if (!job.greeted) {
                 runtime.voice().happy(body, false);
@@ -146,8 +167,7 @@ final class PetRoaming {
         if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT);
         sleep.accept(body, false);
         if (order == PetOrder.FOLLOW) { PetMotion.stop(body); body.setAware(true); }
-        else if (order == PetOrder.SIT || order == PetOrder.LAY) PostureNavigationGoal.hold(runtime, pet, body);
-        else PetMotion.hold(body);
+        else PostureNavigationGoal.hold(runtime, pet, body);
         var type = runtime.config().type(pet.typeId());
         if (type != null) runtime.visual().update(body, type,
                 order == PetOrder.LAY ? PetAnimation.LIE : order == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE);
@@ -174,7 +194,11 @@ final class PetRoaming {
                 restorePosture(pet, body, entry.getValue().returnOrder);
             else if (pet != null && pet.activity() == Activity.ATTENDING) pet.activity(Activity.NONE);
         }
-        attention.clear(); owners.clear();
+        for (UUID id : listeners.keySet()) {
+            var pet = runtime.store().get(id);
+            if (pet != null) pet.listeningUntilMillis(0);
+        }
+        attention.clear(); owners.clear(); listeners.clear();
     }
 
     private static double horizontalSpeed(Player player) {

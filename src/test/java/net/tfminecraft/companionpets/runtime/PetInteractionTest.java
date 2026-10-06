@@ -269,6 +269,13 @@ class PetInteractionTest {
                 com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
                         new NamespacedKey(runtime.plugin(), "training_navigation")));
     }
+    /** Holding postures keep native AI awake; only the posture goal keeps the body still. */
+    private boolean postureHeld() {
+        var goal = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "posture_navigation")));
+        return body.isAware() && goal != null && goal.shouldActivate();
+    }
+
 
     private com.destroystokyo.paper.entity.ai.Goal<org.bukkit.entity.Mob> lookGoal() {
         return org.bukkit.Bukkit.getMobGoals().getGoal(body,
@@ -882,7 +889,7 @@ class PetInteractionTest {
         pet.need(Need.ENERGY, 10); ticker.run(); assertTrue(body.isSitting());
         pet.need(Need.ENERGY, 100); pet.activity(Activity.NONE); ticker.run();
         assertFalse(body.isSitting()); assertTrue(body.isAware());
-        pet.order(PetOrder.STAY); pet.staying(true); ticker.run(); assertFalse(body.isAware());
+        pet.order(PetOrder.STAY); pet.staying(true); ticker.run(); assertTrue(postureHeld());
     }
     @Test void changingOwnershipEndsBothSidesOfAnActivePetMeeting() {
         greetingGround = true; eagerGreeting();
@@ -1369,7 +1376,7 @@ class PetInteractionTest {
         var recoveredActions = new PetActions(recovered);
         recoveredActions.reattach(body);
         new PetTicker(recovered, recoveredActions).run();
-        assertEquals(at, body.getLocation()); assertFalse(body.isAware());
+        assertEquals(at, body.getLocation()); assertTrue(postureHeld());
         assertEquals(PetOrder.FOLLOW, pet.order(), "The saved order is retained while its session is paused");
         var event = new org.bukkit.event.entity.EntityTeleportEvent(body, at, player.getLocation());
         new net.tfminecraft.companionpets.listen.PetListener(recovered, recoveredActions).onTeleport(event);
@@ -1386,7 +1393,7 @@ class PetInteractionTest {
         listener.onJoin(new org.bukkit.event.player.PlayerJoinEvent(player, (net.kyori.adventure.text.Component) null));
         var at = body.getLocation().clone();
         new PetTicker(runtime, actions).run();
-        assertEquals(at, body.getLocation()); assertFalse(body.isAware());
+        assertEquals(at, body.getLocation()); assertTrue(postureHeld());
         var event = new org.bukkit.event.entity.EntityTeleportEvent(body, at, player.getLocation());
         listener.onTeleport(event); assertTrue(event.isCancelled());
         player.teleport(at.clone().add(8, 0, 0));
@@ -1609,7 +1616,7 @@ class PetInteractionTest {
         actions.onChat(player, "follow Toby"); assertEquals(PetOrder.FOLLOW, pet.order());
         actions.onChat(player, "sit down Toby"); assertEquals(PetOrder.SIT, pet.order());
         pet.bindWord("stay", Trick.STAY); pet.progress(Trick.STAY, 100);
-        actions.onChat(player, "Toby stay"); assertEquals(PetOrder.STAY, pet.order()); assertFalse(body.isSitting()); assertFalse(body.isAware());
+        actions.onChat(player, "Toby stay"); assertEquals(PetOrder.STAY, pet.order()); assertFalse(body.isSitting()); assertTrue(postureHeld());
     }
 
     @Test void remoteOtherOwnerAndStoredPetsCannotHearNamedOrders() {
@@ -1628,7 +1635,7 @@ class PetInteractionTest {
         var at = body.getLocation().clone();
         player.teleport(player.getLocation().add(100, 0, 0));
         new PetTicker(runtime, actions).run();
-        assertEquals(at, body.getLocation()); assertFalse(body.isSitting()); assertFalse(body.isAware());
+        assertEquals(at, body.getLocation()); assertFalse(body.isSitting()); assertTrue(postureHeld());
         for (PetOrder order : new PetOrder[]{PetOrder.STAY, PetOrder.SIT, PetOrder.LAY}) {
             pet.order(order); pet.staying(order == PetOrder.STAY);
             var event = new org.bukkit.event.entity.EntityTeleportEvent(body, at, player.getLocation());
@@ -1661,7 +1668,7 @@ class PetInteractionTest {
         long now = System.currentTimeMillis();
         actions.roaming().attend(pet, player, now);
         assertTrue(actions.roaming().tickAttention(pet, body, now + 29_000));
-        assertFalse(body.isAware()); assertTrue(navigationStops > 0);
+        assertTrue(body.isAware()); assertTrue(navigationStops > 0);
         assertTrue(actions.roaming().tickAttention(pet, body, now + 38_999));
         assertFalse(actions.roaming().tickAttention(pet, body, now + 39_000));
         assertEquals(Activity.NONE, pet.activity());
@@ -1681,7 +1688,7 @@ class PetInteractionTest {
             assertEquals(player.getLocation(), navigationTarget, "A name call uses the owner's current position");
             body.setVelocity(new org.bukkit.util.Vector(0.4, -0.2, 0.3));
             actions.onChat(player, "Toby " + posture.name().toLowerCase());
-            assertEquals(posture.name(), pet.order().name()); assertEquals(posture != Trick.STAY, body.isAware());
+            assertEquals(posture.name(), pet.order().name()); assertTrue(postureHeld());
             assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
             assertEquals(-0.2, body.getVelocity().getY(), "Holding keeps gravity");
             assertFalse(actions.roaming().tickAttention(pet, body, now + 2), "The previous call must be cancelled");
@@ -1713,7 +1720,7 @@ class PetInteractionTest {
             assertTrue(actions.roaming().tickAttention(pet, body, now + 2));
             assertEquals(previous, pet.order()); assertEquals(previous == PetOrder.STAY, pet.staying());
             assertEquals(Activity.NONE, pet.activity());
-            assertEquals(previous != PetOrder.STAY, body.isAware());
+            assertTrue(body.isAware()); assertEquals(previous != PetOrder.FOLLOW, postureHeld());
             assertEquals(previous == PetOrder.SIT || previous == PetOrder.LAY, body.isSitting());
             assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
             assertFalse(actions.roaming().tickAttention(pet, body, now + 3));
@@ -1729,6 +1736,29 @@ class PetInteractionTest {
         actions.onChat(player, "Toby come"); actions.onChat(player, "Toby follow");
         assertFalse(actions.roaming().tickAttention(pet, body, System.currentTimeMillis()));
         assertEquals(PetOrder.FOLLOW, pet.order()); assertTrue(body.isAware());
+    }
+
+    @Test void petsThatCannotComeStillLookAtWhoeverSaysTheirName() {
+        var ticker = new PetTicker(runtime, actions);
+        for (PetOrder order : new PetOrder[]{PetOrder.STAY, PetOrder.SIT, PetOrder.LAY}) {
+            pet.order(order); pet.staying(order == PetOrder.STAY); ticker.run();
+            actions.onChat(player, "Toby");
+            assertEquals(order, pet.order()); assertTrue(postureHeld(), order + " does not get up");
+            assertTrue(lookGoal().shouldActivate(), order + " turns to its name");
+            body.setTicksLived(body.getTicksLived() + 20); ticker.run();
+            assertTrue(lookGoal().shouldActivate(), "It keeps looking while it waits for an order");
+            pet.listeningUntilMillis(1); ticker.run();
+            body.setTicksLived(body.getTicksLived() + 20);
+            assertFalse(lookGoal().shouldActivate(), "Then the head returns to native looking");
+        }
+        pet.order(PetOrder.FOLLOW); pet.staying(false); pet.activity(Activity.SLEEPING);
+        var sleepingLook = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "sleeping_look")));
+        assertTrue(sleepingLook.shouldActivate());
+        actions.onChat(player, "Toby");
+        assertEquals(Activity.SLEEPING, pet.activity());
+        assertFalse(sleepingLook.shouldActivate(), "A sleeping pet lifts its head to its name");
+        assertTrue(lookGoal().shouldActivate());
     }
 
     @Test void sittingLyingAndSleepingStayAwakeWithNativeLookingWithoutWalking() {
@@ -1764,9 +1794,9 @@ class PetInteractionTest {
         actions.onChat(player, "Toby stay"); body.teleport(player.getLocation().add(8, 0, 0));
         long now = System.currentTimeMillis(); actions.onChat(player, "Toby come");
         assertTrue(actions.roaming().tickAttention(pet, body, now + 31_000));
-        assertEquals(PetOrder.STAY, pet.order()); assertFalse(body.isAware());
+        assertEquals(PetOrder.STAY, pet.order()); assertTrue(postureHeld());
         actions.onChat(player, "Toby come"); actions.clearInteractions();
-        assertEquals(PetOrder.STAY, pet.order()); assertFalse(body.isAware());
+        assertEquals(PetOrder.STAY, pet.order()); assertTrue(postureHeld());
     }
 
     @Test void profileHasNoDedicatedFollowButton() {

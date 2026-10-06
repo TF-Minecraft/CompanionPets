@@ -11,8 +11,8 @@ import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.pet.*;
 
 /**
- * Keeps sitting, lying and sleeping pets still with native AI awake, like a vanilla
- * sitting pet. Their head is left to the native look goals, except while asleep.
+ * Keeps staying, sitting, lying and sleeping pets still with native AI awake, like a
+ * vanilla sitting pet. Their head is left to the native look goals, except while asleep.
  */
 final class PostureNavigationGoal implements Goal<Mob> {
     private final GoalKey<Mob> key;
@@ -43,9 +43,13 @@ final class PostureNavigationGoal implements Goal<Mob> {
     }
 
     private Locomotion.Mode mode() {
-        return Locomotion.choose(pet.illness(), pet.need(Need.HEALTH), pet.need(Need.ENERGY),
+        Locomotion.Mode mode = Locomotion.choose(pet.illness(), pet.need(Need.HEALTH), pet.need(Need.ENERGY),
                 pet.need(Need.HUNGER), pet.activity(), pet.fetch() != null,
                 System.currentTimeMillis() < pet.forcedSitUntilMillis(), pet.order(), pet.staying());
+        // Like the ticker, an idle pet that may not follow its owner right now stays where it is.
+        if (mode == Locomotion.Mode.FOLLOW && pet.activity() == Activity.NONE
+                && !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId()))) return Locomotion.Mode.STAY;
+        return mode;
     }
 
     @Override public boolean shouldActivate() {
@@ -54,9 +58,13 @@ final class PostureNavigationGoal implements Goal<Mob> {
         if (training instanceof TrainingNavigationGoal focus && focus.shouldActivate()) return false;
         if (runtime.visual().belly(body)) return true;
         var mode = mode();
-        return mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP;
+        return mode == Locomotion.Mode.STAY || mode == Locomotion.Mode.SIT
+                || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP;
     }
-    boolean asleep() { return shouldActivate() && mode() == Locomotion.Mode.SLEEP; }
+    // A sleeping pet still turns its head to whoever just said its name.
+    boolean asleep() {
+        return System.currentTimeMillis() >= pet.listeningUntilMillis() && shouldActivate() && mode() == Locomotion.Mode.SLEEP;
+    }
     @Override public boolean shouldStayActive() { return shouldActivate(); }
     @Override public void tick() {
         if (!shouldActivate()) return;
