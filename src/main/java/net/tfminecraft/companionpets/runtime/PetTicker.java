@@ -14,8 +14,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 
 import net.tfminecraft.companionpets.behavior.Locomotion;
 import net.tfminecraft.companionpets.behavior.Rest;
@@ -34,7 +32,6 @@ import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.pet.Presence;
 import net.tfminecraft.companionpets.play.FavoriteToy;
 import net.tfminecraft.companionpets.session.TrainingSession;
-import net.tfminecraft.companionpets.gui.StatLook;
 import net.tfminecraft.companionpets.text.PetTexts;
 
 public final class PetTicker implements Runnable {
@@ -410,31 +407,6 @@ public final class PetTicker implements Runnable {
             } else if (session.rewardTrick() != null && now > session.rewardUntil()) {
                 actions.missedReward(player, pet, session);
             }
-        }
-    }
-
-    public void lookBars() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (PetFx.refreshHeld(player)) continue;
-            Entity looked = PetActions.lookingAt(player, 4.5);
-            Pet pet = runtime.byEntity(looked);
-            if (pet == null) {
-                continue;
-            }
-            TrainingSession session = runtime.sessions().training(player.getUniqueId());
-            boolean training = session != null && session.petId().equals(pet.id());
-            String socialStatus = actions.social().status(pet);
-            if (training && (session.pendingWord() != null || session.rewardTrick() != null)) {
-                continue;
-            }
-            Component tag = training
-                    ? StatLook.tag("Training · say a command", NamedTextColor.AQUA)
-                    : socialStatus != null
-                            ? StatLook.tag(socialStatus, NamedTextColor.RED)
-                    : pet.illness() == Illness.NONE
-                            ? null
-                            : StatLook.tag(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED);
-            PetFx.status(player, StatLook.summary(pet, tag));
         }
     }
 

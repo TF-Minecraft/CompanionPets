@@ -655,10 +655,11 @@ class PetInteractionTest {
     @Test void dogsShuffleAndOccasionallyHopForOrdinaryToyWithoutSoundsOrGroupMessage() {
         greetingGround = true; body.setOnGround(true); pet.favoriteToy("BONE"); long now = System.currentTimeMillis();
         var other = secondPet(new Location(player.getWorld(), -4, 64, 0));
+        while (player.nextActionBar() != null) { }
         player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
         actions.anticipation().tick(now);
         assertTrue(actions.anticipation().active(pet)); assertTrue(actions.anticipation().active(other));
-        assertFalse(net.tfminecraft.companionpets.fx.PetFx.refreshHeld(player), "Toy attention adds no message naming one pet");
+        assertNull(player.nextActionBar(), "Toy attention adds no message naming one pet");
         body.teleport(PetSpacing.toyFront(runtime, pet, player));
         actions.anticipation().advance(pet, now + 250); Location first = navigationTarget;
         actions.anticipation().advance(pet, now + 1250); Location second = navigationTarget;
@@ -996,6 +997,20 @@ class PetInteractionTest {
         assertTrue(actions.social().trigger(player, pet, "chase", now + 12000));
         actions.social().advance(pet, now + 12100); actions.social().advance(pet, now + 18100);
         assertEquals(0, actions.social().friendship(pet, other), "The pets must actually play together");
+    }
+
+    @Test void barkingTellsTheOwnerOnceHowToCalmThePets() {
+        greetingGround = true; var other = secondPet(body.getLocation().add(0, 0, 2));
+        pet.personality(PetPersonality.TERRITORIAL); other.personality(PetPersonality.TERRITORIAL);
+        long now = System.currentTimeMillis();
+        while (player.nextActionBar() != null) { }
+        assertTrue(actions.social().trigger(player, pet, "bark", now));
+        var notice = player.nextActionBar();
+        assertNotNull(notice);
+        assertTrue(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(notice).contains("Right-click repeatedly to calm"));
+        actions.social().advance(pet, now + 500); actions.social().advance(pet, now + 1000);
+        assertNull(player.nextActionBar(), "The hint is not repeated while they bark");
     }
 
     @Test void friendshipRewardsAnActualChaseAndFamiliarTerritorialPetsDoNotProtest() {

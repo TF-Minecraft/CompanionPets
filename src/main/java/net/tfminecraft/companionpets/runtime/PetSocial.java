@@ -185,7 +185,13 @@ final class PetSocial {
         SocialNavigationGoal.ensure(runtime, b, bodyB, this);
         if (phase == Phase.GREET) {
             receive(a, bodyA, bodyB, moodA, e); receive(b, bodyB, bodyA, moodB, e);
-        } else if (phase == Phase.BARK) bark(e, bodyA, bodyB);
+        } else if (phase == Phase.BARK) {
+            bark(e, bodyA, bodyB);
+            // Sent once at the start; there is no look-at status bar to repeat it.
+            for (Player owner : new java.util.LinkedHashSet<>(java.util.Arrays.asList(e.ownerA, e.ownerB)))
+                if (owner != null && owner.isOnline())
+                    PetFx.bar(owner, a.name() + " and " + b.name() + " are barking. Right-click repeatedly to calm them");
+        }
         return true;
     }
 
