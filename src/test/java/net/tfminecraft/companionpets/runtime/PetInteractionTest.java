@@ -51,6 +51,8 @@ class PetInteractionTest {
     private final java.util.List<String> customSounds = new java.util.ArrayList<>();
     private YamlConfiguration testConfig;
     private boolean bellyAvailable, bellyActive;
+    private boolean headTiltAvailable;
+    private int headTiltPlays, actionCancels;
     private int headHolds, headReleases;
     private float heldBodyYaw, heldHeadYaw, heldPitch;
     private org.bukkit.Sound nativeSound = org.bukkit.Sound.ENTITY_FROG_AMBIENT;
@@ -156,12 +158,16 @@ class PetInteractionTest {
                     items: {foods: [], treats: [], medicines: [], brushes: [], toys: []}
                 """);
         var visual = new PetVisual() {
+            @Override public boolean play(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, String action) {
+                if (action.equals("HEAD_TILT") && headTiltAvailable) { headTiltPlays++; return true; }
+                return false;
+            }
             @Override public boolean startBelly(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, long duration) {
                 bellyActive = bellyAvailable; return bellyActive;
             }
             @Override public boolean belly(Entity entity) { return bellyActive; }
             @Override public boolean holdsMovement(Entity entity) { return bellyActive; }
-            @Override public void cancelAction(Entity entity) { bellyActive = false; }
+            @Override public void cancelAction(Entity entity) { actionCancels++; bellyActive = false; }
             @Override public void holdHeadLook(Entity entity, float yaw, float head, float pitch) {
                 headHolds++; heldBodyYaw = yaw; heldHeadYaw = head; heldPitch = pitch;
             }
@@ -197,6 +203,27 @@ class PetInteractionTest {
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
     }
     private void eagerGreeting() { pet.bond(100); pet.personality(PetPersonality.FRIENDLY); }
+
+    @Test void trainingStartsWithAvailableHeadTiltWithoutCancellingItOnRepeatedTreatClicks() {
+        headTiltAvailable = true;
+        var treat = new ItemStack(Material.COD);
+        player.getInventory().setItemInMainHand(treat);
+        actions.useOnPet(player, body, treat);
+        assertEquals(1, headTiltPlays);
+        int cancels = actionCancels;
+        actions.useOnPet(player, body, treat);
+        assertEquals(1, headTiltPlays, "Do not restart the same gesture while it is playing");
+        assertEquals(cancels, actionCancels, "Do not cancel attention on another treat click");
+        assertTrue(trainingGoal().shouldActivate());
+    }
+
+    @Test void trainingStillHoldsAttentionWhenHeadTiltClipIsMissing() {
+        var treat = new ItemStack(Material.COD);
+        player.getInventory().setItemInMainHand(treat);
+        assertDoesNotThrow(() -> actions.useOnPet(player, body, treat));
+        assertEquals(0, headTiltPlays);
+        assertTrue(trainingGoal().shouldActivate());
+    }
 
     private com.destroystokyo.paper.entity.ai.Goal<org.bukkit.entity.Mob> trainingGoal() {
         return org.bukkit.Bukkit.getMobGoals().getGoal(body,

@@ -389,7 +389,8 @@ pets:
   # use idle in the air and walk in water.
   # jump plays once on takeoff, holding its last pose until landing (or fall).
   # Shake follows the beginning of the native WOLF shake, alongside its sound.
-  # head_tilt is for training; author only head bones and use a distinct clip.
+  # head_tilt plays when training starts and when the pet is confused by a command.
+  # Author only head bones and use a distinct clip; missing head_tilt is optional.
   # Without corresponding clips, eating/speaking
   # use effects/sounds. pet is the normal petting reaction; it does not interrupt
   # belly rubs. belly_up may be a zero-length pose; the plugin holds it itself.

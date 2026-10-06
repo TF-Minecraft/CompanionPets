@@ -213,7 +213,6 @@ final class PetTraining {
 
     void beginTraining(Player player, Pet pet, Entity entity) {
         if (!pet.ownerId().equals(player.getUniqueId()) || pet.stored()) return;
-        runtime.visual().cancelAction(entity);
         PetTypeDef trainingType = runtime.config().type(pet.typeId());
         if (trainingType == null || trainingType.tricks().stream().noneMatch(t -> allowsTrick(pet, t))) {
             PetFx.bar(player, pet.name() + " has no available tricks to learn");
@@ -222,6 +221,7 @@ final class PetTraining {
         TrainingSession existing = runtime.sessions().training(player.getUniqueId());
         if (existing != null && existing.petId().equals(pet.id())) {
             if (entity instanceof Mob mob) TrainingNavigationGoal.begin(runtime, pet, mob, player);
+            trainingHeadTilt(player, pet, entity, System.currentTimeMillis());
             PetFx.bar(player, PetTexts.trainingPrompt(pet));
             return;
         }
@@ -234,11 +234,13 @@ final class PetTraining {
         if (existing != null) {
             endTraining(player, runtime.store().get(existing.petId()), "you started training another pet");
         }
+        runtime.visual().cancelAction(entity);
         runtime.sessions().training(player.getUniqueId(), new TrainingSession(pet.id()));
         PetFx.look(entity, player);
         if (entity instanceof Mob mob) {
             TrainingNavigationGoal.begin(runtime, pet, mob, player);
         }
+        trainingHeadTilt(player, pet, entity, now);
         PetFx.bar(player, PetTexts.trainingPrompt(pet));
         PetFx.tell(player, "Training " + pet.name() + ". Look at " + PetTexts.him(pet.sex()) + " and say a command in chat."
                 + practiceList(pet));
