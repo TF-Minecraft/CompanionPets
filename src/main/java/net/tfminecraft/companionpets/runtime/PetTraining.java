@@ -221,6 +221,7 @@ final class PetTraining {
         }
         TrainingSession existing = runtime.sessions().training(player.getUniqueId());
         if (existing != null && existing.petId().equals(pet.id())) {
+            if (entity instanceof Mob mob) TrainingNavigationGoal.begin(runtime, pet, mob, player);
             PetFx.bar(player, PetTexts.trainingPrompt(pet));
             return;
         }
@@ -236,7 +237,7 @@ final class PetTraining {
         runtime.sessions().training(player.getUniqueId(), new TrainingSession(pet.id()));
         PetFx.look(entity, player);
         if (entity instanceof Mob mob) {
-            mob.getPathfinder().stopPathfinding();
+            TrainingNavigationGoal.begin(runtime, pet, mob, player);
         }
         PetFx.bar(player, PetTexts.trainingPrompt(pet));
         PetFx.tell(player, "Training " + pet.name() + ". Look at " + PetTexts.him(pet.sex()) + " and say a command in chat."

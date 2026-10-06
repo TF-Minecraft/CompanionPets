@@ -244,6 +244,7 @@ public final class PetTicker implements Runnable {
                 WaterNavigationGoal.ensure(runtime, pet, mob, actions);
                 continue;
             }
+            if (TrainingNavigationGoal.hold(runtime, pet, mob)) continue;
             if (actions.greeting(pet) || actions.anticipation().active(pet)) continue;
             Locomotion.Mode mode = Locomotion.choose(
                     pet.illness(),

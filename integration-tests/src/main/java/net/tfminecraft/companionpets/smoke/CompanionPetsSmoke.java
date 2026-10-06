@@ -47,6 +47,8 @@ public final class CompanionPetsSmoke extends JavaPlugin {
     private final List<org.bukkit.block.BlockState> temporaryFloor = new ArrayList<>();
     private record Held(Mob body, Location origin, int ticks, String description) { }
     private record NativeFollower(Mob body, Location origin, Location ownerAt, String type) { }
+    private record NativeTraining(Mob body, Location origin, Pet pet,
+            com.destroystokyo.paper.entity.ai.Goal<Mob> goal, String type) { }
     private void check(boolean ok, String message) { if (!ok) throw new AssertionError(message); checks++; }
     @Override public void onEnable() { Bukkit.getScheduler().runTaskLater(this, this::run, 240); }
 
@@ -75,6 +77,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
             UUID owner = UUID.randomUUID();
             var held = new ArrayList<Held>();
             var followers = new ArrayList<NativeFollower>();
+            var trainees = new ArrayList<NativeTraining>();
             for (var type : config.types().values()) {
                 var oldIds = new HashSet<UUID>(); store.all().forEach(p -> oldIds.add(p.id()));
                 try {
@@ -253,6 +256,36 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                 // let the real selector calculate a route when navigation becomes available.
                 followers.add(new NativeFollower(follower, origin, ownerAt, type.id()));
             }
+            for (var type : config.types().values()) {
+                Location origin = nativeFollowPlatform(at.clone().add(20 + (followers.size() + trainees.size()) * 14, 0, 20));
+                if (!origin.getChunk().isForceLoaded()) { origin.getChunk().setForceLoaded(true); forcedChunks.add(origin.getChunk()); }
+                UUID trainerId = UUID.randomUUID();
+                var trainee = new Pet(UUID.randomUUID(), trainerId, type.id(), "Training " + type.id(), PetSex.MALE);
+                trainee.stored(false);
+                var body = (Mob) runtime.bodies().spawn(trainee, type, origin, null);
+                check(body != null, type.id() + " training body created"); entities.add(body);
+                runtime.remember(trainee, body);
+                var nativeBody = handle(body);
+                nativeBody.getClass().getField("activatedTick").setLong(nativeBody, Long.MAX_VALUE);
+                Location ownerAt = origin.clone().add(11, 0, 0);
+                if (!ownerAt.getChunk().isForceLoaded()) { ownerAt.getChunk().setForceLoaded(true); forcedChunks.add(ownerAt.getChunk()); }
+                var nativeOwner = world.spawn(ownerAt, org.bukkit.entity.ArmorStand.class, stand -> {
+                    stand.setVisible(false); stand.setMarker(true); stand.setGravity(false); stand.setInvulnerable(true); stand.setPersistent(false);
+                }); entities.add(nativeOwner);
+                ((org.bukkit.entity.Tameable) body).setTamed(true);
+                nativeBody.getClass().getMethod("setOwner", Class.forName("net.minecraft.world.entity.LivingEntity"))
+                        .invoke(nativeBody, nativeOwner.getClass().getMethod("getHandle").invoke(nativeOwner));
+                runtime.sessions().training(trainerId, new net.tfminecraft.companionpets.session.TrainingSession(trainee.id()));
+                var trainer = ownerFixture(trainerId, origin.clone().add(0, 0, 3), true);
+                var begin = Class.forName("net.tfminecraft.companionpets.runtime.TrainingNavigationGoal")
+                        .getDeclaredMethod("begin", PetRuntime.class, Pet.class, Mob.class, org.bukkit.entity.Player.class);
+                begin.setAccessible(true); begin.invoke(null, runtime, trainee, body, trainer);
+                var focus = Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(Mob.class,
+                        new NamespacedKey(this, "training_navigation")));
+                check(focus != null && focus.shouldActivate(), type.id() + " training holds native movement");
+                checkStopped(body, type.id() + " training");
+                trainees.add(new NativeTraining(body, origin, trainee, focus, type.id()));
+            }
             var toyType = config.type("wolf");
             check(toyType != null && !toyType.toys().isEmpty(), "Wolf test toy configured");
             var toy = toyType.toys().getFirst().create(); check(toy != null, "Provider creates configured toy");
@@ -296,6 +329,28 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                         check(after.distanceSquared(follower.ownerAt()) + .25 < follower.origin().distanceSquared(follower.ownerAt()),
                                 follower.type() + " actually approaches its native owner without plugin path commands: "
                                         + follower.origin() + " -> " + after + ", grounded=" + follower.body().isOnGround());
+                    }
+                    for (NativeTraining trainee : trainees) {
+                        check(nativeTicks(trainee.body()) > 0, trainee.type() + " training probe actually receives native ticks");
+                        var after = trainee.body().getLocation();
+                        double dx = after.getX() - trainee.origin().getX(), dz = after.getZ() - trainee.origin().getZ();
+                        check(dx * dx + dz * dz < .0025, trainee.type() + " training stays still over 20 native ticks");
+                        check(Bukkit.getMobGoals().getRunningGoals(trainee.body()).contains(trainee.goal()),
+                                trainee.type() + " real selector runs training movement guard: active=" + trainee.goal().shouldActivate()
+                                        + ", aware=" + trainee.body().isAware() + ", ticks=" + nativeTicks(trainee.body())
+                                        + ", running=" + Bukkit.getMobGoals().getRunningGoals(trainee.body()).stream().map(g -> g.getKey().toString()).toList());
+                        var nativeBody = handle(trainee.body());
+                        var aim = trainee.body().getEyeLocation();
+                        aim.setYaw((float) nativeBody.getClass().getMethod("getYHeadRot").invoke(nativeBody));
+                        aim.setPitch((float) nativeBody.getClass().getMethod("getXRot").invoke(nativeBody));
+                        var target = trainee.origin().clone().add(0, 1.62, 3).toVector().subtract(aim.toVector()).normalize();
+                        check(aim.getDirection().dot(target) > .8, trainee.type() + " native look controller faces trainer");
+                        runtime.sessions().clearTraining(trainee.pet().ownerId());
+                        check(!trainee.goal().shouldStayActive(), trainee.type() + " training releases when session ends");
+                        var follow = Bukkit.getMobGoals().getGoal((org.bukkit.entity.Tameable) trainee.body(), com.destroystokyo.paper.entity.ai.VanillaGoal.FOLLOW_OWNER);
+                        check(follow.shouldActivate(), trainee.type() + " native follow remains available after training");
+                        follow.start(); follow.tick();
+                        check(trainee.body().getPathfinder().hasPath(), trainee.type() + " native following can resume a path after training");
                     }
                     checkedTypes = new LinkedHashSet<>(config.types().keySet());
                     checksComplete = true;
@@ -362,6 +417,10 @@ public final class CompanionPetsSmoke extends JavaPlugin {
 
     /** Only identity, position and chat feedback are needed by the confirmed release/menu routes. */
     private static org.bukkit.entity.Player ownerFixture(UUID owner, Location at) {
+        return ownerFixture(owner, at, false);
+    }
+
+    private static org.bukkit.entity.Player ownerFixture(UUID owner, Location at, boolean online) {
         return (org.bukkit.entity.Player) java.lang.reflect.Proxy.newProxyInstance(org.bukkit.entity.Player.class.getClassLoader(),
                 new Class<?>[]{org.bukkit.entity.Player.class}, (proxy, method, args) -> switch (method.getName()) {
                     case "getUniqueId" -> owner;
@@ -370,7 +429,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                     case "getWorld" -> at.getWorld();
                     case "getName", "toString" -> "Isolated smoke owner";
                     case "sendMessage", "sendActionBar", "closeInventory" -> null;
-                    case "isOnline" -> false;
+                    case "isOnline" -> online;
                     case "hashCode" -> owner.hashCode();
                     case "equals" -> proxy == args[0];
                     default -> throw new AssertionError("Unexpected owner fixture call: " + method.getName());
