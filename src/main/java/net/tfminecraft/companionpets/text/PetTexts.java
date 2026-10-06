@@ -168,14 +168,14 @@ public final class PetTexts {
     public static String trickDescription(Trick trick) {
         return switch (trick.kind()) {
             case CUSTOM -> "Performs a learned gesture";
-            case SIT -> "Sits down and rests, without following";
+            case SIT -> "Sits down and rests";
             case FOLLOW -> "Wakes up and follows you again";
-            case COME -> "Comes to you, then resumes its previous posture";
-            case STAY -> "Stands still where it is, until you say follow";
+            case COME -> "Comes to you, then resumes its pose";
+            case STAY -> "Stands still until you say follow";
             case SPEAK -> "Barks, meows or yips on cue";
             case JUMP -> "Leaps up into the air";
             case SPIN -> "Twirls around in a circle";
-            case LAY -> "Lies down awake and rests until you give another order";
+            case LAY -> "Lies down awake and rests";
             case PAW -> "Gives you a paw";
         };
     }
