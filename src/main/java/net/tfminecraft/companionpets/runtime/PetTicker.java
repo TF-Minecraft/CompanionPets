@@ -74,6 +74,12 @@ public final class PetTicker implements Runnable {
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
             boolean online = owner != null && owner.isOnline();
+            // Pet House pets with frozen care (owner offline, or no decay while stored) have nothing to update.
+            if (pet.stored() && PresenceRules.resolve(true, online, 0, 0,
+                    runtime.config().care().decayWhileStored()) == Presence.FROZEN) {
+                missingBodySince.remove(pet.id());
+                continue;
+            }
             Entity body = runtime.entity(pet);
             if (body != null && !runtime.bodies().compatible(body, runtime.config().type(pet.typeId()))) continue;
             if (!pet.stored() && body == null && bodyChunkEntitiesLoaded(pet)) {

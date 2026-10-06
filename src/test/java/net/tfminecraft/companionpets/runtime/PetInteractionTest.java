@@ -1756,6 +1756,16 @@ class PetInteractionTest {
         assertEquals(PetOrder.FOLLOW, pet.order()); assertTrue(body.isAware());
     }
 
+    @Test void careSkipsFrozenPetHousePetsButStillDecaysThemWhenConfigured() throws Exception {
+        pet.stored(true); pet.need(Need.HUNGER, 80);
+        var ticker = new PetTicker(runtime, actions);
+        ticker.run(); Thread.sleep(5); ticker.run();
+        assertEquals(80, pet.need(Need.HUNGER), "No decay in the Pet House by default");
+        testConfig.set("care.decay-while-stored", true); runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        ticker.run(); Thread.sleep(5); ticker.run();
+        assertTrue(pet.need(Need.HUNGER) < 80, "Configured decay still applies to stored pets");
+    }
+
     @Test void petsThatCannotComeStillLookAtWhoeverSaysTheirName() {
         var ticker = new PetTicker(runtime, actions);
         for (PetOrder order : new PetOrder[]{PetOrder.STAY, PetOrder.SIT, PetOrder.LAY}) {
