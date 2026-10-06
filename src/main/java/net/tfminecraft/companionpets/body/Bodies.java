@@ -78,11 +78,7 @@ public final class Bodies {
         }
         visual.apply(entity, type);
         keepPersistent(entity);
-        if (entity instanceof Mob mob) {
-            mob.setAware(aware(pet) || net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob));
-            // A held posture turns pushing off again on its next goal tick.
-            mob.setCollidable(true);
-        }
+        if (entity instanceof Mob mob) mob.setAware(aware(pet) || net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob));
     }
 
     public UUID readId(Entity entity) {
@@ -110,11 +106,7 @@ public final class Bodies {
         }
         visual.apply(entity, type);
         keepPersistent(entity);
-        if (entity instanceof Mob mob) {
-            mob.setAware(aware(pet) || net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob));
-            // A held posture turns pushing off again on its next goal tick.
-            mob.setCollidable(true);
-        }
+        if (entity instanceof Mob mob) mob.setAware(aware(pet) || net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob));
     }
 
     public boolean compatible(Entity entity, PetTypeDef type) {
