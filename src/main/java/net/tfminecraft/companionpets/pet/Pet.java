@@ -30,6 +30,12 @@ public final class Pet {
     private final EnumMap<Need, Double> needs = new EnumMap<>(Need.class);
     private double bond;
     private long bornAt;
+    private long lastOwnerNearbyMillis;
+    private long lastGreetingMillis;
+    private final RelationshipMemory carers = new RelationshipMemory();
+    private final RelationshipMemory friends = new RelationshipMemory();
+    public RelationshipMemory carers() { return carers; }
+    public RelationshipMemory friends() { return friends; }
     private long criticalMillis;
     private long dirtyMillis;
     private final EnumSet<Need> announcedLow = EnumSet.noneOf(Need.class);
@@ -38,6 +44,12 @@ public final class Pet {
     private boolean dead;
 
     private String favoriteToy;
+    private long toyExcitedUntilMillis;
+    private double socialTailHz;
+    public double socialTailHz() { return socialTailHz; }
+    public void socialTailHz(double value) { socialTailHz = Double.isFinite(value) ? Math.max(0, value) : 0; }
+    public long toyExcitedUntilMillis() { return toyExcitedUntilMillis; }
+    public void toyExcitedUntilMillis(long value) { toyExcitedUntilMillis = Math.max(0, value); }
     private String carriedToy;
     private final Map<String, Trick> words = new LinkedHashMap<>();
     private final Map<Trick, Double> progress = new java.util.LinkedHashMap<>();
@@ -72,8 +84,19 @@ public final class Pet {
     }
 
     public void ownerId(UUID ownerId) {
+        if (!this.ownerId.equals(ownerId)) {
+            lastOwnerNearbyMillis = 0;
+            lastGreetingMillis = 0;
+            carers.clear(); friends.clear();
+            toyExcitedUntilMillis = 0;
+        }
         this.ownerId = java.util.Objects.requireNonNull(ownerId);
     }
+
+    public long lastOwnerNearbyMillis() { return lastOwnerNearbyMillis; }
+    public void lastOwnerNearbyMillis(long value) { lastOwnerNearbyMillis = Math.max(0, value); }
+    public long lastGreetingMillis() { return lastGreetingMillis; }
+    public void lastGreetingMillis(long value) { lastGreetingMillis = Math.max(0, value); }
 
     public String typeId() {
         return typeId;
@@ -387,6 +410,7 @@ public final class Pet {
     }
 
     public void clearRuntimeMotion() {
+        socialTailHz = 0;
         activity = Activity.NONE;
         fetch = null;
         playUntilMillis = 0L;

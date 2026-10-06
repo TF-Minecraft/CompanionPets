@@ -22,9 +22,18 @@ class TrainingValidationTest {
                 net.tfminecraft.companionpets.training.TrainingMath.understanding(100, config.training()));
     }
     @Test void reversedThrowSpeedsAndNegativeLimitsAreRejected() throws Exception {
-        for (String source : new String[]{"play: {throw-speed-low: 2, throw-speed-high: 1}", "limits: {max-stored: -1}", "limits: {max-out: -1}"}) {
+        for (String source : new String[]{"play: {throw-speed-low: 2, throw-speed-high: 1}",
+                "play: {toy-attention-seconds: 0}", "play: {favorite-toy-attention-seconds: 0}",
+                "play: {fetch-speed-multiplier: 0}", "play: {fetch-speed-multiplier: 4}",
+                "limits: {max-stored: -1}", "limits: {max-out: -1}"}) {
             var yaml = new YamlConfiguration(); yaml.loadFromString(source);
             assertThrows(IllegalArgumentException.class, () -> CompanionConfig.load(MockBukkit.createMockPlugin(), yaml), source);
         }
+    }
+    @Test void invalidToyAttentionNumbersFallBackToDefaults() throws Exception {
+        var yaml = new YamlConfiguration();
+        yaml.loadFromString("play: {toy-attention-seconds: -1, favorite-toy-attention-seconds: .nan}");
+        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        assertEquals(20, config.play().toyAttentionSeconds()); assertEquals(35, config.play().favoriteToyAttentionSeconds());
     }
 }

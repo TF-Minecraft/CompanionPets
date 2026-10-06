@@ -26,6 +26,7 @@ final class PetCareActions {
                 return true;
             }
             pet.treated(true);
+            runtime.recordCare(player, pet, 8, now);
             pet.need(Need.HEALTH, pet.need(Need.HEALTH) + runtime.config().care().medicineHealthBump());
             comfort(pet, now);
             PetFx.hearts(entity, 3);
@@ -34,6 +35,7 @@ final class PetCareActions {
         }
         if (type.items().isBrush(hand)) {
             HealthRecovery.improve(pet, Need.CLEANLINESS, 100);
+            runtime.recordCare(player, pet, 6, now);
             comfort(pet, now);
             PetFx.hearts(entity, 2);
             PetFx.bar(player, pet.name() + "'s coat is clean and shiny again");
@@ -58,6 +60,7 @@ final class PetCareActions {
             return true;
         }
         HealthRecovery.improve(pet, Need.HUNGER, pet.need(Need.HUNGER) + gain);
+        runtime.recordCare(player, pet, 4, System.currentTimeMillis());
         if (favorite) {
             pet.need(Need.MOOD, pet.need(Need.MOOD) + runtime.config().care().favoriteFoodMood());
         }

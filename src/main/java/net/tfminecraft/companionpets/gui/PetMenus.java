@@ -62,7 +62,7 @@ public final class PetMenus {
         holder.petHousePage(petHousePage);
         Inventory inventory = Bukkit.createInventory(holder, 45, title(pet.name()));
         holder.inventory(inventory);
-        fillCare(inventory, pet);
+        fillCare(player, inventory, pet);
         player.openInventory(inventory);
     }
 
@@ -72,11 +72,12 @@ public final class PetMenus {
                 || !pet.id().equals(holder.petId())) {
             return;
         }
-        fillCare(holder.getInventory(), pet);
+        fillCare(player, holder.getInventory(), pet);
     }
 
-    private void fillCare(Inventory inventory, Pet pet) {
-        fillProfile(inventory, pet, true, inventory.getHolder() instanceof MenuHolder holder && holder.petHouseBack());
+    private void fillCare(org.bukkit.entity.Player player, Inventory inventory, Pet pet) {
+        fillProfile(inventory, pet, pet.ownerId().equals(player.getUniqueId()),
+                inventory.getHolder() instanceof MenuHolder holder && holder.petHouseBack());
     }
 
     public void fillInformation(Inventory inventory, Pet pet) {
@@ -126,7 +127,7 @@ public final class PetMenus {
                 sick ? line(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED) : null));
 
         if (back) MenuNavigation.back(inventory, management ? "Return to the Pet House list" : "Return to this player's pets");
-        inventory.setItem(careSlot(TRICKS_SLOT, back), action(Material.BOOK, "Tricks",
+        inventory.setItem(management ? careSlot(TRICKS_SLOT, back) : TRICKS_SLOT, action(Material.BOOK, "Tricks",
                 line("See what " + pet.name() + " has learned", NamedTextColor.GRAY)));
         if (management) {
             boolean stored = pet.stored();

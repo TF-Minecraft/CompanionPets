@@ -61,16 +61,13 @@ public final class Locomotion {
         return Mode.FOLLOW;
     }
 
-    public static double speed(Illness illness, double bond, double cleanliness, boolean favoriteFetch) {
+    public static double speed(Illness illness, double bond, double cleanliness, boolean ignoredFavoriteFetch) {
         double speed = bond >= 70.0 ? 1.25 : bond <= 30.0 ? 0.95 : 1.1;
         if (illness == Illness.UNWELL || illness == Illness.SICK) {
             speed *= 0.65;
         }
         if (cleanliness < 25.0) {
             speed *= 0.85;
-        }
-        if (favoriteFetch) {
-            speed *= 1.35;
         }
         return speed;
     }

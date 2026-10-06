@@ -161,8 +161,9 @@ final class PetRoaming {
 
     boolean step(Pet pet, Mob body, Player owner, double speed, long now) {
         RoamSettings settings = runtime.config().roaming();
-        if (!settings.enabled() || owner == null || !owner.isOnline() || !owner.getWorld().equals(body.getWorld())
-                || body.getTarget() != null
+        if (!runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.ROAM)
+                || !settings.enabled() || owner == null || !owner.isOnline() || !owner.getWorld().equals(body.getWorld())
+                || body.getTarget() != null || pet.activity() != Activity.NONE
                 || body.getLocation().distanceSquared(owner.getLocation()) > square(settings.radius() + 2)) {
             plans.remove(pet.id());
             return false;
@@ -227,11 +228,11 @@ final class PetRoaming {
             }
         }
         double choice = runtime.random().nextDouble();
-        Entity target = choice < 0.45 && !pets.isEmpty() ? pets.get(runtime.random().nextInt(pets.size()))
-                : choice < 0.75 && !players.isEmpty() ? players.get(runtime.random().nextInt(players.size()))
+        Entity target = choice < 0.45 && !pets.isEmpty() ? familiarChoice(pet, pets)
+                : choice < 0.75 && !players.isEmpty() ? familiarChoice(pet, players)
                 : null;
         if (target == null && !pets.isEmpty() && runtime.random().nextBoolean()) {
-            target = pets.get(runtime.random().nextInt(pets.size()));
+            target = familiarChoice(pet, pets);
         }
         double angle = runtime.random().nextDouble() * Math.PI * 2;
         double radius = 1.5 + runtime.random().nextDouble() * Math.max(0.5, settings.radius() - 1.5);
@@ -243,6 +244,22 @@ final class PetRoaming {
                 target == null ? point : target.getLocation(), until);
     }
 
+    private Entity familiarChoice(Pet pet, List<Entity> candidates) {
+        double[] weights = new double[candidates.size()];
+        double total = 0;
+        for (int i = 0; i < candidates.size(); i++) {
+            Entity entity = candidates.get(i); Pet other = runtime.byEntity(entity);
+            double trust = other != null && runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.PET_FRIENDSHIPS)
+                    ? pet.friends().trust(other.id()) : entity instanceof Player
+                            && runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.RECOGNIZE_CARERS)
+                                    ? pet.carers().trust(entity.getUniqueId()) : 0;
+            weights[i] = 1 + trust / 20; total += weights[i];
+        }
+        double roll = runtime.random().nextDouble() * total;
+        for (int i = 0; i < weights.length; i++) if ((roll -= weights[i]) < 0) return candidates.get(i);
+        return candidates.getLast();
+    }
+
     void cancel(Pet pet) { plans.remove(pet.id()); cancelAttention(pet); }
     void cancelWithPosture(Pet pet) {
         Attention job = attention.get(pet.id());
@@ -251,6 +268,7 @@ final class PetRoaming {
             restorePosture(pet, body, job.returnOrder);
     }
     void cancelPlan(Pet pet) { plans.remove(pet.id()); }
+    boolean exploring(Pet pet) { return plans.containsKey(pet.id()); }
 
     private void cancelAttention(Pet pet) {
         attention.remove(pet.id());

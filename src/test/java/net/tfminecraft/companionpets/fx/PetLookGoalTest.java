@@ -89,7 +89,67 @@ class PetLookGoalTest {
         assertFalse(goal().shouldActivate());
     }
 
-    private static class WatchingWolf extends WolfMock {
+    @Test void restingBodyKeepsItsHeadingDuringLongLooksAndReleasesItOnStop() {
+        var held = new java.util.ArrayList<float[]>();
+        int[] released = {0};
+        var visual = new net.tfminecraft.companionpets.visual.PetVisual() {
+            @Override public void apply(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type) { }
+            @Override public void holdHeadLook(Entity entity, float yaw, float head, float pitch) {
+                held.add(new float[]{yaw, head, pitch});
+            }
+            @Override public void releaseHeadLook(Entity entity) { released[0]++; }
+        };
+        body.setBodyYaw(170);
+        body.setRotation(170, 0);
+        var position = body.getLocation().toVector();
+        target.teleport(new Location(body.getWorld(), 1, 67, -4));
+        for (int tick = 1; tick <= 100; tick++) {
+            body.setTicksLived(tick);
+            look.hold(visual); look.track(target); look.tick();
+            assertEquals(170, body.getBodyYaw());
+            assertEquals(170, body.getLocation().getYaw());
+            assertEquals(position, body.getLocation().toVector());
+            assertEquals(0, body.handle.bodyRotationControl.headStableTime);
+            assertTrue(Math.abs(body.handle.headYaw - 170) <= 50);
+        }
+        assertEquals(100, held.size());
+        assertNotEquals(170, body.handle.headYaw);
+        assertEquals(0, body.speed);
+        assertTrue(body.pitch <= 30);
+        look.stop(); look.stop();
+        assertEquals(1, released[0]);
+        look.track(target); look.tick();
+        assertEquals(40, body.speed, "Follow returns to native unrestricted looking");
+    }
+
+    @Test void restingWithoutTargetStaysActiveAndExpiredHoldUnlocksModel() {
+        int[] releases = {0};
+        look.hold(new net.tfminecraft.companionpets.visual.PetVisual() {
+            @Override public void apply(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type) { }
+            @Override public void releaseHeadLook(Entity entity) { releases[0]++; }
+        });
+        assertTrue(look.shouldActivate()); look.tick();
+        body.setTicksLived(14);
+        assertFalse(look.shouldActivate()); assertEquals(1, releases[0]);
+    }
+
+    @Test void postureRefreshDoesNotKeepAnOldAttentionTargetForever() {
+        var visual = new net.tfminecraft.companionpets.visual.IdleVisual();
+        target.teleport(new Location(body.getWorld(), -4, 64, 2));
+        look.hold(visual); look.track(target);
+        for (int tick = 1; tick < 40; tick++) {
+            body.setTicksLived(tick); look.hold(visual); look.tick();
+        }
+        assertTrue(look.shouldActivate());
+        assertEquals(0, body.handle.headYaw, 0.001, "Expired attention returns the held head to the front");
+    }
+
+    public static class WatchingWolf extends WolfMock {
+        private final NativeHead handle = new NativeHead();
+        private float bodyYaw;
+        @Override public float getBodyYaw() { return bodyYaw; }
+        @Override public void setBodyYaw(float yaw) { bodyYaw = yaw; }
+        public NativeHead getHandle() { return handle; }
         Location lookedAt;
         int calls;
         float speed, pitch;
@@ -103,5 +163,16 @@ class PetLookGoalTest {
         private void record(Location point, float speed, float pitch) {
             lookedAt = point.clone(); calls++; this.speed = speed; this.pitch = pitch;
         }
+    }
+
+    public static class NativeHead {
+        private final BodyControl bodyRotationControl = new BodyControl();
+        float headYaw;
+        public void setYRot(float yaw) { }
+        public void setXRot(float pitch) { }
+        public void setYHeadRot(float yaw) { headYaw = yaw; }
+    }
+    public static class BodyControl {
+        private int headStableTime = 30;
     }
 }

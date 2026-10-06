@@ -35,6 +35,41 @@ class PetStoreTest {
         return new PetStore(new File(directory.toFile(), "pets.yml"), logger);
     }
 
+    @Test void iterationSnapshotsStaySafeAcrossAddReplaceRemoveAndReload() {
+        var store = store(); assertTrue(store.load());
+        var first = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
+        store.add(first); var before = store.all();
+        assertThrows(UnsupportedOperationException.class, () -> before.clear());
+        var second = new Pet(UUID.randomUUID(), first.ownerId(), "cat", "Sol", PetSex.MALE);
+        for (Pet pet : before) store.add(second);
+        assertEquals(java.util.List.of(first), before); assertEquals(2, store.all().size());
+        var replacement = new Pet(first.id(), first.ownerId(), "cat", "Luna II", PetSex.FEMALE);
+        store.add(replacement);
+        assertTrue(store.all().contains(replacement)); assertFalse(store.all().contains(first));
+        var deleting = store.all();
+        for (Pet pet : deleting) assertTrue(store.remove(pet.id()));
+        assertEquals(2, deleting.size()); assertTrue(store.all().isEmpty());
+        assertTrue(store.save()); assertTrue(store.load()); assertTrue(store.all().isEmpty());
+        store.add(new Pet(UUID.randomUUID(), first.ownerId(), "cat", "New", PetSex.MALE));
+        assertEquals(1, store.all().size()); assertTrue(store.load()); assertTrue(store.all().isEmpty());
+    }
+
+    @Test void carersAndPetFriendsSurviveRestartWithoutBecomingOwners() throws Exception {
+        var first = store(); assertTrue(first.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
+        var carer = UUID.randomUUID(); var friend = UUID.randomUUID();
+        pet.carers().reinforce(carer, 20, 1000, 0); pet.carers().greeted(carer, 2000);
+        pet.friends().reinforce(friend, 12, 3000, 0); first.add(pet); assertTrue(first.save());
+        var restored = store(); assertTrue(restored.load()); var loaded = restored.get(pet.id());
+        assertEquals(pet.ownerId(), loaded.ownerId()); assertTrue(loaded.carers().familiar(carer));
+        assertEquals(pet.carers().entries(), loaded.carers().entries()); assertEquals(pet.friends().entries(), loaded.friends().entries());
+        var yaml = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(directory.resolve("pets.yml").toFile());
+        yaml.set("pets." + pet.id() + ".carers.bad-id.trust", 100);
+        yaml.set("pets." + pet.id() + ".friends." + UUID.randomUUID(), "invalid"); yaml.save(directory.resolve("pets.yml").toFile());
+        var invalid = store(); assertTrue(invalid.load()); assertEquals(1, invalid.get(pet.id()).carers().entries().size());
+        assertEquals(1, invalid.get(pet.id()).friends().entries().size());
+    }
+
     @Test void explicitStayAndLayPersistAsOrdersAcrossRestart() {
         var first = store(); assertTrue(first.load());
         for (PetOrder order : new PetOrder[]{PetOrder.STAY, PetOrder.LAY}) {
@@ -54,6 +89,8 @@ class PetStoreTest {
         Pet pet = new Pet(id, owner, "beagle", "Luna", PetSex.FEMALE);
         pet.personality(PetPersonality.PLAYFUL);
         pet.bornAt(123456L);
+        pet.lastOwnerNearbyMillis(123000L);
+        pet.lastGreetingMillis(120000L);
         pet.order(PetOrder.SIT);
         pet.staying(true);
         pet.stored(true);
@@ -84,6 +121,8 @@ class PetStoreTest {
         assertEquals("Luna", restored.name());
         assertEquals(PetPersonality.PLAYFUL, restored.personality());
         assertEquals(123456L, restored.bornAt());
+        assertEquals(123000L, restored.lastOwnerNearbyMillis());
+        assertEquals(120000L, restored.lastGreetingMillis());
         assertEquals(PetOrder.SIT, restored.order());
         assertTrue(restored.staying());
         assertTrue(restored.stored());

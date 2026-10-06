@@ -32,7 +32,7 @@ class LocomotionAndOrdersTest {
     void highBondFollowsCloserAndSicknessSlowsTheWalk() {
         assertTrue(Locomotion.followDistance(100) < Locomotion.followDistance(0));
         assertTrue(Locomotion.speed(Illness.SICK, 50, 100, false) < Locomotion.speed(Illness.NONE, 50, 100, false));
-        assertTrue(Locomotion.speed(Illness.NONE, 50, 100, true) > Locomotion.speed(Illness.NONE, 50, 100, false));
+        assertEquals(Locomotion.speed(Illness.NONE, 50, 100, true), Locomotion.speed(Illness.NONE, 50, 100, false));
     }
 
     @Test

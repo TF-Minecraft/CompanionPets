@@ -31,8 +31,8 @@ public final class TestCommands {
                     runtime.store().all().stream().filter(p -> !before.contains(p.id()))
                             .forEach(p -> audit.append(sender, "spawn-learned", p, "none", StaffAudit.snapshot(p)));
             } else {
-                StaffCommands.require(args.length == 2 && List.of("affection", "bark", "mischief", "dig", "belly").contains(args[1].toLowerCase(Locale.ROOT)),
-                        "Usage: /companionpets moment <affection|bark|mischief|dig|belly>, while looking at your pet.");
+                StaffCommands.require(args.length == 2 && List.of("affection", "bark", "mischief", "dig", "belly", "greeting", "pet-greeting").contains(args[1].toLowerCase(Locale.ROOT)),
+                        "Usage: /companionpets moment <affection|bark|mischief|dig|belly|greeting|pet-greeting>, while looking at your pet.");
                 Pet pet = runtime.byEntity(PetActions.lookingAt(player, 6));
                 StaffCommands.require(pet != null && pet.ownerId().equals(player.getUniqueId()), "Look at one of your pets first.");
                 if (!audit.append(sender, "moment-requested", pet, StaffAudit.snapshot(pet), args[1])) return true;
@@ -45,7 +45,7 @@ public final class TestCommands {
     public List<String> complete(CommandSender sender, String[] args) {
         if (!sender.hasPermission("companionpets.test") || args.length != 2) return List.of();
         if (args[0].equalsIgnoreCase("spawn")) return StaffCommands.filter(runtime.config().types().keySet(), args[1]);
-        if (args[0].equalsIgnoreCase("moment")) return StaffCommands.filter(List.of("affection", "bark", "mischief", "dig", "belly"), args[1]);
+        if (args[0].equalsIgnoreCase("moment")) return StaffCommands.filter(List.of("affection", "bark", "mischief", "dig", "belly", "greeting", "pet-greeting"), args[1]);
         return List.of();
     }
 }

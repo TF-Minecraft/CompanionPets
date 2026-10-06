@@ -46,6 +46,7 @@ final class PostureNavigationGoal implements Goal<Mob> {
     @Override public boolean shouldActivate() {
         if (!body.isValid() || body.isDead() || pet.stored() || pet.dead()
                 || pet.activity() == Activity.SLEEPING || WaterEscape.needed(body)) return false;
+        if (runtime.visual().belly(body)) return true;
         var mode = Locomotion.choose(pet.illness(), pet.need(Need.HEALTH), pet.need(Need.ENERGY),
                 pet.need(Need.HUNGER), pet.activity(), pet.fetch() != null,
                 System.currentTimeMillis() < pet.forcedSitUntilMillis(), pet.order(), pet.staying());
@@ -56,6 +57,7 @@ final class PostureNavigationGoal implements Goal<Mob> {
         if (!shouldActivate()) return;
         PetMotion.stop(body);
         body.setTarget(null);
+        PetFx.holdLooking(body, runtime.visual());
         if (!nearby(target) || body.getTicksLived() >= nextLookAt) {
             var candidates = body.getNearbyEntities(6, 3, 6).stream().filter(this::nearby).toList();
             target = candidates.isEmpty() ? null : candidates.get(runtime.random().nextInt(candidates.size()));
@@ -69,7 +71,7 @@ final class PostureNavigationGoal implements Goal<Mob> {
                 && body.getLocation().distanceSquared(entity.getLocation()) <= 36
                 && (!(entity instanceof Player player) || player.isOnline() && player.getGameMode() != GameMode.SPECTATOR);
     }
-    @Override public void stop() { target = null; nextLookAt = 0; }
+    @Override public void stop() { target = null; nextLookAt = 0; PetFx.releaseLooking(body); }
     @Override public GoalKey<Mob> getKey() { return key; }
     @Override public EnumSet<GoalType> getTypes() { return EnumSet.of(GoalType.MOVE, GoalType.JUMP); }
 }

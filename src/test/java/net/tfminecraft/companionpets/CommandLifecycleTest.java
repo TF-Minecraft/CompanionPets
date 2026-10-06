@@ -70,6 +70,7 @@ class CommandLifecycleTest {
     @Test void operatorPreviewCompletionFiltersPrefixes() {
         player.setOp(true);
         assertEquals(List.of("belly"), complete("moment", "be"));
+        assertEquals(List.of("greeting"), complete("moment", "gr"));
         assertTrue(complete("social", "sn").isEmpty());
         assertTrue(complete("personality", "fr").isEmpty());
         assertTrue(complete("testpet", "unknown").isEmpty());

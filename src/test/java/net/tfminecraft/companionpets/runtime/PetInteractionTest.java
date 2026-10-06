@@ -31,9 +31,28 @@ class PetInteractionTest {
     private Pet pet;
     private int bodyRemovals;
     private int navigationStops;
+    private int navigationRequests;
     private Location navigationTarget;
     private boolean inWater;
     private Location lookedAt;
+    private boolean greetingGround;
+    private boolean reachableGreetingPath = true;
+    private Location plannedPathTarget;
+    private boolean unreachableFormationSlot, existingFollowPath;
+    private Location partialFollowEnd;
+    private boolean lookingAtPet;
+    private boolean blockedHop;
+    private boolean blockedSocialSight;
+    private org.bukkit.entity.EntityType greetingSpecies = org.bukkit.entity.EntityType.WOLF;
+    private double navigationSpeed;
+    private double tailHz;
+    private final java.util.List<org.bukkit.Sound> greetingSounds = new java.util.ArrayList<>();
+    private final java.util.List<Float> greetingPitches = new java.util.ArrayList<>();
+    private YamlConfiguration testConfig;
+    private boolean bellyAvailable, bellyActive;
+    private int headHolds, headReleases;
+    private float heldBodyYaw, heldHeadYaw, heldPitch;
+    private org.bukkit.Sound nativeSound = org.bukkit.Sound.ENTITY_FROG_AMBIENT;
 
     @BeforeEach void setup() throws Exception {
         var goals = new java.util.HashMap<String, com.destroystokyo.paper.entity.ai.Goal<?>>();
@@ -45,7 +64,7 @@ class PetInteractionTest {
                             return switch (method.getName()) {
                                 case "getGoal" -> goals.get(id + ":" + args[1]);
                                 case "addGoal" -> { goals.put(id + ":" + ((com.destroystokyo.paper.entity.ai.Goal<?>) args[2]).getKey(), (com.destroystokyo.paper.entity.ai.Goal<?>) args[2]); yield null; }
-                                case "removeGoal" -> { goals.remove(id + ":" + args[1]); yield null; }
+                                case "removeGoal" -> { goals.remove(id + ":" + (args[1] instanceof com.destroystokyo.paper.entity.ai.Goal<?> goal ? goal.getKey() : args[1])); yield null; }
                                 case "removeAllGoals" -> { goals.keySet().removeIf(k -> k.startsWith(id + ":")); yield null; }
                                 default -> throw new AssertionError("Unexpected goals call: " + method.getName());
                             };
@@ -54,28 +73,43 @@ class PetInteractionTest {
         });
         var plugin = MockBukkit.createMockPlugin();
         var world = new WorldMock() {
+            @Override public void playSound(Location at, org.bukkit.Sound sound, float volume, float pitch) {
+                greetingSounds.add(sound); greetingPitches.add(pitch);
+            }
             @Override public org.bukkit.util.RayTraceResult rayTraceBlocks(Location at, org.bukkit.util.Vector direction, double distance, org.bukkit.FluidCollisionMode fluids, boolean ignorePassable) { return null; }
-            @Override public org.bukkit.util.RayTraceResult rayTraceEntities(Location at, org.bukkit.util.Vector direction, double distance, java.util.function.Predicate<? super Entity> filter) { return null; }
+            @Override public org.bukkit.util.RayTraceResult rayTraceEntities(Location at, org.bukkit.util.Vector direction, double distance, java.util.function.Predicate<? super Entity> filter) {
+                return lookingAtPet ? new org.bukkit.util.RayTraceResult(body.getLocation().toVector(), body) : null;
+            }
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
                 if (type != org.bukkit.entity.Wolf.class) return super.spawn(at, type);
                 var wolf = new WolfMock(server, UUID.randomUUID()) {
+                    @Override public org.bukkit.entity.EntityType getType() { return greetingSpecies; }
+                    @Override public org.bukkit.Sound getAmbientSound() { return nativeSound; }
+                    @Override public org.bukkit.Sound getHurtSound() { return org.bukkit.Sound.ENTITY_PIG_HURT; }
+                    private float bodyYaw;
+                    @Override public float getBodyYaw() { return bodyYaw; }
+                    @Override public void setBodyYaw(float yaw) { bodyYaw = yaw; }
                     @Override public int getHeadRotationSpeed() { return 40; }
                     @Override public int getMaxHeadPitch() { return 30; }
                     @Override public void lookAt(Entity target, float speed, float pitch) {
                         lookedAt = target instanceof org.bukkit.entity.LivingEntity living ? living.getEyeLocation() : target.getLocation();
                     }
+                    @Override public void lookAt(Location target, float speed, float pitch) { lookedAt = target.clone(); }
                     @Override public boolean isInWater() { return inWater; }
+                    @Override public boolean hasLineOfSight(Entity entity) { return !blockedSocialSight; }
                     @Override public void setRemoveWhenFarAway(boolean remove) { }
                     @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() {
                         return (com.destroystokyo.paper.entity.Pathfinder) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
                                 new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class}, (proxy, method, args) -> switch (method.getName()) {
                                     case "stopPathfinding" -> { navigationStops++; yield null; }
-                                    case "moveTo" -> { navigationTarget = ((Location) args[0]).clone(); yield true; }
-                                    case "hasPath" -> false;
+                                    case "moveTo" -> { navigationRequests++; navigationTarget = (args[0] instanceof Location at ? at : plannedPathTarget).clone(); navigationSpeed = (double) args[1]; yield true; }
+                                    case "hasPath" -> existingFollowPath;
                                     case "getEntity" -> this;
-                                    case "findPath" -> (com.destroystokyo.paper.entity.Pathfinder.PathResult) java.lang.reflect.Proxy.newProxyInstance(
+                                    case "findPath" -> { plannedPathTarget = ((Location) args[0]).clone();
+                                        boolean reaches = reachableGreetingPath && (!unreachableFormationSlot || plannedPathTarget.distanceSquared(player.getLocation()) < 0.1);
+                                        yield (com.destroystokyo.paper.entity.Pathfinder.PathResult) java.lang.reflect.Proxy.newProxyInstance(
                                             getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.PathResult.class},
-                                            (p, m, a) -> m.getName().equals("canReachFinalPoint") ? true : null);
+                                            (p, m, a) -> switch (m.getName()) { case "canReachFinalPoint" -> reaches; case "getFinalPoint" -> partialFollowEnd; default -> null; }); }
                                     default -> throw new AssertionError("Unexpected navigation call: " + method.getName());
                                 });
                     }
@@ -85,16 +119,23 @@ class PetInteractionTest {
                 return type.cast(wolf);
             }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
+                if (blockedHop && y == 65) return new BlockMock(Material.STONE, new Location(this, x, y, z)) {
+                    @Override public boolean isPassable() { return false; }
+                };
+                if (greetingGround && y == 63) return new BlockMock(Material.STONE, new Location(this, x, y, z)) {
+                    @Override public boolean isPassable() { return false; }
+                };
                 return new BlockMock(new Location(this, x, y, z)) {
                     @Override public boolean isPassable() { return true; }
                 };
             }
+            @Override public boolean isChunkLoaded(int x, int z) { return greetingGround || super.isChunkLoaded(x, z); }
         };
         server.addWorld(world);
         player = server.addPlayer();
         player.teleport(new Location(world, 0, 64, 0));
         player.openInventory(server.createInventory(null, 9));
-        var yaml = new YamlConfiguration();
+        var yaml = new YamlConfiguration(); testConfig = yaml;
         yaml.loadFromString("""
                 limits: {max-out: 2}
                 items:
@@ -111,6 +152,17 @@ class PetInteractionTest {
                     items: {foods: [], treats: [], medicines: [], brushes: [], toys: []}
                 """);
         var visual = new PetVisual() {
+            @Override public boolean startBelly(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, long duration) {
+                bellyActive = bellyAvailable; return bellyActive;
+            }
+            @Override public boolean belly(Entity entity) { return bellyActive; }
+            @Override public boolean holdsMovement(Entity entity) { return bellyActive; }
+            @Override public void cancelAction(Entity entity) { bellyActive = false; }
+            @Override public void holdHeadLook(Entity entity, float yaw, float head, float pitch) {
+                headHolds++; heldBodyYaw = yaw; heldHeadYaw = head; heldPitch = pitch;
+            }
+            @Override public void releaseHeadLook(Entity entity) { headReleases++; }
+            @Override public void wagTail(Entity entity, double hz) { tailHz = hz; }
             @Override public void apply(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type) { }
             @Override public void removeBody(Entity entity) {
                 bodyRemovals++;
@@ -135,6 +187,906 @@ class PetInteractionTest {
         return store;
     }
     @AfterEach void teardown() { MockBukkit.unmock(); }
+
+    private void greetingSpecies(org.bukkit.entity.EntityType entity) {
+        greetingSpecies = entity; testConfig.set("pets.wolf.entity", entity.name());
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+    }
+    private void eagerGreeting() { pet.bond(100); pet.personality(PetPersonality.FRIENDLY); }
+    private void assertCircleRadius(double base) {
+        double radius = navigationTarget.distance(player.getLocation());
+        assertTrue(radius >= base * 0.85 && radius <= base * 1.15, "Organic radius: " + radius);
+    }
+
+    @Test void unlistedSpeciesUsesItsNativeVoiceAndSilentMobsDoNotMakeFoxOrPlayerSounds() {
+        greetingSpecies = org.bukkit.entity.EntityType.PIG; nativeSound = org.bukkit.Sound.ENTITY_PIG_AMBIENT;
+        net.tfminecraft.companionpets.fx.PetFx.happy(body, true); net.tfminecraft.companionpets.fx.PetFx.ambient(body);
+        net.tfminecraft.companionpets.fx.PetFx.sad(body); net.tfminecraft.companionpets.fx.PetFx.hurt(body);
+        assertEquals(java.util.List.of(org.bukkit.Sound.ENTITY_PIG_AMBIENT, org.bukkit.Sound.ENTITY_PIG_AMBIENT,
+                org.bukkit.Sound.ENTITY_PIG_AMBIENT, org.bukkit.Sound.ENTITY_PIG_HURT), greetingSounds);
+        nativeSound = null; net.tfminecraft.companionpets.fx.PetFx.ambient(body); net.tfminecraft.companionpets.fx.PetFx.happy(body, true);
+        assertEquals(4, greetingSounds.size());
+    }
+
+    @Test void BellyRollKeepsBodyFixedAndHeadBoundedUntilTheWholeMomentEnds() {
+        bellyAvailable = true; body.setOnGround(true); body.setBodyYaw(0);
+        assertTrue(actions.moments().triggerBelly(pet, body, player));
+        var hold = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "posture_navigation")));
+        var look = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey("companionpets", "look")));
+        assertNotNull(hold); assertTrue(hold.shouldActivate()); assertNotNull(look);
+        player.teleport(body.getLocation().add(3, 0, 3));
+        new PetTicker(runtime, actions).run();
+        for (int i = 0; i < 20; i++) { hold.tick(); look.tick(); }
+        assertTrue(headHolds > 0); assertEquals(0, heldBodyYaw); assertEquals(0, body.getBodyYaw());
+        assertTrue(Math.abs(heldHeadYaw) <= 50); assertTrue(Math.abs(heldPitch) <= 30);
+        assertTrue(Math.abs(heldHeadYaw) > 10, "Head can follow a visible front-side target");
+        player.teleport(body.getLocation().add(0, 0, -3));
+        for (int i = 0; i < 20; i++) { hold.tick(); look.tick(); }
+        assertEquals(0, heldHeadYaw, 0.001, "A target behind cannot twist the resting head");
+        bellyActive = false; assertFalse(actions.moments().tickBelly(pet, body, player));
+        assertTrue(headReleases > 0); assertFalse(hold.shouldActivate());
+    }
+
+    @Test void favoriteToyInEitherHandPromptsInterestButDoesNotInterruptOrdersOrLowNeeds() {
+        pet.favoriteToy("STICK"); greetingGround = true; long now = System.currentTimeMillis();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now); assertEquals(0, pet.toyExcitedUntilMillis());
+        assertEquals(PetSpacing.toyFront(runtime, pet, player), navigationTarget);
+        body.teleport(navigationTarget); actions.anticipation().tick(now + 250);
+        assertTrue(pet.toyExcitedUntilMillis() > now);
+        assertNotNull(org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey("companionpets", "look"))));
+        actions.anticipation().tick(now + 1500);
+        int sounds = greetingSounds.size(); actions.anticipation().tick(now + 1550);
+        assertEquals(1, sounds); assertEquals(sounds, greetingSounds.size(), "No repeating sound on every tick");
+        assertEquals(Activity.TOY_FOCUS, pet.activity());
+        actions.anticipation().tick(now + 60_000);
+        assertFalse(actions.anticipation().active(pet), "Even a favorite becomes boring without play or owner movement");
+        assertEquals(Activity.NONE, pet.activity());
+        assertEquals(sounds, greetingSounds.size(), "Boredom does not restart favorite noises");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.AIR)); actions.anticipation().tick(now + 61_000);
+        assertEquals(0, pet.toyExcitedUntilMillis());
+        player.getInventory().setItemInOffHand(new ItemStack(Material.STICK)); actions.anticipation().tick(now + 62_000);
+        assertTrue(pet.toyExcitedUntilMillis() > now + 62_000);
+        pet.order(PetOrder.LAY); actions.anticipation().tick(now + 63_000); assertEquals(0, pet.toyExcitedUntilMillis());
+        pet.order(PetOrder.FOLLOW); pet.need(Need.ENERGY, 10); actions.anticipation().tick(now + 64_000);
+        assertEquals(0, pet.toyExcitedUntilMillis());
+    }
+
+    @Test void ordinaryHeldToyTakesPriorityOverGreetingsBellyAndExplorationUntilPutAway() {
+        testConfig.set("items.toys", java.util.List.of("STICK", "BONE"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        long now = System.currentTimeMillis(); greetingGround = true; bellyAvailable = true; body.setOnGround(true);
+        pet.favoriteToy("BONE");
+        assertTrue(actions.moments().triggerBelly(pet, body, player));
+        assertTrue(bellyActive);
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        new PetTicker(runtime, actions).run();
+        assertFalse(bellyActive); assertEquals(Activity.TOY_FOCUS, pet.activity());
+        assertEquals(0, pet.toyExcitedUntilMillis());
+        assertFalse(actions.greetings().trigger(pet, player, now));
+        assertFalse(actions.roaming().step(pet, body, player, 1, now + 60_000));
+        org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey("companionpets", "look"))).tick();
+        assertEquals(player.getEyeLocation().subtract(0, 0.55, 0), lookedAt);
+        var goalKey = com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
+                new NamespacedKey(runtime.plugin(), "toy_navigation"));
+        assertTrue(org.bukkit.Bukkit.getMobGoals().getGoal(body, goalKey).shouldActivate());
+        assertEquals(0, greetingSounds.size(), "Normal toy has quiet attention");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
+        actions.anticipation().tick(now + 200);
+        assertEquals(Activity.NONE, pet.activity()); assertFalse(actions.anticipation().active(pet));
+        assertFalse(org.bukkit.Bukkit.getMobGoals().getGoal(body, goalKey).shouldActivate());
+        assertTrue(actions.greetings().trigger(pet, player, now + 400));
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now + 600);
+        assertFalse(actions.greeting(pet)); assertEquals(Activity.TOY_FOCUS, pet.activity());
+    }
+
+    @Test void heldFavoriteHasTwoInitialSafeHopsThenWaitsBeforeAnotherAndKeepsQuiet() {
+        pet.favoriteToy("STICK"); greetingGround = true; body.setOnGround(true); long now = System.currentTimeMillis();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now);
+        body.teleport(navigationTarget); actions.anticipation().tick(now + 250);
+        actions.anticipation().tick(now + 1500);
+        assertTrue(body.getVelocity().getY() >= 0.30 && body.getVelocity().getY() <= 0.36);
+        double energy = pet.need(Need.ENERGY); assertEquals(99.8, energy, 0.001);
+        body.setOnGround(false); body.setVelocity(new org.bukkit.util.Vector(0, -0.1, 0));
+        actions.anticipation().tick(now + 2000); assertEquals(-0.1, body.getVelocity().getY());
+        body.setOnGround(true); blockedHop = true;
+        actions.anticipation().tick(now + 4000); assertEquals(-0.1, body.getVelocity().getY());
+        blockedHop = false; actions.anticipation().tick(now + 4500);
+        assertTrue(body.getVelocity().getY() >= 0.30); assertEquals(99.6, pet.need(Need.ENERGY), 0.001);
+        body.setVelocity(new org.bukkit.util.Vector()); actions.anticipation().tick(now + 5000);
+        assertEquals(0, body.getVelocity().getY(), "Pause after the two initial hops");
+        int sounds = greetingSounds.size(); actions.anticipation().tick(now + 8000);
+        assertEquals(sounds, greetingSounds.size()); assertTrue(sounds <= 2);
+        assertEquals(0, body.getVelocity().getY());
+        pet.need(Need.ENERGY, 10); actions.anticipation().tick(now + 10_000);
+        assertFalse(actions.anticipation().active(pet)); assertEquals(Activity.NONE, pet.activity());
+    }
+
+    @Test void heldToyFollowsMovingOwnerBeyondAcquisitionRadiusWithoutHoppingOrDestroyingGoals() {
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("STICK"); long now = System.currentTimeMillis();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now);
+        var key = com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
+                new NamespacedKey(runtime.plugin(), "toy_navigation"));
+        var goal = org.bukkit.Bukkit.getMobGoals().getGoal(body, key);
+        UUID entityId = body.getUniqueId();
+        body.setVelocity(new org.bukkit.util.Vector());
+        player.teleport(player.getLocation().add(8, 0, 0));
+        actions.anticipation().tick(now + 2000);
+        assertTrue(actions.anticipation().active(pet)); assertEquals(PetSpacing.toyFront(runtime, pet, player), navigationTarget);
+        assertEquals(0, body.getVelocity().getY(), "Approach the toy before hopping");
+        assertEquals(net.tfminecraft.companionpets.behavior.Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), false), navigationSpeed);
+        int stops = navigationStops; actions.anticipation().advance(pet, now + 2050);
+        assertEquals(stops, navigationStops, "Native navigation is not stopped between path decisions");
+        player.teleport(player.getLocation().add(1, 0, 0)); actions.anticipation().advance(pet, now + 2300);
+        assertEquals(PetSpacing.toyFront(runtime, pet, player), navigationTarget, "Route follows the front of the moving owner");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
+        actions.anticipation().advance(pet, now + 2400);
+        assertFalse(actions.anticipation().active(pet)); assertEquals(Activity.NONE, pet.activity());
+        assertSame(goal, org.bukkit.Bukkit.getMobGoals().getGoal(body, key)); assertFalse(goal.shouldActivate());
+        assertTrue(body.isValid()); assertEquals(entityId, pet.entityId());
+        body.teleport(player.getLocation().add(1, 0, 0));
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now + 3000);
+        assertSame(goal, org.bukkit.Bukkit.getMobGoals().getGoal(body, key), "Reuse one bounded goal per body");
+    }
+
+    @Test void heldToySwitchingPrefersFavoriteInOffhandAndConfigurationCanDisableGestures() {
+        testConfig.set("items.toys", java.util.List.of("STICK", "BONE"));
+        testConfig.set("pets.wolf.behaviors", java.util.List.of("toy-anticipation"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        pet.favoriteToy("BONE"); greetingGround = true; body.setOnGround(true); long now = System.currentTimeMillis();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now); assertEquals(0, pet.toyExcitedUntilMillis());
+        body.teleport(navigationTarget);
+        player.getInventory().setItemInOffHand(new ItemStack(Material.BONE));
+        actions.anticipation().tick(now + 200);
+        assertTrue(pet.toyExcitedUntilMillis() > now); assertEquals(0, greetingSounds.size());
+        assertEquals(0, body.getVelocity().getY(), "Attention without enabled jumps");
+        player.getInventory().setItemInOffHand(new ItemStack(Material.AIR));
+        actions.anticipation().tick(now + 400);
+        assertTrue(actions.anticipation().active(pet)); assertEquals(0, pet.toyExcitedUntilMillis());
+        pet.stored(true); actions.anticipation().tick(now + 600); assertFalse(actions.anticipation().active(pet));
+    }
+
+    @Test void favoriteCatToyProducesOnlyTwoMeowsWithoutDogHops() {
+        greetingSpecies(org.bukkit.entity.EntityType.CAT); pet.favoriteToy("STICK");
+        greetingGround = true; body.setOnGround(true); long now = System.currentTimeMillis();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now); body.teleport(navigationTarget);
+        actions.anticipation().tick(now + 250);
+        for (int i = 1; i <= 16; i++) actions.anticipation().tick(now + i * 1000);
+        assertEquals(2, greetingSounds.size());
+        assertTrue(greetingSounds.stream().allMatch(s -> s == org.bukkit.Sound.ENTITY_CAT_AMBIENT));
+        assertEquals(0, body.getVelocity().getY());
+    }
+
+    @Test void toyAttentionUsesSeparateFrontPositionsRegardlessOfYawOrPitchAndSharesSoundBudget() {
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("STICK");
+        var others = java.util.List.of(secondPet(new Location(player.getWorld(), -3, 64, -2)),
+                secondPet(new Location(player.getWorld(), 3, 64, -2)), secondPet(new Location(player.getWorld(), 4, 64, -2)));
+        var pets = new java.util.ArrayList<Pet>(); pets.add(pet); pets.addAll(others);
+        for (var p : others) p.favoriteToy("STICK");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK)); long now = System.currentTimeMillis();
+        actions.anticipation().tick(now);
+        for (float yaw : new float[]{0, 90, 180, -90}) {
+            player.teleport(new Location(player.getWorld(), 0, 64, 0, yaw, 85));
+            var targets = new java.util.ArrayList<Location>();
+            for (var p : pets) {
+                Location at = PetSpacing.toyFront(runtime, p, player); assertNotNull(at); targets.add(at);
+                double angle = Math.toRadians(yaw);
+                assertTrue(-Math.sin(angle) * at.getX() + Math.cos(angle) * at.getZ() >= 2.3,
+                        "Every pet stays in front even when the player looks almost straight down");
+            }
+            for (int i = 0; i < targets.size(); i++) for (int j = i + 1; j < targets.size(); j++)
+                assertTrue(targets.get(i).distance(targets.get(j)) >= 0.9, "Fallback front positions still leave body clearance");
+        }
+        player.teleport(new Location(player.getWorld(), 0, 64, 0));
+        for (var p : pets) runtime.entity(p).teleport(PetSpacing.toyFront(runtime, p, player));
+        actions.anticipation().tick(now + 250);
+        int lastCount = greetingSounds.size(); long lastVoice = Long.MIN_VALUE;
+        for (int i = 1; i <= 120; i++) {
+            long at = now + 250 + i * 100;
+            actions.anticipation().tick(at);
+            int count = greetingSounds.size();
+            if (count > lastCount) {
+                assertEquals(lastCount + 1, count, "The whole group cannot bark together");
+                if (lastVoice != Long.MIN_VALUE) assertTrue(at - lastVoice >= 2800);
+                lastVoice = at; lastCount = count;
+            }
+        }
+        assertTrue(greetingSounds.size() > 0); assertTrue(greetingSounds.size() <= 3);
+        assertTrue(pets.stream().allMatch(p -> actions.anticipation().active(p)));
+        assertTrue(pet.need(Need.ENERGY) >= 99.4 - 0.001, "Repeated waiting hops stay spaced out");
+    }
+
+    @Test void dogsShuffleAndOccasionallyHopForOrdinaryToyWithoutSoundsOrGroupMessage() {
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("BONE"); long now = System.currentTimeMillis();
+        var other = secondPet(new Location(player.getWorld(), -4, 64, 0));
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now);
+        assertTrue(actions.anticipation().active(pet)); assertTrue(actions.anticipation().active(other));
+        assertFalse(net.tfminecraft.companionpets.fx.PetFx.refreshHeld(player), "Toy attention adds no message naming one pet");
+        body.teleport(PetSpacing.toyFront(runtime, pet, player));
+        actions.anticipation().advance(pet, now + 250); Location first = navigationTarget;
+        actions.anticipation().advance(pet, now + 1250); Location second = navigationTarget;
+        assertTrue(first.distance(second) > 1, "The dog steps sideways and then comes a little closer");
+        assertTrue(second.getZ() > 1.8, "Playful movement stays visible in front");
+        actions.anticipation().advance(pet, now + 3000);
+        assertTrue(body.getVelocity().getY() >= 0.30); assertEquals(99.8, pet.need(Need.ENERGY), 0.001);
+        body.setVelocity(new org.bukkit.util.Vector());
+        actions.anticipation().advance(pet, now + 6000);
+        assertEquals(0, body.getVelocity().getY(), "Waiting hops have a real pause");
+        actions.anticipation().advance(pet, now + 14000);
+        assertTrue(body.getVelocity().getY() >= 0.30); assertEquals(99.6, pet.need(Need.ENERGY), 0.001);
+        assertEquals(0, greetingSounds.size());
+        pet.need(Need.ENERGY, 30); body.setVelocity(new org.bukkit.util.Vector());
+        actions.anticipation().advance(pet, now + 30000);
+        assertEquals(0, body.getVelocity().getY(), "A tired dog can watch without jumping");
+    }
+
+    @Test void dogTailStaysFastForEntireToyWaitAndRespectsBehaviorSettingAndRelease() {
+        testConfig.set("pets.wolf.appearance.type", "modelengine"); testConfig.set("pets.wolf.appearance.model", "beagle");
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig)); eagerGreeting(); greetingGround = true;
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(System.currentTimeMillis());
+        var ticker = new net.tfminecraft.companionpets.visual.PetVisualTicker(runtime);
+        ticker.run(); assertEquals(4.5, tailHz, 0.001, "Ordinary toys also get fast tail motion");
+        pet.toyExcitedUntilMillis(System.currentTimeMillis() + 6000); ticker.run(); assertEquals(5.3, tailHz, 0.001);
+        pet.toyExcitedUntilMillis(0); ticker.run(); assertEquals(4.5, tailHz, 0.001, "Tail keeps moving after the initial excitement");
+        testConfig.set("pets.wolf.behaviors", java.util.List.of("toy-anticipation"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig)); ticker.run(); assertEquals(0, tailHz);
+        player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
+        actions.anticipation().advance(pet, System.currentTimeMillis() + 1000);
+        assertEquals(0, tailHz); assertFalse(actions.anticipation().active(pet));
+    }
+
+    @Test void brieflyPuttingAwayFavoriteDoesNotRestartItsNoiseAndHops() {
+        greetingGround = true; pet.favoriteToy("STICK"); long now = System.currentTimeMillis();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now); body.teleport(navigationTarget); actions.anticipation().tick(now + 250);
+        actions.anticipation().tick(now + 1500); int sounds = greetingSounds.size();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.AIR)); actions.anticipation().tick(now + 2000);
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK)); actions.anticipation().tick(now + 2250);
+        actions.anticipation().tick(now + 3500);
+        assertTrue(actions.anticipation().active(pet)); assertEquals(0, pet.toyExcitedUntilMillis());
+        assertEquals(sounds, greetingSounds.size());
+    }
+
+    @Test void boringHeldToyReleasesNativeGoalAndStaysIgnoredUntilOwnerMoves() {
+        greetingGround = true; pet.favoriteToy("BONE"); long now = System.currentTimeMillis();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.roaming().tickOwners(now); actions.anticipation().tick(now);
+        var key = com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
+                new NamespacedKey(runtime.plugin(), "toy_navigation"));
+        var goal = org.bukkit.Bukkit.getMobGoals().getGoal(body, key); assertTrue(goal.shouldActivate());
+        actions.anticipation().advance(pet, now + 19_999); assertTrue(actions.anticipation().active(pet));
+        actions.anticipation().advance(pet, now + 20_000);
+        assertFalse(actions.anticipation().active(pet)); assertEquals(Activity.NONE, pet.activity());
+        assertFalse(goal.shouldActivate()); assertEquals(0, tailHz); assertEquals(0, pet.toyExcitedUntilMillis());
+        for (int i = 1; i <= 10; i++) actions.anticipation().tick(now + 20_000 + i * 500);
+        assertFalse(actions.anticipation().active(pet), "The next manager ticks cannot reacquire the boring toy");
+        assertTrue(actions.roaming().step(pet, body, player, 1, now + 26_000), "Spontaneous exploration resumes");
+        player.teleport(player.getLocation().add(0.6, 0, 0)); actions.anticipation().tick(now + 27_000);
+        assertTrue(actions.anticipation().active(pet)); assertSame(goal, org.bukkit.Bukkit.getMobGoals().getGoal(body, key));
+        actions.anticipation().tick(now + 46_999); assertTrue(actions.anticipation().active(pet));
+        actions.anticipation().tick(now + 47_000); assertFalse(actions.anticipation().active(pet));
+    }
+
+    @Test void favoriteHoldsAttentionLongerAndPetHopsOrOwnerJitterDoNotRenewInterest() {
+        greetingGround = true; pet.favoriteToy("STICK"); long now = System.currentTimeMillis();
+        var other = secondPet(new Location(player.getWorld(), -2, 64, 0)); other.favoriteToy("BONE");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        actions.anticipation().tick(now);
+        for (int i = 1; i <= 40; i++) {
+            player.teleport(new Location(player.getWorld(), i % 2 == 0 ? 0.1 : -0.1, 64, 0));
+            body.teleport(new Location(player.getWorld(), 0, 64 + (i % 2 == 0 ? 0.4 : 0), 2.4));
+            actions.anticipation().tick(now + i * 500);
+        }
+        assertFalse(actions.anticipation().active(other)); assertTrue(actions.anticipation().active(pet));
+        actions.anticipation().tick(now + 34_999); assertTrue(actions.anticipation().active(pet));
+        actions.anticipation().tick(now + 35_000); assertFalse(actions.anticipation().active(pet));
+    }
+
+    @Test void puttingAwayOrChangingToyRenewsInterestAndBoredPetsCanStillFetch() {
+        testConfig.set("items.toys", java.util.List.of("STICK", "BONE"));
+        testConfig.set("play.toy-attention-seconds", 2); testConfig.set("play.favorite-toy-attention-seconds", 4);
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; pet.favoriteToy("BONE"); long now = System.currentTimeMillis();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK)); actions.anticipation().tick(now);
+        actions.anticipation().tick(now + 2000); assertFalse(actions.anticipation().active(pet));
+        assertTrue(actions.fetchActions().canChase(pet), "Waiting boredom does not disable actual toy play");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.BONE)); actions.anticipation().tick(now + 2500);
+        assertTrue(actions.anticipation().active(pet));
+        actions.anticipation().tick(now + 6500); assertFalse(actions.anticipation().active(pet));
+        player.getInventory().setItemInMainHand(new ItemStack(Material.AIR)); actions.anticipation().tick(now + 7000);
+        player.getInventory().setItemInMainHand(new ItemStack(Material.BONE)); actions.anticipation().tick(now + 7500);
+        assertTrue(actions.anticipation().active(pet));
+        actions.anticipation().tick(now + 11500); assertFalse(actions.anticipation().active(pet));
+        actions.anticipation().ownerThrew(player); actions.anticipation().tick(now + 12000);
+        assertTrue(actions.anticipation().active(pet), "Throwing renews interest even with more of the same toy in hand");
+    }
+
+    @Test void movingWithToyKeepsRenewingInterestUntilOwnerStops() {
+        greetingGround = true; pet.favoriteToy("BONE"); long now = System.currentTimeMillis();
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK)); actions.anticipation().tick(now);
+        for (int i = 1; i <= 8; i++) {
+            player.teleport(player.getLocation().add(0.6, 0, 0)); actions.anticipation().tick(now + i * 10_000);
+            assertTrue(actions.anticipation().active(pet), "Moving owner remains interesting beyond the initial duration");
+        }
+        actions.anticipation().tick(now + 100_000); assertFalse(actions.anticipation().active(pet));
+    }
+
+    @Test void behaviorAllowListDisablesOptionalActionsWhileCareAndLearnedOrdersStillWork() {
+        testConfig.set("pets.wolf.behaviors", java.util.List.of()); runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        assertFalse(actions.greetings().trigger(pet, player, System.currentTimeMillis()));
+        assertFalse(actions.fetchActions().canChase(pet)); assertFalse(actions.moments().triggerDig(pet, body, player));
+        pet.need(Need.HUNGER, 10); var food = new ItemStack(Material.BEEF, 2);
+        assertTrue(actions.useOnPet(player, body, food)); assertTrue(pet.need(Need.HUNGER) > 10);
+        pet.bindWord("sit", Trick.SIT); pet.progress(Trick.SIT, 100); actions.onChat(player, "Toby sit");
+        assertEquals(PetOrder.SIT, pet.order());
+    }
+
+    @Test void frogCanPlayWithToysAndCroaksInsteadOfBarkingAtFavorite() {
+        greetingSpecies(org.bukkit.entity.EntityType.FROG);
+        pet.favoriteToy("STICK"); greetingGround = true; body.setOnGround(true);
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        long now = System.currentTimeMillis();
+        actions.anticipation().tick(now); body.teleport(navigationTarget);
+        actions.anticipation().tick(now + 250); actions.anticipation().tick(now + 1500);
+        assertTrue(actions.anticipation().active(pet)); assertTrue(actions.fetchActions().canChase(pet));
+        assertEquals(java.util.List.of(org.bukkit.Sound.ENTITY_FROG_AMBIENT), greetingSounds);
+        assertTrue(body.getVelocity().getY() > 0); assertEquals(Activity.TOY_FOCUS, pet.activity());
+    }
+
+    @Test void speciesWithoutFetchDoNotShowMisleadingToyHint() {
+        greetingSpecies(org.bukkit.entity.EntityType.PIG);
+        assertFalse(actions.useOnPet(player, body, new ItemStack(Material.STICK)));
+        assertEquals(Activity.NONE, pet.activity());
+    }
+
+    @Test void pettingBuildsFamiliarityEvenWhenAffectionGesturesAreDisabled() {
+        testConfig.set("pets.wolf.behaviors", java.util.List.of("recognize-carers"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        var other = org.bukkit.Bukkit.getServer().getPlayer(player.getUniqueId());
+        var visitor = ((org.mockbukkit.mockbukkit.ServerMock) org.bukkit.Bukkit.getServer()).addPlayer();
+        visitor.teleport(player.getLocation());
+        assertTrue(actions.useOnPet(visitor, body, new ItemStack(Material.AIR)));
+        assertEquals(4, pet.carers().trust(visitor.getUniqueId()));
+        assertEquals(other.getUniqueId(), pet.ownerId());
+        assertEquals(PetOrder.FOLLOW, pet.order());
+    }
+
+    @Test void carersAreRememberedThroughRealCareAndRecognizedWithoutChangingOwnershipOrPosture() {
+        var other = MockBukkit.getMock().addPlayer(); other.teleport(player.getLocation());
+        long now = System.currentTimeMillis(); var care = new PetCareActions(runtime);
+        assertTrue(care.groom(other, pet, body, new ItemStack(Material.FEATHER), runtime.config().type("wolf"), now));
+        assertTrue(care.groom(other, pet, body, new ItemStack(Material.FEATHER), runtime.config().type("wolf"), now + 500));
+        assertEquals(6, pet.carers().trust(other.getUniqueId()));
+        care.groom(other, pet, body, new ItemStack(Material.FEATHER), runtime.config().type("wolf"), now + 60000);
+        assertTrue(pet.carers().familiar(other.getUniqueId()));
+        pet.order(PetOrder.SIT); body.setSitting(true);
+        actions.greetings().tick(now + 61000); assertFalse(actions.greeting(pet));
+        other.teleport(player.getLocation().add(20, 0, 0)); actions.greetings().tick(now + 120000);
+        other.teleport(player.getLocation()); actions.greetings().tick(now + 122000);
+        assertTrue(actions.greeting(pet)); assertEquals(PetOrder.SIT, pet.order()); assertEquals(Activity.NONE, pet.activity());
+        assertTrue(body.isSitting()); assertEquals(player.getUniqueId(), pet.ownerId()); assertEquals(0, pet.lastGreetingMillis());
+        assertTrue(pet.carers().get(other.getUniqueId()).greetedAt() > 0);
+        actions.greetings().advance(pet, now + 125000); assertFalse(actions.greeting(pet));
+        other.getInventory().setItemInMainHand(new ItemStack(Material.COD));
+        actions.useOnPet(other, body, other.getInventory().getItemInMainHand()); assertNull(runtime.sessions().training(other.getUniqueId()));
+    }
+
+    private Pet secondPet(Location at) {
+        var other = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
+        var otherBody = at.getWorld().spawn(at, org.bukkit.entity.Wolf.class);
+        otherBody.getPersistentDataContainer().set(runtime.petKey(), org.bukkit.persistence.PersistentDataType.STRING, other.id().toString());
+        runtime.store().add(other); runtime.remember(other, otherBody); other.bond(100); other.personality(PetPersonality.FRIENDLY);
+        return other;
+    }
+
+    @Test void positivePetEncountersBuildMutualFamiliarityWhileInterruptedOnesDoNot() {
+        var other = secondPet(body.getLocation().add(0, 0, 1.2)); long now = System.currentTimeMillis();
+        assertTrue(actions.social().trigger(player, pet, "sniff"));
+        actions.social().tick(now + 1000); actions.social().tick(now + 6000);
+        assertEquals(6, pet.friends().trust(other.id())); assertEquals(6, other.friends().trust(pet.id()));
+        assertTrue(actions.social().trigger(player, pet, "sniff")); actions.social().cancel(pet);
+        assertEquals(6, pet.friends().trust(other.id()), "Interrupted meeting gives no extra trust");
+        assertTrue(actions.social().trigger(player, pet, "sniff", now + 62000));
+        actions.social().tick(now + 63000); actions.social().tick(now + 67000);
+        assertEquals(12, actions.social().friendship(pet, other));
+    }
+
+    @Test void followingFallsBackToOwnerAndRefreshesBetweenBehaviorTicksWithoutOverridingRest() {
+        testConfig.set("pets.wolf.behaviors", java.util.List.of());
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; pet.bond(100);
+        body.teleport(player.getLocation().add(8, 0, 0));
+        secondPet(player.getLocation().add(7, 0, 1));
+        unreachableFormationSlot = true;
+        new PetTicker(runtime, actions).run();
+        assertEquals(player.getLocation(), navigationTarget);
+        var key = com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
+                new NamespacedKey(runtime.plugin(), "follow_navigation"));
+        var goal = MockBukkit.getMock().getMobGoals().getGoal(body, key);
+        assertNotNull(goal); assertTrue(goal.shouldActivate());
+        int requests = navigationRequests;
+        new PetTicker(runtime, actions).run(); goal.tick();
+        assertEquals(requests, navigationRequests, "Behavior and native ticks share one refresh interval");
+        player.teleport(player.getLocation().add(0.5, 0, 0));
+        ((FollowNavigationGoal) goal).advance(System.currentTimeMillis() + 250);
+        assertEquals(player.getLocation(), navigationTarget);
+        UUID ownerId = pet.ownerId(); pet.ownerId(UUID.randomUUID()); assertFalse(goal.shouldActivate());
+        pet.ownerId(ownerId);
+        pet.activity(Activity.TOY_FOCUS); assertFalse(goal.shouldActivate());
+        pet.activity(Activity.NONE); pet.order(PetOrder.LAY); assertFalse(goal.shouldActivate());
+        pet.order(PetOrder.FOLLOW); pet.need(Need.ENERGY, 10); assertFalse(goal.shouldActivate());
+        pet.need(Need.ENERGY, 100); new PetTicker(runtime, actions).run();
+        assertSame(goal, MockBukkit.getMock().getMobGoals().getGoal(body, key));
+        assertTrue(goal.shouldActivate());
+    }
+
+    @Test void followingUsesHelpfulPartialRoutesAndKeepsExistingPathWhenReplanningFails() {
+        testConfig.set("pets.wolf.behaviors", java.util.List.of());
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; pet.bond(100);
+        body.teleport(player.getLocation().add(8, 0, 0));
+        secondPet(player.getLocation().add(7, 0, 1));
+        reachableGreetingPath = false;
+        partialFollowEnd = player.getLocation().add(2, 0, 0);
+        new PetTicker(runtime, actions).run();
+        assertNotNull(navigationTarget);
+        partialFollowEnd = null; existingFollowPath = true;
+        int stops = navigationStops;
+        var goal = (FollowNavigationGoal) MockBukkit.getMock().getMobGoals().getGoal(body,
+                com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "follow_navigation")));
+        long now = System.currentTimeMillis(); goal.advance(now + 300);
+        assertEquals(stops, navigationStops);
+        runtime.store().all().stream().filter(p -> p != pet).forEach(p -> p.stored(true));
+        goal.advance(now + 600);
+        assertEquals(stops, navigationStops, "A lone pet also keeps its route if replanning fails");
+    }
+
+    @Test void changingOwnershipEndsBothSidesOfAnActivePetMeeting() {
+        greetingGround = true; eagerGreeting();
+        var other = secondPet(body.getLocation().add(0, 0, 1.2));
+        assertTrue(actions.social().trigger(player, pet, "greeting"));
+        pet.ownerId(UUID.randomUUID()); actions.social().advance(other, System.currentTimeMillis() + 500);
+        assertFalse(actions.social().engaged(pet)); assertFalse(actions.social().engaged(other));
+        assertEquals(0, pet.socialTailHz()); assertEquals(0, other.socialTailHz());
+        assertEquals(0, actions.social().friendship(pet, other));
+    }
+
+    @Test void initialPetGreetingStartsWhileOwnersMoveAndDoesNotRepeatWhileTogether() {
+        greetingGround = true; eagerGreeting();
+        var other = secondPet(body.getLocation().add(0, 0, 1.2)); long now = System.currentTimeMillis();
+        actions.roaming().tickOwners(now); player.teleport(player.getLocation().add(0.5, 0, 0));
+        actions.roaming().tickOwners(now + 100); actions.social().tick(now + 100);
+        assertTrue(actions.social().engaged(pet)); assertTrue(actions.social().engaged(other));
+        var key = com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
+                new NamespacedKey(runtime.plugin(), "social_navigation"));
+        var goal = org.bukkit.Bukkit.getMobGoals().getGoal(body, key);
+        assertNotNull(goal); assertTrue(goal.shouldActivate());
+        assertTrue(pet.socialTailHz() > 0); assertTrue(other.socialTailHz() > 0);
+        var teleport = new org.bukkit.event.entity.EntityTeleportEvent(body, body.getLocation(), player.getLocation());
+        new net.tfminecraft.companionpets.listen.PetListener(runtime, actions).onTeleport(teleport);
+        assertTrue(teleport.isCancelled(), "Native follow cannot teleport a pet during its meeting");
+        actions.social().tick(now + 500); actions.social().tick(now + 3300);
+        assertFalse(actions.social().engaged(pet)); assertFalse(goal.shouldActivate());
+        assertEquals(2, pet.friends().trust(other.id())); assertEquals(2, other.friends().trust(pet.id()));
+        assertEquals(0, pet.socialTailHz()); assertEquals(0, other.socialTailHz());
+        int voices = greetingSounds.size();
+        actions.social().tick(now + 3400); assertFalse(actions.social().engaged(pet));
+        assertEquals(voices, greetingSounds.size());
+        // Keep the owners moving so a later stationary sniff cannot obscure the initial greeting check.
+        player.teleport(player.getLocation().add(0.5, 0, 0)); actions.roaming().tickOwners(now + 23000);
+        actions.social().tick(now + 23000); assertFalse(actions.social().engaged(pet));
+        assertSame(goal, org.bukkit.Bukkit.getMobGoals().getGoal(body, key));
+    }
+
+    @Test void separationRenewsGreetingButBriefDistanceAndInterruptionsDoNotAddFriendship() {
+        greetingGround = true; eagerGreeting(); var other = secondPet(body.getLocation().add(0, 0, 1.2));
+        var otherBody = runtime.entity(other); long now = System.currentTimeMillis();
+        actions.social().tick(now); actions.social().tick(now + 500); actions.social().tick(now + 3100);
+        assertEquals(2, actions.social().friendship(pet, other));
+        otherBody.teleport(body.getLocation().add(9, 0, 0)); actions.social().tick(now + 4000);
+        actions.social().tick(now + 11000); otherBody.teleport(body.getLocation().add(0, 0, 1.2));
+        actions.social().tick(now + 11500); assertFalse(actions.social().engaged(pet));
+        otherBody.teleport(body.getLocation().add(9, 0, 0)); actions.social().tick(now + 12000);
+        actions.social().tick(now + 23000); otherBody.teleport(body.getLocation().add(0, 0, 1.2));
+        actions.social().tick(now + 23500); assertTrue(actions.social().engaged(pet));
+        pet.order(PetOrder.LAY); actions.social().advance(pet, now + 24000);
+        assertFalse(actions.social().engaged(other)); assertEquals(2, actions.social().friendship(pet, other));
+        assertEquals(0, other.socialTailHz());
+    }
+
+    @Test void eachCompletedPositiveInteractionAddsFriendshipWithinTheRollingMinuteBudget() {
+        eagerGreeting(); var other = secondPet(body.getLocation().add(0, 0, 1.2)); long now = System.currentTimeMillis();
+        for (int i = 0; i < 3; i++) {
+            long start = now + i * 6000;
+            assertTrue(actions.social().trigger(player, pet, "sniff", start));
+            actions.social().advance(pet, start + 100); actions.social().advance(pet, start + 5100);
+            assertEquals(Math.min(12, (i + 1) * 6), actions.social().friendship(pet, other));
+        }
+        assertTrue(actions.social().trigger(player, pet, "sniff", now + 66000));
+        actions.social().advance(pet, now + 66100); actions.social().advance(pet, now + 71100);
+        assertEquals(18, actions.social().friendship(pet, other));
+    }
+
+    @Test void shyPetsKeepDistanceUntilFamiliarAndOnlyMutuallyAcceptedPlayCanStart() {
+        greetingGround = true; pet.personality(PetPersonality.PLAYFUL);
+        var other = secondPet(body.getLocation().add(0, 0, 4)); other.personality(PetPersonality.SHY);
+        long now = System.currentTimeMillis();
+        assertFalse(actions.social().trigger(player, pet, "chase", now));
+        assertTrue(actions.social().trigger(player, pet, "greeting", now));
+        actions.social().advance(pet, now + 500);
+        assertNotNull(navigationTarget); assertTrue(navigationTarget.distance(runtime.entity(other).getLocation()) >= 2.3,
+                "The invitation respects the stranger's personal space");
+        assertEquals(0, other.socialTailHz(), "Shy observer has no excited tail cue");
+        actions.social().cancel(pet);
+        pet.friends().reinforce(other.id(), 20, now, 0); other.friends().reinforce(pet.id(), 20, now, 0);
+        assertTrue(actions.social().trigger(player, pet, "greeting", now + 6000));
+        assertTrue(other.socialTailHz() > 0, "The shy pet responds warmly to its friend");
+        actions.social().cancel(pet);
+        assertTrue(actions.social().trigger(player, pet, "chase", now + 10000));
+        actions.social().cancel(pet); other.need(Need.ENERGY, 30);
+        assertFalse(actions.social().trigger(player, pet, "chase", now + 11000));
+    }
+
+    @Test void warningsUnreachableGreetingsAndMotionlessChasesDoNotBuildFriendship() {
+        greetingGround = true; eagerGreeting(); var other = secondPet(body.getLocation().add(0, 0, 1));
+        other.personality(PetPersonality.TERRITORIAL); long now = System.currentTimeMillis();
+        assertTrue(actions.social().trigger(player, pet, "greeting", now));
+        actions.social().advance(pet, now + 100); actions.social().advance(pet, now + 3100);
+        assertEquals(0, actions.social().friendship(pet, other));
+        assertEquals(1, greetingSounds.stream().filter(s -> s == org.bukkit.Sound.ENTITY_WOLF_GROWL).count());
+        other.personality(PetPersonality.FRIENDLY); runtime.entity(other).teleport(body.getLocation().add(0, 0, 4));
+        reachableGreetingPath = false; navigationTarget = null;
+        assertTrue(actions.social().trigger(player, pet, "greeting", now + 6000));
+        actions.social().advance(pet, now + 6100); actions.social().advance(pet, now + 9100);
+        assertNull(navigationTarget); assertEquals(0, actions.social().friendship(pet, other));
+        reachableGreetingPath = true;
+        assertTrue(actions.social().trigger(player, pet, "chase", now + 12000));
+        actions.social().advance(pet, now + 12100); actions.social().advance(pet, now + 18100);
+        assertEquals(0, actions.social().friendship(pet, other), "The pets must actually play together");
+    }
+
+    @Test void friendshipRewardsAnActualChaseAndFamiliarTerritorialPetsDoNotProtest() {
+        greetingGround = true; eagerGreeting(); var other = secondPet(body.getLocation().add(0, 0, 2));
+        long now = System.currentTimeMillis();
+        assertTrue(actions.social().trigger(player, pet, "chase", now));
+        actions.social().advance(pet, now + 100);
+        body.teleport(body.getLocation().add(1, 0, 0)); runtime.entity(other).teleport(runtime.entity(other).getLocation().add(1, 0, 0));
+        actions.social().advance(pet, now + 2000); actions.social().advance(pet, now + 6100);
+        assertEquals(8, actions.social().friendship(pet, other));
+        pet.friends().reinforce(other.id(), 20, now + 7000, 0); other.friends().reinforce(pet.id(), 20, now + 7000, 0);
+        pet.personality(PetPersonality.TERRITORIAL); other.personality(PetPersonality.TERRITORIAL);
+        assertFalse(actions.social().trigger(player, pet, "bark", now + 8000));
+        int sounds = greetingSounds.size();
+        assertTrue(actions.social().trigger(player, pet, "greeting", now + 9000));
+        assertTrue(greetingSounds.subList(sounds, greetingSounds.size()).stream().noneMatch(s -> s == org.bukkit.Sound.ENTITY_WOLF_GROWL));
+    }
+
+    @Test void socialGreetingRespectsVisibilityCapabilitiesTrainingAndToyPriority() {
+        greetingGround = true; eagerGreeting(); var other = secondPet(body.getLocation().add(0, 0, 1.2));
+        blockedSocialSight = true; assertFalse(actions.social().trigger(player, pet, "greeting"));
+        blockedSocialSight = false; pet.order(PetOrder.SIT); assertFalse(actions.social().trigger(player, pet, "greeting"));
+        pet.order(PetOrder.FOLLOW); pet.illness(Illness.SICK); assertFalse(actions.social().trigger(player, pet, "greeting"));
+        pet.illness(Illness.NONE);
+        runtime.sessions().training(player.getUniqueId(), new net.tfminecraft.companionpets.session.TrainingSession(pet.id()));
+        assertFalse(actions.social().trigger(player, pet, "greeting")); runtime.sessions().clearTraining(player.getUniqueId());
+        assertTrue(actions.social().trigger(player, pet, "greeting"));
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK)); actions.anticipation().tick(System.currentTimeMillis());
+        assertFalse(actions.social().engaged(pet)); assertEquals(Activity.TOY_FOCUS, pet.activity());
+        assertEquals(0, pet.socialTailHz()); assertEquals(0, other.socialTailHz()); assertEquals(0, actions.social().friendship(pet, other));
+        actions.clearInteractions(); player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
+        testConfig.set("pets.wolf.behaviors", java.util.List.of("social-sniff", "pet-friendships"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        assertFalse(actions.social().trigger(player, pet, "greeting"));
+        assertTrue(actions.social().trigger(player, pet, "sniff"));
+    }
+
+    @Test void catMeetingUsesMeowsWithoutDogHopsAndStaffCanTriggerTheMeeting() {
+        greetingGround = true; greetingSpecies(org.bukkit.entity.EntityType.CAT); eagerGreeting();
+        var other = secondPet(body.getLocation().add(0, 0, 1.2)); pet.personality(PetPersonality.PLAYFUL);
+        body.setOnGround(true); ((WolfMock) runtime.entity(other)).setOnGround(true); lookingAtPet = true;
+        assertTrue(actions.triggerTestMoment(player, "pet-greeting"));
+        actions.social().advance(pet, System.currentTimeMillis() + 700);
+        assertEquals(java.util.List.of(org.bukkit.Sound.ENTITY_CAT_AMBIENT, org.bukkit.Sound.ENTITY_CAT_AMBIENT), greetingSounds);
+        assertEquals(0, body.getVelocity().getY()); assertEquals(0, pet.socialTailHz());
+    }
+
+    @Test void severalPetsHaveSeparatedGreetingAndFollowingDestinations() {
+        greetingGround = true; eagerGreeting(); var other = secondPet(player.getLocation().add(-4, 0, 0));
+        long now = System.currentTimeMillis(); assertTrue(actions.greetings().trigger(pet, player, now));
+        assertTrue(actions.greetings().trigger(other, player, now));
+        actions.greetings().advance(pet, now + 3400); var first = navigationTarget.clone();
+        actions.greetings().advance(other, now + 3400); var second = navigationTarget.clone();
+        assertTrue(first.distance(second) >= 1, "Front slots stay separated");
+        var followA = PetSpacing.follow(runtime, pet, player); var followB = PetSpacing.follow(runtime, other, player);
+        assertNotNull(followA); assertNotNull(followB); assertTrue(followA.distance(followB) >= 1.5);
+    }
+
+    @Test void reunionAfterDistanceAbsenceWakesHeldPetsAndConsumesReturnOnce() {
+        greetingGround = true;
+        long now = System.currentTimeMillis();
+        actions.greetings().tick(now);
+        pet.order(PetOrder.LAY); pet.activity(Activity.SLEEPING); pet.staying(true);
+        pet.forcedSitUntilMillis(now + 1_000_000); body.setSitting(true); body.setAware(false);
+        var home = player.getLocation();
+        player.teleport(home.clone().add(40, 0, 0));
+        actions.greetings().tick(now + 299_000);
+        assertFalse(actions.greeting(pet));
+        player.teleport(home);
+        actions.greetings().tick(now + 301_000);
+        assertTrue(actions.greeting(pet)); assertEquals(Activity.GREETING, pet.activity());
+        assertEquals(PetOrder.FOLLOW, pet.order()); assertFalse(pet.staying());
+        assertEquals(0, pet.forcedSitUntilMillis()); assertFalse(body.isSitting()); assertTrue(body.isAware());
+        assertNotNull(navigationTarget);
+        var event = new org.bukkit.event.entity.EntityTeleportEvent(body, body.getLocation(), player.getLocation());
+        new net.tfminecraft.companionpets.listen.PetListener(runtime, actions).onTeleport(event);
+        assertTrue(event.isCancelled(), "Vanilla follow cannot teleport during the circle");
+        actions.greetings().tick(now + 302_000);
+        assertEquals(now + 301_000, pet.lastGreetingMillis());
+        actions.greetings().tick(now + 310_000);
+        assertFalse(actions.greeting(pet)); assertEquals(Activity.NONE, pet.activity());
+        assertEquals(PetOrder.FOLLOW, pet.order());
+    }
+
+    @Test void shortAbsencesAndCooldownDoNotCauseRepeatedGreetings() {
+        long now = System.currentTimeMillis();
+        pet.lastOwnerNearbyMillis(now - 299_000);
+        actions.greetings().tick(now);
+        assertFalse(actions.greeting(pet)); assertEquals(now, pet.lastOwnerNearbyMillis());
+        pet.lastOwnerNearbyMillis(now - 301_000); pet.lastGreetingMillis(now - 1000);
+        actions.greetings().tick(now);
+        assertFalse(actions.greeting(pet)); assertEquals(now - 1000, pet.lastGreetingMillis());
+        pet.lastOwnerNearbyMillis(0); pet.lastGreetingMillis(0);
+        actions.greetings().tick(now);
+        assertFalse(actions.greeting(pet), "Old saves start tracking without a false reunion");
+    }
+
+    @Test void reunionHistorySurvivesReconnectAndWaitsForUnloadedBody() {
+        greetingGround = true;
+        long now = System.currentTimeMillis();
+        actions.greetings().ownerDeparted(player, now - 301_000);
+        actions.ownerSessionChanged(player);
+        UUID realBody = pet.entityId();
+        pet.entityId(UUID.randomUUID());
+        actions.greetings().tick(now);
+        assertFalse(actions.greeting(pet)); assertEquals(now - 301_000, pet.lastOwnerNearbyMillis());
+        pet.entityId(realBody);
+        actions.greetings().tick(now + 500);
+        assertTrue(actions.greeting(pet)); assertTrue(runtime.followingAllowed(pet, player));
+        var restored = loadedStore(runtime.plugin()).get(pet.id());
+        assertEquals(now + 500, restored.lastGreetingMillis());
+    }
+
+    @Test void testGreetingBypassesAbsenceFromAllHeldOrdersAndNewOrderCancelsIt() {
+        greetingGround = true;
+        lookingAtPet = true;
+        long now = System.currentTimeMillis();
+        for (PetOrder order : new PetOrder[]{PetOrder.SIT, PetOrder.LAY, PetOrder.STAY}) {
+            pet.order(order); pet.staying(order == PetOrder.STAY); body.setSitting(true); body.setAware(false);
+            assertTrue(actions.triggerTestMoment(player, "greeting"));
+            assertTrue(actions.greeting(pet)); assertFalse(body.isSitting());
+            assertEquals(PetOrder.FOLLOW, pet.order());
+            pet.order(PetOrder.SIT);
+            actions.greetings().advance(pet, now + 200);
+            assertFalse(actions.greeting(pet)); assertEquals(PetOrder.SIT, pet.order());
+            assertEquals(Activity.NONE, pet.activity());
+        }
+        pet.order(PetOrder.FOLLOW);
+        assertTrue(actions.greetings().trigger(pet, player, now));
+        actions.clearInteractions(pet);
+        assertFalse(actions.greeting(pet)); assertEquals(Activity.NONE, pet.activity());
+    }
+
+    @Test void greetingRoutesCircleAroundMovingOwnerAndSkipsUnsafeOrUnreachableGround() {
+        eagerGreeting();
+        greetingGround = true;
+        long now = System.currentTimeMillis();
+        assertTrue(actions.greetings().trigger(pet, player, now));
+        Location first = navigationTarget.clone();
+        assertCircleRadius(2);
+        player.teleport(player.getLocation().add(3, 0, 0));
+        actions.greetings().advance(pet, now + 200);
+        assertEquals(first.getX() + 3, navigationTarget.getX(), 0.001);
+        assertCircleRadius(2);
+        body.teleport(navigationTarget);
+        actions.greetings().advance(pet, now + 400);
+        assertTrue(body.getLocation().distance(navigationTarget) > 0.8, "Reaching a waypoint advances around the circle");
+        Location reachable = navigationTarget.clone();
+        reachableGreetingPath = false;
+        actions.greetings().advance(pet, now + 600);
+        assertEquals(reachable, navigationTarget);
+        greetingGround = false;
+        actions.greetings().advance(pet, now + 800);
+        assertEquals(reachable, navigationTarget, "No path into unsupported ground");
+    }
+
+    @Test void sickAndHungryPetsRecognizeQuietlyWhileBusyAndSwimmingPetsDoNotGreet() {
+        long now = System.currentTimeMillis();
+        pet.illness(Illness.SICK); assertTrue(actions.greetings().trigger(pet, player, now));
+        assertEquals(Activity.NONE, pet.activity()); assertNull(navigationTarget);
+        assertTrue(greetingSounds.contains(org.bukkit.Sound.ENTITY_WOLF_WHINE));
+        actions.clearInteractions(pet);
+        pet.illness(Illness.NONE); pet.need(Need.HUNGER, 10);
+        assertTrue(actions.greetings().trigger(pet, player, now)); assertEquals(Activity.NONE, pet.activity());
+        actions.clearInteractions(pet);
+        pet.need(Need.HUNGER, 100); pet.activity(Activity.ATTENDING);
+        assertFalse(actions.greetings().trigger(pet, player, now));
+        pet.activity(Activity.NONE); inWater = true;
+        assertFalse(actions.greetings().trigger(pet, player, now));
+        inWater = false; assertTrue(actions.greetings().trigger(pet, player, now));
+        inWater = true; actions.greetings().advance(pet, now + 200);
+        assertFalse(actions.greeting(pet)); assertEquals(Activity.NONE, pet.activity());
+    }
+
+    @Test void greetingMovesInFrontOfOwnerAndHopsTowardThemOnlyAfterLanding() {
+        eagerGreeting();
+        greetingGround = true;
+        body.setOnGround(true);
+        long now = System.currentTimeMillis();
+        assertTrue(actions.greetings().trigger(pet, player, now));
+        actions.greetings().advance(pet, now + 3400);
+        assertEquals(player.getLocation().clone().add(0, 0, 1.8), navigationTarget);
+        body.teleport(navigationTarget);
+        actions.greetings().advance(pet, now + 3600);
+        assertEquals(0.36, body.getVelocity().getY(), 0.0001);
+        assertTrue(body.getVelocity().getZ() < 0, "The hop approaches the owner from the front");
+        var lookGoal = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey("companionpets", "look")));
+        assertNotNull(lookGoal); lookGoal.tick();
+        assertEquals(player.getEyeLocation(), lookedAt);
+        assertNull(body.getTarget(), "The affectionate hop never attacks");
+        body.setOnGround(false); body.setVelocity(new org.bukkit.util.Vector(0, -0.2, 0));
+        actions.greetings().advance(pet, now + 4600);
+        assertEquals(-0.2, body.getVelocity().getY(), 0.0001, "No repeated impulse in midair");
+        body.setOnGround(true); body.setVelocity(new org.bukkit.util.Vector());
+        actions.greetings().advance(pet, now + 4800);
+        assertEquals(0.36, body.getVelocity().getY(), 0.0001);
+        actions.greetings().advance(pet, now + 5600);
+        assertCircleRadius(2);
+    }
+
+    @Test void catGreetingMeowsFrequentlyAndWalksSmallerCirclesWithoutDogHops() {
+        greetingSpecies(org.bukkit.entity.EntityType.CAT); eagerGreeting();
+        greetingGround = true; body.setOnGround(true);
+        long now = System.currentTimeMillis();
+        assertTrue(actions.greetings().trigger(pet, player, now));
+        assertCircleRadius(1.4);
+        assertEquals(0.8, navigationSpeed);
+        for (int elapsed = 200; elapsed < 8000; elapsed += 200) {
+            actions.greetings().advance(pet, now + elapsed);
+            assertCircleRadius(1.4);
+            assertEquals(0, body.getVelocity().getY(), "Cats never enter the dog's bounce phase");
+        }
+        assertTrue(greetingSounds.size() >= 8, "Repeated conversational meows throughout the welcome");
+        assertTrue(greetingSounds.stream().allMatch(s -> s == org.bukkit.Sound.ENTITY_CAT_AMBIENT));
+        assertTrue(greetingPitches.stream().allMatch(p -> p >= 0.95 && p <= 1.15));
+        actions.greetings().advance(pet, now + 8000);
+        int sounds = greetingSounds.size();
+        actions.greetings().advance(pet, now + 10000);
+        assertEquals(sounds, greetingSounds.size(), "Meowing stops with the greeting");
+    }
+
+    @Test void catPausesToLookAtOwnerThenContinuesAroundTheirCurrentPosition() {
+        eagerGreeting();
+        greetingSpecies(org.bukkit.entity.EntityType.CAT); greetingGround = true;
+        long now = System.currentTimeMillis();
+        assertTrue(actions.greetings().trigger(pet, player, now));
+        body.teleport(navigationTarget); actions.greetings().advance(pet, now + 200);
+        body.teleport(navigationTarget); int stops = navigationStops;
+        actions.greetings().advance(pet, now + 400);
+        assertTrue(navigationStops > stops);
+        var look = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey("companionpets", "look")));
+        assertNotNull(look); look.tick(); assertEquals(player.getEyeLocation(), lookedAt);
+        var paused = navigationTarget.clone();
+        player.teleport(player.getLocation().add(2, 0, 0));
+        actions.greetings().advance(pet, now + 600); assertEquals(paused, navigationTarget);
+        actions.greetings().advance(pet, now + 1000);
+        assertCircleRadius(1.4);
+        assertEquals(0.8, navigationSpeed);
+    }
+
+    @Test void otherMobsUseTheirOwnVoiceAndCalmMovementWithoutDogHops() {
+        greetingSpecies(org.bukkit.entity.EntityType.FROG); greetingGround = true; body.setOnGround(true);
+        testConfig.set("pets.wolf.behaviors", java.util.List.of("greeting", "greeting-approach"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig)); eagerGreeting();
+        long now = System.currentTimeMillis();
+        assertTrue(actions.greetings().trigger(pet, player, now));
+        actions.greetings().advance(pet, now + 3400);
+        assertEquals(1, navigationSpeed);
+        assertEquals(1.8, navigationTarget.distance(player.getLocation()), 0.001);
+        assertEquals(0, body.getVelocity().getY());
+        assertTrue(greetingSounds.stream().allMatch(s -> s == org.bukkit.Sound.ENTITY_FROG_AMBIENT));
+    }
+
+    @Test void greetingSkipsHopsUnderLowCeilingsOrWithUnreachableLandingAndReactsToOwnerFacing() {
+        eagerGreeting();
+        greetingGround = true;
+        body.setOnGround(true);
+        long now = System.currentTimeMillis();
+        assertTrue(actions.greetings().trigger(pet, player, now));
+        var turned = player.getLocation(); turned.setYaw(90); player.teleport(turned);
+        actions.greetings().advance(pet, now + 3400);
+        assertEquals(-1.8, navigationTarget.getX(), 0.0001);
+        assertEquals(0, navigationTarget.getZ(), 0.0001);
+        body.teleport(navigationTarget); body.setVelocity(new org.bukkit.util.Vector());
+        blockedHop = true;
+        actions.greetings().advance(pet, now + 3600);
+        assertEquals(0, body.getVelocity().getY());
+        blockedHop = false; reachableGreetingPath = false;
+        actions.greetings().advance(pet, now + 3800);
+        assertEquals(0, body.getVelocity().getY());
+        reachableGreetingPath = true;
+        body.teleport(player.getLocation());
+        actions.greetings().advance(pet, now + 4000);
+        assertEquals(0.36, body.getVelocity().getY(), 0.0001);
+        assertTrue(Double.isFinite(body.getVelocity().getX()) && Double.isFinite(body.getVelocity().getZ()));
+    }
+
+    @Test void offlineAbsenceTriggersOnReconnectButAnUnloadedNearbyPetHasNoFalseAbsence() {
+        long now = System.currentTimeMillis();
+        actions.greetings().tick(now);
+        player.disconnect();
+        actions.greetings().tick(now + 301_000);
+        assertFalse(actions.greeting(pet)); assertEquals(now, pet.lastOwnerNearbyMillis());
+        player.reconnect();
+        actions.ownerSessionChanged(player);
+        actions.greetings().tick(now + 302_000);
+        assertTrue(actions.greeting(pet));
+        actions.clearInteractions(pet);
+        UUID original = pet.entityId(); pet.entityId(UUID.randomUUID());
+        actions.greetings().tick(now + 303_000);
+        assertEquals(now + 303_000, pet.lastOwnerNearbyMillis(), "Physical presence is tracked while the body is unloaded");
+        pet.entityId(original);
+    }
+
+    @Test void anotherPlayerCannotTrainStoreOrReleasePetEvenWithOwnerMenuOrForgedConfirmation() {
+        var other = MockBukkit.getMock().addPlayer();
+        other.teleport(player.getLocation());
+        var holder = new net.tfminecraft.companionpets.gui.MenuHolder(net.tfminecraft.companionpets.gui.MenuHolder.Kind.CARE, pet.id(), null);
+        actions.menus().openCare(other, pet);
+        var inventory = other.getOpenInventory().getTopInventory();
+        assertEquals(Material.BOOK, inventory.getItem(net.tfminecraft.companionpets.gui.PetMenus.TRICKS_SLOT).getType());
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, inventory.getItem(net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT).getType());
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, inventory.getItem(net.tfminecraft.companionpets.gui.PetMenus.RELEASE_SLOT).getType());
+        actions.clickMenu(other, holder, net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, null, false, false, false);
+        actions.clickMenu(other, holder, net.tfminecraft.companionpets.gui.PetMenus.RELEASE_SLOT, null, false, false, false);
+        assertNull(runtime.sessions().release(other.getUniqueId()));
+        runtime.sessions().release(other.getUniqueId(), new net.tfminecraft.companionpets.session.ReleasePrompt(pet.id(), System.currentTimeMillis() + 30_000));
+        actions.onChat(other, "yes");
+        assertNull(runtime.sessions().release(other.getUniqueId()));
+        assertFalse(pet.stored()); assertTrue(body.isValid()); assertEquals(0, bodyRemovals);
+        assertSame(pet, runtime.store().get(pet.id())); assertFalse(runtime.store().isDeleted(pet.id()));
+        other.getInventory().setItemInMainHand(new ItemStack(Material.COD));
+        actions.useOnPet(other, body, other.getInventory().getItemInMainHand());
+        assertNull(runtime.sessions().training(other.getUniqueId()));
+        lookingAtPet = true;
+        actions.onChat(other, "new word"); actions.bindTrick(other, pet, "new word", Trick.SIT);
+        assertNull(pet.trickFor("new word")); assertNull(runtime.sessions().training(other.getUniqueId()));
+        assertEquals(player.getUniqueId(), pet.ownerId());
+    }
+
+    @Test void ownershipChangeInvalidatesReleaseConfirmationAndRefreshHidesManagement() {
+        actions.menus().openCare(player, pet);
+        runtime.sessions().release(player.getUniqueId(), new net.tfminecraft.companionpets.session.ReleasePrompt(pet.id(), System.currentTimeMillis() + 30_000));
+        pet.ownerId(UUID.randomUUID());
+        actions.menus().refreshCare(player, pet);
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, player.getOpenInventory().getTopInventory().getItem(net.tfminecraft.companionpets.gui.PetMenus.RELEASE_SLOT).getType());
+        actions.onChat(player, "yes");
+        assertNull(runtime.sessions().release(player.getUniqueId()));
+        assertSame(pet, runtime.store().get(pet.id())); assertTrue(body.isValid()); assertEquals(0, bodyRemovals);
+    }
 
     @Test void restartingWithADistantFollowingPetKeepsItsSavedPositionAndBlocksNativeTeleport() {
         body.teleport(player.getLocation().add(40, 0, 0)); runtime.remember(pet, body);
@@ -516,9 +1468,12 @@ class PetInteractionTest {
             body.setVelocity(new org.bukkit.util.Vector(0.3, -0.2, 0.4)); hold.tick();
             var look = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
                     org.bukkit.entity.Mob.class, new NamespacedKey("companionpets", "look")));
-            assertNotNull(look); look.tick(); assertEquals(player.getEyeLocation(), lookedAt);
+            assertNotNull(look); look.tick();
+            assertNotNull(lookedAt);
+            assertTrue(Math.abs(lookedAt.getYaw() - body.getBodyYaw()) <= 60);
             player.teleport(player.getLocation().add(0.2, 0, 0)); look.tick();
-            assertEquals(player.getEyeLocation(), lookedAt); assertEquals(position, body.getLocation());
+            assertTrue(Math.abs(lookedAt.getYaw() - body.getBodyYaw()) <= 60);
+            assertEquals(position, body.getLocation());
             assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
             assertFalse(body.getWorld().getEntities().stream().anyMatch(e ->
                     e.customName() != null && net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()

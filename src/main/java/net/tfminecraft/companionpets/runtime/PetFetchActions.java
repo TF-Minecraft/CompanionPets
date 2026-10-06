@@ -36,6 +36,8 @@ import net.tfminecraft.companionpets.play.ThrowSpeed;
 final class PetFetchActions {
     private final PetRuntime runtime;
     private final PetActions actions;
+    private final Map<UUID, Boolean> crouchedCats = new HashMap<>();
+    private final Map<UUID, Route> routes = new HashMap<>();
     private final Map<UUID, FetchJob> throwsInProgress = new HashMap<>();
     private final Map<UUID, Location> lastLocations = new HashMap<>();
     private final Map<UUID, Long> expiresAt = new HashMap<>();
@@ -70,6 +72,7 @@ final class PetFetchActions {
             return;
         }
         register(job, ball);
+        actions.anticipation().ownerThrew(player);
         for (Pet pet : runtime.store().all()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             Entity body = runtime.entity(pet);
@@ -78,13 +81,15 @@ final class PetFetchActions {
                     || body.getLocation().distance(player.getLocation()) > runtime.config().ownerNearRadius()
                     || !canChase(pet)) continue;
             FetchJob previous = pet.fetch();
-            if (previous != null && (previous.phase() == FetchPhase.CARRY || runtime.random().nextDouble() >= 0.35)) continue;
+            ItemRef toy = type.toy(thrown);
+            boolean favorite = toy != null && toy.key().equals(pet.favoriteToy());
+            double switchChance = favorite ? 0.65 : previous != null && previous.favorite(pet.id()) ? 0.1 : 0.35;
+            if (previous != null && (pet.id().equals(previous.carrierId()) || runtime.random().nextDouble() >= switchChance)) continue;
             // Leaving a race never returns or removes the toy that other pets chase.
             releaseFetch(pet, false);
             actions.clearInteractions(pet);
             runtime.visual().cancelAction(body);
-            ItemRef toy = type.toy(thrown);
-            job.favorite(pet.id(), toy != null && toy.key().equals(pet.favoriteToy()));
+            job.favorite(pet.id(), favorite);
             pet.fetch(job);
             pet.activity(Activity.PLAYING);
             pet.playUntilMillis(0L);
@@ -100,7 +105,8 @@ final class PetFetchActions {
     }
 
     boolean canChase(Pet pet) {
-        return !pet.stored() && !pet.dead() && pet.illness() != Illness.SICK && pet.illness() != Illness.WEAKENED
+        return runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.FETCH)
+                && !pet.stored() && !pet.dead() && pet.illness() != Illness.SICK && pet.illness() != Illness.WEAKENED
                 && pet.need(Need.HEALTH) > 0 && pet.need(Need.ENERGY) >= 25 && pet.need(Need.HUNGER) >= 25
                 && !training(pet)
                 && pet.activity() != Activity.SLEEPING && pet.order() == PetOrder.FOLLOW && !pet.staying()
@@ -120,6 +126,10 @@ final class PetFetchActions {
     }
 
     void step(Pet pet, Mob mob) {
+        step(pet, mob, System.currentTimeMillis());
+    }
+
+    void step(Pet pet, Mob mob, long now) {
         FetchJob job = pet.fetch();
         if (job == null) {
             return;
@@ -141,7 +151,7 @@ final class PetFetchActions {
             Entity projectile = job.projectileId() == null ? null : Bukkit.getEntity(job.projectileId());
             if (projectile == null) return;
             if (!mob.getWorld().equals(projectile.getWorld())) { actions.releaseFetch(pet, owner, true); return; }
-            mob.getPathfinder().moveTo(projectile.getLocation(), speed);
+            moveTo(pet, mob, projectile.getLocation(), speed, now);
             return;
         }
         if (job.phase() == FetchPhase.GROUND) {
@@ -151,15 +161,34 @@ final class PetFetchActions {
                 return;
             }
             if (!mob.getWorld().equals(item.getWorld())) { actions.releaseFetch(pet, owner, true); return; }
+            if (runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.CAT_PLAY)
+                    && mob.getLocation().distanceSquared(item.getLocation()) <= 4
+                    && now < job.inspectUntil(pet.id(), now)) {
+                mob.getPathfinder().stopPathfinding(); PetFx.look(mob, item.getLocation());
+                if (mob instanceof org.bukkit.entity.Cat cat) {
+                    crouchedCats.putIfAbsent(pet.id(), cat.isSneaking()); cat.setSneaking(true);
+                }
+                return;
+            }
+            restoreCat(pet);
             if (claim(pet)) {
                 mob.getPathfinder().stopPathfinding();
             } else {
-                mob.getPathfinder().moveTo(item.getLocation(), speed);
+                moveTo(pet, mob, item.getLocation(), speed, now);
             }
             return;
         }
         if (!mob.getWorld().equals(owner.getWorld())) {
             actions.releaseFetch(pet, owner, false);
+            return;
+        }
+        if (!pet.id().equals(job.carrierId())) {
+            Location destination = carrierDestination(pet, job, owner);
+            if (destination == null) { actions.releaseFetch(pet, owner, false); return; }
+            if (mob.getLocation().distanceSquared(destination) > 1) moveTo(pet, mob, destination, speed, now);
+            else mob.getPathfinder().stopPathfinding();
+            Pet carrier = runtime.store().get(job.carrierId());
+            PetFx.look(mob, runtime.entity(carrier));
             return;
         }
         if (mob.getLocation().distance(owner.getLocation()) < 2.2) {
@@ -170,9 +199,21 @@ final class PetFetchActions {
             PetFx.hearts(mob, favorite ? 6 : 3);
             mob.getPathfinder().stopPathfinding();
         } else {
-            mob.getPathfinder().moveTo(owner.getLocation(), speed);
+            moveTo(pet, mob, owner.getLocation(), speed, now);
         }
     }
+
+    private void moveTo(Pet pet, Mob body, Location target, double speed, long now) {
+        Route previous = routes.get(pet.id());
+        FetchJob job = pet.fetch();
+        if (previous != null && previous.job == job && previous.phase == job.phase() && now < previous.refreshAt
+                && previous.target.getWorld().equals(target.getWorld()) && previous.target.distanceSquared(target) < 16) return;
+        // Keep pickup and delivery checks on every AI tick, but avoid recalculating
+        // paths every tick. Phase changes and distant target jumps refresh immediately.
+        body.getPathfinder().moveTo(target, speed);
+        routes.put(pet.id(), new Route(job, job.phase(), target.clone(), now + 250));
+    }
+    private record Route(FetchJob job, FetchPhase phase, Location target, long refreshAt) { }
 
     private boolean training(Pet pet) {
         var session = runtime.sessions().training(pet.ownerId());
@@ -212,19 +253,17 @@ final class PetFetchActions {
                 || body.getLocation().distance(item.getLocation()) >= 1.7 || !job.claim(pet.id())) return false;
         item.remove();
         job.itemId(null);
-        for (Pet other : chasers(job)) if (other != pet) {
-            double speed = movementSpeed(other);
-            detach(other);
-            Player owner = Bukkit.getPlayer(other.ownerId());
-            if (owner != null && owner.isOnline() && body.getWorld().equals(owner.getWorld()))
-                actions.roaming().returnFromFetch(other, owner, speed);
-        }
+        // Keep the race participants in this job: they follow the winner until
+        // delivery, and finish together when the one physical toy is returned.
+        for (Pet other : chasers(job)) if (other != pet && runtime.entity(other) instanceof Mob mob) step(other, mob);
         return true;
     }
 
     Location destination(Pet pet) {
         FetchJob job = pet.fetch();
         if (job == null) return null;
+        if (job.phase() == FetchPhase.CARRY && !pet.id().equals(job.carrierId()))
+            return carrierDestination(pet, job, Bukkit.getPlayer(job.throwerId()));
         Entity target = switch (job.phase()) {
             case AIR -> entity(job.projectileId());
             case GROUND -> entity(job.itemId());
@@ -233,10 +272,29 @@ final class PetFetchActions {
         return target == null ? null : target.getLocation();
     }
 
+    private Location carrierDestination(Pet pet, FetchJob job, Player thrower) {
+        Pet carrier = runtime.store().get(job.carrierId());
+        Entity body = runtime.entity(carrier);
+        Entity follower = runtime.entity(pet);
+        if (body == null || follower == null || !body.getWorld().equals(follower.getWorld())) return null;
+        Location at = body.getLocation();
+        Vector forward = thrower != null && thrower.getWorld().equals(body.getWorld())
+                ? thrower.getLocation().toVector().subtract(at.toVector()).setY(0) : at.getDirection().setY(0);
+        if (forward.lengthSquared() < 0.001) forward = new Vector(0, 0, 1);
+        forward.normalize();
+        int slot = 0;
+        for (Pet other : runtime.store().all())
+            if (other.fetch() == job && !other.id().equals(job.carrierId()) && other.id().compareTo(pet.id()) < 0) slot++;
+        double side = (slot % 2 == 0 ? -1 : 1) * (0.65 + 0.6 * (slot / 4));
+        return at.clone().add(forward.clone().multiply(-1.5 - 0.8 * (slot / 2)))
+                .add(new Vector(-forward.getZ(), 0, forward.getX()).multiply(side));
+    }
+
     double movementSpeed(Pet pet) {
         FetchJob job = pet.fetch();
-        return job.speed(pet.id(), 1.30 * Locomotion.speed(pet.illness(), pet.bond(),
-                pet.need(Need.CLEANLINESS), job.favorite(pet.id())));
+        double base = job.speed(pet.id(), Locomotion.speed(pet.illness(), pet.bond(),
+                pet.need(Need.CLEANLINESS), false));
+        return base * runtime.config().play().fetchSpeedMultiplier();
     }
 
     void releaseFetch(Pet pet, boolean toOwner) {
@@ -265,6 +323,7 @@ final class PetFetchActions {
     }
 
     void tick(long now) {
+        routes.keySet().removeIf(id -> runtime.store().get(id) == null || runtime.store().get(id).fetch() == null);
         for (FetchJob job : List.copyOf(throwsInProgress.values())) {
             for (Pet pet : chasers(job)) {
                 if (runtime.entity(pet) == null || !canChase(pet)) releaseFetch(pet, false);
@@ -307,12 +366,19 @@ final class PetFetchActions {
     }
 
     private void detach(Pet pet) {
+        routes.remove(pet.id());
+        restoreCat(pet);
         pet.fetch(null);
         if (pet.activity() == Activity.PLAYING) pet.activity(Activity.NONE);
         if (runtime.entity(pet) instanceof Mob mob) {
             mob.getPathfinder().stopPathfinding();
             if (mob instanceof Wolf wolf) net.tfminecraft.companionpets.integration.WolfShake.restore(wolf);
         }
+    }
+
+    private void restoreCat(Pet pet) {
+        Boolean previous = crouchedCats.remove(pet.id());
+        if (previous != null && runtime.entity(pet) instanceof org.bukkit.entity.Cat cat) cat.setSneaking(previous);
     }
 
     private void unprotect(FetchJob job) {
@@ -325,7 +391,17 @@ final class PetFetchActions {
     }
 
     private void finish(FetchJob job, Location at) {
+        var followers = job.phase() == FetchPhase.CARRY ? chasers(job).stream()
+                .filter(p -> !p.id().equals(job.carrierId())).toList() : List.<Pet>of();
+        var speeds = new HashMap<UUID, Double>();
+        for (Pet follower : followers) speeds.put(follower.id(), movementSpeed(follower));
         forget(job);
+        for (Pet follower : followers) {
+            Player owner = Bukkit.getPlayer(follower.ownerId());
+            Entity body = runtime.entity(follower);
+            if (canChase(follower) && owner != null && owner.isOnline() && body != null && body.getWorld().equals(owner.getWorld()))
+                actions.roaming().returnFromFetch(follower, owner, speeds.get(follower.id()));
+        }
         if (at != null) dropPlain(at, job.toy());
     }
 

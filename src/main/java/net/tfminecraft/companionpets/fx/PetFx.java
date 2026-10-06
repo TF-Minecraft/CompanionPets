@@ -94,7 +94,8 @@ public final class PetFx {
     }
 
     public static void ambient(Entity entity) {
-        entity.getWorld().playSound(entity.getLocation(), ambientSound(entity.getType()), 0.8f, 1.0f);
+        Sound sound = ambientSound(entity);
+        if (sound != null) entity.getWorld().playSound(entity.getLocation(), sound, 0.8f, 1.0f);
     }
 
     public static void eat(Entity entity) {
@@ -153,7 +154,9 @@ public final class PetFx {
     }
 
     public static void hurt(Entity entity) {
-        entity.getWorld().playSound(entity.getLocation(), hurtSound(entity.getType()), 1.0f, 1.0f);
+        Sound sound = hurtSound(entity.getType());
+        if (sound == null && entity instanceof LivingEntity living) sound = living.getHurtSound();
+        if (sound != null) entity.getWorld().playSound(entity.getLocation(), sound, 1.0f, 1.0f);
     }
 
     public static void jump(Entity entity, boolean partial) {
@@ -180,8 +183,14 @@ public final class PetFx {
     }
 
     public static void stopLooking(Entity entity) {
-        if (entity instanceof Mob mob) PetLookGoal.remove(mob);
+        if (entity instanceof Mob mob) { PetLookGoal.release(mob); PetLookGoal.remove(mob); }
     }
+
+    public static void holdLooking(Mob body, net.tfminecraft.companionpets.visual.PetVisual visual) {
+        PetLookGoal.hold(body, visual);
+    }
+
+    public static void releaseLooking(Mob body) { PetLookGoal.release(body); }
 
     private record Hold(String text, long at) {
     }
@@ -194,9 +203,9 @@ public final class PetFx {
             case WOLF -> loud ? Sound.ENTITY_WOLF_AMBIENT : Sound.ENTITY_WOLF_PANT;
             case CAT -> loud ? Sound.ENTITY_CAT_PURREOW : Sound.ENTITY_CAT_PURR;
             case FOX -> loud ? Sound.ENTITY_FOX_AMBIENT : Sound.ENTITY_FOX_SNIFF;
-            default -> ambientSound(entity.getType());
+            default -> ambientSound(entity);
         };
-        entity.getWorld().playSound(entity.getLocation(), sound, 0.9f, 1.1f);
+        if (sound != null) entity.getWorld().playSound(entity.getLocation(), sound, 0.9f, 1.1f);
     }
 
     public static void sad(Entity entity) {
@@ -204,9 +213,9 @@ public final class PetFx {
             case WOLF -> Sound.ENTITY_WOLF_WHINE;
             case CAT -> Sound.ENTITY_CAT_BEG_FOR_FOOD;
             case FOX -> Sound.ENTITY_FOX_SNIFF;
-            default -> ambientSound(entity.getType());
+            default -> ambientSound(entity);
         };
-        entity.getWorld().playSound(entity.getLocation(), sound, 0.8f, 0.9f);
+        if (sound != null) entity.getWorld().playSound(entity.getLocation(), sound, 0.8f, 0.9f);
     }
 
     public static Sound hurtSound(EntityType type) {
@@ -215,7 +224,8 @@ public final class PetFx {
             case CAT -> Sound.ENTITY_CAT_HURT;
             case FOX -> Sound.ENTITY_FOX_HURT;
             case PARROT -> Sound.ENTITY_PARROT_HURT;
-            default -> Sound.ENTITY_PLAYER_HURT;
+            case FROG -> Sound.ENTITY_FROG_HURT;
+            default -> null;
         };
     }
 
@@ -225,7 +235,13 @@ public final class PetFx {
             case CAT -> Sound.ENTITY_CAT_AMBIENT;
             case FOX -> Sound.ENTITY_FOX_AMBIENT;
             case PARROT -> Sound.ENTITY_PARROT_AMBIENT;
-            default -> Sound.ENTITY_FOX_AMBIENT;
+            case FROG -> Sound.ENTITY_FROG_AMBIENT;
+            default -> null;
         };
+    }
+
+    public static Sound ambientSound(Entity entity) {
+        Sound sound = ambientSound(entity.getType());
+        return sound != null ? sound : entity instanceof Mob mob ? mob.getAmbientSound() : null;
     }
 }
