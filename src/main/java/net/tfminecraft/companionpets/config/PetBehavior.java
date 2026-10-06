@@ -20,6 +20,7 @@ public enum PetBehavior {
     public static Set<PetBehavior> defaults(EntityType entity) {
         var result = EnumSet.of(GREETING, GREETING_APPROACH, ROAM, SOCIAL_GREETING, SOCIAL_SNIFF,
                 AFFECTION, RECOGNIZE_CARERS, PET_FRIENDSHIPS);
+        if (entity == null) return Set.copyOf(result);
         switch (entity) {
             case WOLF -> result.addAll(EnumSet.of(GREETING_CIRCLES, GREETING_JUMPS,
                     GREETING_TAIL_WAG, TOY_ANTICIPATION, TOY_VOCALIZING, TOY_JUMPS, TOY_TAIL_WAG, FETCH, SOCIAL_CHASE,

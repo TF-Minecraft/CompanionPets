@@ -1051,6 +1051,25 @@ class PetInteractionTest {
         pet.entityId(original);
     }
 
+    @Test void anotherPlayerCanReadLearnedTricksAndReturnWithoutTrainingOrChangingThePet() {
+        var other = MockBukkit.getMock().addPlayer();
+        pet.progress(Trick.SIT, 100); pet.bindWord("sit", Trick.SIT);
+        actions.menus().openCare(other, pet);
+        var care = (net.tfminecraft.companionpets.gui.MenuHolder) other.getOpenInventory().getTopInventory().getHolder();
+        actions.clickMenu(other, care, net.tfminecraft.companionpets.gui.PetMenus.TRICKS_SLOT, null, false, false, false);
+        var learned = (net.tfminecraft.companionpets.gui.MenuHolder) other.getOpenInventory().getTopInventory().getHolder();
+        assertEquals(net.tfminecraft.companionpets.gui.MenuHolder.Kind.LEARNED, learned.kind());
+        assertEquals(pet.id(), learned.petId());
+        actions.clickMenu(other, learned, 0, learned.getInventory().getItem(0), false, false, false);
+        assertNull(runtime.sessions().training(other.getUniqueId()));
+        assertEquals(100, pet.progress(Trick.SIT)); assertEquals(Trick.SIT, pet.trickFor("sit"));
+        assertEquals(player.getUniqueId(), pet.ownerId()); assertFalse(pet.stored());
+        actions.clickMenu(other, learned, net.tfminecraft.companionpets.gui.PetMenus.TRICKS_BACK_SLOT, null, false, false, false);
+        var returned = (net.tfminecraft.companionpets.gui.MenuHolder) other.getOpenInventory().getTopInventory().getHolder();
+        assertEquals(net.tfminecraft.companionpets.gui.MenuHolder.Kind.CARE, returned.kind());
+        assertEquals(Material.BOOK, returned.getInventory().getItem(net.tfminecraft.companionpets.gui.PetMenus.TRICKS_SLOT).getType());
+    }
+
     @Test void anotherPlayerCannotTrainStoreOrReleasePetEvenWithOwnerMenuOrForgedConfirmation() {
         var other = MockBukkit.getMock().addPlayer();
         other.teleport(player.getLocation());

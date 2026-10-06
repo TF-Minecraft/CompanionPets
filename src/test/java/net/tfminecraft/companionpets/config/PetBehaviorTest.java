@@ -9,6 +9,29 @@ import org.bukkit.entity.EntityType;
 import org.junit.jupiter.api.Test;
 
 class PetBehaviorTest {
+    @Test void mythicOnlyPetTypesLoadWithSharedDefaultsAndExplicitOverrides() throws Exception {
+        org.mockbukkit.mockbukkit.MockBukkit.mock();
+        try {
+            org.mockbukkit.mockbukkit.MockBukkit.createMockPlugin("MythicMobs");
+            var plugin = org.mockbukkit.mockbukkit.MockBukkit.createMockPlugin();
+            var yaml = new YamlConfiguration();
+            yaml.loadFromString("""
+                    pets:
+                      custom: {mythic-mob: ExamplePet, egg: EGG}
+                      explicit: {mythic-mob: AnotherPet, egg: STICK, behaviors: [greeting, fetch]}
+                      dog: {entity: WOLF, egg: WOLF_SPAWN_EGG}
+                    """);
+            var config = CompanionConfig.load(plugin, yaml);
+            assertNotNull(config.type("custom")); assertNull(config.type("custom").entity());
+            assertEquals("ExamplePet", config.type("custom").mythicMob());
+            assertEquals(PetBehavior.defaults(EntityType.PIG), config.type("custom").behaviors());
+            assertEquals(Set.of(PetBehavior.GREETING, PetBehavior.FETCH), config.type("explicit").behaviors());
+            assertEquals(PetBehavior.defaults(EntityType.WOLF), config.type("dog").behaviors());
+        } finally {
+            org.mockbukkit.mockbukkit.MockBukkit.unmock();
+        }
+    }
+
     @Test void defaultsGiveSpeciesDifferentActionsWithoutRestrictingExplicitOverrides() {
         var dog = PetBehavior.defaults(EntityType.WOLF);
         var cat = PetBehavior.defaults(EntityType.CAT);

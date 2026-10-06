@@ -439,7 +439,7 @@ public final class PetActions {
         if ((holder.kind() == MenuHolder.Kind.TRICK || holder.kind() == MenuHolder.Kind.LEARNED)
                 && slot == PetMenus.TRICKS_NEXT_SLOT) {
             Pet pet = runtime.store().get(holder.petId());
-            if (pet != null && pet.ownerId().equals(player.getUniqueId())) {
+            if (pet != null && (holder.kind() == MenuHolder.Kind.LEARNED || pet.ownerId().equals(player.getUniqueId()))) {
                 if (!net.tfminecraft.companionpets.gui.MenuNavigation.turn(player, holder.page(), holder.pages(), rightClick)) return;
                 int page = holder.page() + (rightClick ? -1 : 1);
                 holder.navigating(true);
@@ -455,7 +455,7 @@ public final class PetActions {
         if (holder.kind() == MenuHolder.Kind.LEARNED) {
             if (slot == PetMenus.TRICKS_BACK_SLOT) {
                 Pet pet = runtime.store().get(holder.petId());
-                if (pet != null && pet.ownerId().equals(player.getUniqueId())) {
+                if (pet != null) {
                     menus.openCare(player, pet, holder.petHouseBack(), holder.petHousePage());
                 }
             }
@@ -492,9 +492,14 @@ public final class PetActions {
 
     private void clickCare(Player player, MenuHolder holder, int slot) {
         Pet pet = runtime.store().get(holder.petId());
-        if (pet == null || !pet.ownerId().equals(player.getUniqueId())) {
+        if (pet == null) return;
+        boolean owner = pet.ownerId().equals(player.getUniqueId());
+        int tricksSlot = owner ? PetMenus.careSlot(PetMenus.TRICKS_SLOT, holder.petHouseBack()) : PetMenus.TRICKS_SLOT;
+        if (slot == tricksSlot) {
+            menus.openLearned(player, pet);
             return;
         }
+        if (!owner) return;
         if (slot == PetMenus.NAME_SLOT) {
             beginRename(player, pet);
             player.closeInventory();
@@ -502,10 +507,6 @@ public final class PetActions {
         }
         if (slot == PetMenus.BACK_SLOT) {
             if (holder.petHouseBack()) menus.openKennel(player, holder.petHousePage());
-            return;
-        }
-        if (slot == PetMenus.careSlot(PetMenus.TRICKS_SLOT, holder.petHouseBack())) {
-            menus.openLearned(player, pet);
             return;
         }
         if (slot == PetMenus.careSlot(PetMenus.RELEASE_SLOT, holder.petHouseBack())) {
