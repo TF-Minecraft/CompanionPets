@@ -110,7 +110,8 @@ public final class PetMenus {
         inventory.setItem(21, needIcon(Material.SUNFLOWER, pet, Need.MOOD,
                 line("Throw a toy, or pet " + PetTexts.him(pet.sex()) + " with an empty hand. Treats: ", NamedTextColor.DARK_GRAY).append(treat)));
         inventory.setItem(22, needIcon(Material.BLAZE_POWDER, pet, Need.ENERGY,
-                line("Teach " + PetTexts.him(pet.sex()) + " to rest, or " + PetTexts.he(pet.sex()) + " lies down when exhausted", NamedTextColor.DARK_GRAY)));
+                line("Rests while sitting or lying down (Sit, Lay)", NamedTextColor.DARK_GRAY),
+                line(PetTexts.He(pet.sex()) + " lies down on " + PetTexts.his(pet.sex()) + " own when exhausted", NamedTextColor.DARK_GRAY)));
         List<ItemRef> brushes = type == null ? List.of() : type.brushes();
         ItemRef brush = brushes.isEmpty() ? null : brushes.getFirst();
         inventory.setItem(23, needIcon(brush == null ? new ItemStack(Material.BRUSH) : brush.icon(Material.BRUSH), pet, Need.CLEANLINESS,
@@ -121,9 +122,9 @@ public final class PetMenus {
         inventory.setItem(24, needIcon(sick ? medicine.icon(Material.HONEY_BOTTLE) : new ItemStack(Material.GOLDEN_APPLE), pet, Need.HEALTH,
                 sick
                         ? line("Medicine gives a health boost: ", NamedTextColor.DARK_GRAY).append(itemList(medicines, "medicine"))
-                        : line("Food, brushing and rest restore health", NamedTextColor.DARK_GRAY),
+                        : line("Food and brushing restore health; it also recovers over time", NamedTextColor.DARK_GRAY),
                 line("Food and cleanliness >= 25 to recover", NamedTextColor.DARK_GRAY),
-                line("Energy >= 25 or rest; low mood is OK", NamedTextColor.DARK_GRAY),
+                line("Energy >= 25, or resting in Sit or Lay; low mood is OK", NamedTextColor.DARK_GRAY),
                 sick ? line(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED) : null));
 
         if (back) MenuNavigation.back(inventory, management ? "Return to the Pet House list" : "Return to this player's pets");
