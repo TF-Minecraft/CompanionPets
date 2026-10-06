@@ -35,7 +35,7 @@ public final class PetVisualTicker implements Runnable {
     public void run() {
         Set<UUID> loaded = new HashSet<>();
         long now = System.currentTimeMillis();
-        for (Pet pet : runtime.store().all()) {
+        for (Pet pet : runtime.store().active()) {
             if (pet.stored() || pet.dead()) continue;
             PetTypeDef type = runtime.config().type(pet.typeId());
             if (type == null || !(runtime.entity(pet) instanceof Mob body)) continue;

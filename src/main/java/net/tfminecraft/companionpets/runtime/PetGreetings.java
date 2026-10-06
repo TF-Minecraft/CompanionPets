@@ -32,15 +32,15 @@ final class PetGreetings {
     }
 
     void tick(long now) {
-        for (Pet pet : runtime.store().all()) {
+        for (UUID id : List.copyOf(active.keySet())) {
+            Pet pet = runtime.store().get(id);
+            if (pet != null && (pet.dead() || pet.stored())) cancel(pet);
+        }
+        // Saved pets are stamped when they leave the Pet House, so they need no tick here.
+        for (Pet pet : runtime.store().active()) {
             Player owner = Bukkit.getPlayer(pet.ownerId());
             boolean near = owner != null && owner.isOnline()
                     && runtime.distance(owner, pet) <= runtime.config().greeting().nearRadius();
-            if (pet.dead() || pet.stored()) {
-                cancel(pet);
-                pet.lastOwnerNearbyMillis(now);
-                continue;
-            }
             if (pet.lastOwnerNearbyMillis() == 0) {
                 // Old saves have no presence history: start tracking without an invented absence.
                 pet.lastOwnerNearbyMillis(now);

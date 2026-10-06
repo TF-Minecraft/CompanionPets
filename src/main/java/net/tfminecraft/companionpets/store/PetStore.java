@@ -12,6 +12,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -44,7 +45,8 @@ public final class PetStore {
     private final File session;
     private final Set<UUID> deleted = new LinkedHashSet<>();
     private final Map<UUID, Pet> pets = new LinkedHashMap<>();
-    private List<Pet> snapshot;
+    private Index index;
+    private final Runnable invalidate = () -> index = null;
     private final Map<String, UUID> kennels = new LinkedHashMap<>();
     private boolean loaded;
     private boolean deletionLogHealthy;
@@ -92,7 +94,7 @@ public final class PetStore {
         }
         if (!file.exists() && !backup.exists() && !deletions.exists()) {
             pets.clear();
-            snapshot = null;
+            index = null;
             kennels.clear();
             loaded = true;
             return true;
@@ -137,7 +139,8 @@ public final class PetStore {
             pets.clear();
             pets.putAll(nextPets);
             deleted.forEach(pets::remove);
-            snapshot = null;
+            pets.values().forEach(pet -> pet.indexChanged(invalidate));
+            index = null;
             kennels.clear();
             kennels.putAll(nextKennels);
             loaded = true;
@@ -423,8 +426,12 @@ public final class PetStore {
     public Collection<Pet> all() {
         // Keep immutable iteration safe when callbacks add or remove pets, without
         // copying every saved record on each animation and behavior tick.
-        if (snapshot == null) snapshot = List.copyOf(pets.values());
-        return snapshot;
+        return index().all();
+    }
+
+    /** Pets outside the Pet House and alive. Behavior ticks skip saved records entirely. */
+    public Collection<Pet> active() {
+        return index().active();
     }
 
     public Pet get(UUID id) {
@@ -433,8 +440,10 @@ public final class PetStore {
 
     public void add(Pet pet) {
         if (deleted.contains(pet.id())) throw new IllegalArgumentException("Cannot reuse a deleted pet ID");
-        pets.put(pet.id(), pet);
-        snapshot = null;
+        Pet previous = pets.put(pet.id(), pet);
+        if (previous != null && previous != pet) previous.indexChanged(null);
+        pet.indexChanged(invalidate);
+        index = null;
     }
 
     /** Persist a terminal transition before a caller removes its body. */
@@ -454,25 +463,19 @@ public final class PetStore {
             return false;
         }
         deleted.add(id);
-        pets.remove(id);
-        snapshot = null;
+        pets.remove(id).indexChanged(null);
+        index = null;
         return true;
     }
 
     public List<Pet> of(UUID ownerId) {
-        List<Pet> owned = new ArrayList<>();
-        for (Pet pet : pets.values()) {
-            if (pet.ownerId().equals(ownerId)) {
-                owned.add(pet);
-            }
-        }
-        return owned;
+        return new ArrayList<>(index().owners().getOrDefault(ownerId, List.of()));
     }
 
     public int countOut(UUID ownerId) {
         int count = 0;
-        for (Pet pet : pets.values()) {
-            if (pet.ownerId().equals(ownerId) && !pet.stored() && !pet.dead()) {
+        for (Pet pet : index().owners().getOrDefault(ownerId, List.of())) {
+            if (!pet.stored() && !pet.dead()) {
                 count++;
             }
         }
@@ -481,8 +484,8 @@ public final class PetStore {
 
     public int countStored(UUID ownerId) {
         int count = 0;
-        for (Pet pet : pets.values()) {
-            if (pet.ownerId().equals(ownerId) && pet.stored() && !pet.dead()) {
+        for (Pet pet : index().owners().getOrDefault(ownerId, List.of())) {
+            if (pet.stored() && !pet.dead()) {
                 count++;
             }
         }
@@ -490,16 +493,26 @@ public final class PetStore {
     }
 
     public Pet byEntity(UUID entityId) {
-        if (entityId == null) {
-            return null;
-        }
-        for (Pet pet : pets.values()) {
-            if (entityId.equals(pet.entityId())) {
-                return pet;
-            }
-        }
-        return null;
+        return entityId == null ? null : index().bodies().get(entityId);
     }
+
+    private Index index() {
+        if (index != null) return index;
+        List<Pet> all = List.copyOf(pets.values());
+        List<Pet> active = new ArrayList<>();
+        Map<UUID, List<Pet>> owners = new HashMap<>();
+        Map<UUID, Pet> bodies = new HashMap<>();
+        for (Pet pet : all) {
+            if (!pet.stored() && !pet.dead()) active.add(pet);
+            owners.computeIfAbsent(pet.ownerId(), id -> new ArrayList<>()).add(pet);
+            if (pet.entityId() != null) bodies.putIfAbsent(pet.entityId(), pet);
+        }
+        index = new Index(all, List.copyOf(active), owners, bodies);
+        return index;
+    }
+
+    /** Rebuilt only after a record joins, leaves, changes owner, body, storage or death. */
+    private record Index(List<Pet> all, List<Pet> active, Map<UUID, List<Pet>> owners, Map<UUID, Pet> bodies) { }
 
     public void kennel(String key, UUID ownerId) {
         kennels.put(key, ownerId);

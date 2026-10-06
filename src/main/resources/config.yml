@@ -182,7 +182,10 @@ social:
   max-friendship-gain-per-minute: 12
   bark-radius: 6
   owner-radius: 16
-  encounter-cooldown-seconds: 18
+  # Pets look for a new meeting this often. Meetings already started stay smooth.
+  search-interval-seconds: 2
+  # After a meeting, the same pair waits this long before another sniff or chase.
+  encounter-cooldown-seconds: 60
   bark-seconds: 8
   calm-cooldown-seconds: 30
   territorial-bark-chance: 80

@@ -30,6 +30,7 @@ final class PetSocial {
     private final Map<Pair, Long> nextAllowed = new HashMap<>();
     private final Map<Pair, Visit> visits = new HashMap<>();
     private final Map<Pair, ArrayDeque<Gain>> gains = new HashMap<>();
+    private long nextSearchAt;
 
     PetSocial(PetRuntime runtime, PetRoaming roaming) { this.runtime = runtime; this.roaming = roaming; }
 
@@ -42,7 +43,10 @@ final class PetSocial {
         refreshVisits(now);
         for (var entry : List.copyOf(active.entrySet()))
             if (active.get(entry.getKey()) == entry.getValue()) advance(entry.getKey(), entry.getValue(), now);
-        for (Pet pet : runtime.store().all()) {
+        // Meetings in progress advance every behavior tick; looking for new ones is rarer.
+        if (now < nextSearchAt) return;
+        nextSearchAt = now + Math.round(settings.searchIntervalSeconds() * 1000);
+        for (Pet pet : runtime.store().active()) {
             if (!available(pet) || engaged(pet)) continue;
             Mob body = body(pet);
             if (body == null) continue;
@@ -108,7 +112,7 @@ final class PetSocial {
     }
     void clear() {
         for (Pair pair : List.copyOf(active.keySet())) end(pair, System.currentTimeMillis(), 0);
-        meetingByPet.clear(); nextAllowed.clear(); visits.clear(); gains.clear();
+        meetingByPet.clear(); nextAllowed.clear(); visits.clear(); gains.clear(); nextSearchAt = 0;
     }
 
     boolean trigger(Player owner, Pet pet, String kind) { return trigger(owner, pet, kind, System.currentTimeMillis()); }

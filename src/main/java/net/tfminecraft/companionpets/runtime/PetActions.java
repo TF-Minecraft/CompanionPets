@@ -573,7 +573,7 @@ public final class PetActions {
 
     private boolean respondToName(Player player, String text, long now) {
         boolean answered = false;
-        for (Pet pet : runtime.store().all()) {
+        for (Pet pet : runtime.store().active()) {
             if (!audible(player, pet)
                     || !SpokenOrder.matches(text, pet.name())) continue;
             Entity entity = runtime.entity(pet);
@@ -905,6 +905,8 @@ public final class PetActions {
             return;
         }
         pet.stored(false);
+        // Time in the Pet House is not an absence that earns a welcome.
+        pet.lastOwnerNearbyMillis(System.currentTimeMillis());
         runtime.remember(pet, entity);
         runtime.resumeFollowing(pet);
         runtime.store().save();

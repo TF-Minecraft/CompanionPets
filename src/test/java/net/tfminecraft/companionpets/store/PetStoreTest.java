@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -52,6 +53,26 @@ class PetStoreTest {
         assertTrue(store.save()); assertTrue(store.load()); assertTrue(store.all().isEmpty());
         store.add(new Pet(UUID.randomUUID(), first.ownerId(), "cat", "New", PetSex.MALE));
         assertEquals(1, store.all().size()); assertTrue(store.load()); assertTrue(store.all().isEmpty());
+    }
+
+    @Test void activeOwnerAndBodyLookupsFollowRecordChanges() {
+        var store = store(); assertTrue(store.load());
+        var owner = UUID.randomUUID(); var body = UUID.randomUUID();
+        var out = new Pet(UUID.randomUUID(), owner, "cat", "Luna", PetSex.FEMALE);
+        var saved = new Pet(UUID.randomUUID(), owner, "cat", "Sol", PetSex.MALE); saved.stored(true);
+        store.add(out); store.add(saved);
+        assertEquals(java.util.List.of(out), java.util.List.copyOf(store.active()));
+        assertEquals(1, store.countOut(owner)); assertEquals(1, store.countStored(owner));
+        out.entityId(body); assertSame(out, store.byEntity(body));
+        out.entityId(null); assertNull(store.byEntity(body));
+        out.stored(true); saved.stored(false);
+        assertEquals(java.util.List.of(saved), java.util.List.copyOf(store.active()));
+        var heir = UUID.randomUUID(); saved.ownerId(heir);
+        assertEquals(java.util.List.of(out), store.of(owner)); assertEquals(java.util.List.of(saved), store.of(heir));
+        saved.dead(true); assertTrue(store.active().isEmpty());
+        saved.dead(false); saved.entityId(body); assertTrue(store.remove(saved.id()));
+        assertNull(store.byEntity(body)); assertTrue(store.of(heir).isEmpty());
+        saved.stored(true); assertTrue(store.active().isEmpty(), "Removed records no longer refresh the index");
     }
 
     @Test void carersAndPetFriendsSurviveRestartWithoutBecomingOwners() throws Exception {

@@ -8,11 +8,11 @@ public record SocialSettings(boolean enabled, double encounterRadius, double bar
         double sameOwnerBarkChance, double chaseChance, int calmClicks,
         double greetingRadius, double greetingSeconds, double separationSeconds,
         double greetingFriendshipGain, double sniffFriendshipGain, double chaseFriendshipGain,
-        double maxFriendshipGainPerMinute) {
+        double maxFriendshipGainPerMinute, double searchIntervalSeconds) {
 
     public static SocialSettings defaults() {
-        return new SocialSettings(true, 8, 6, 16, 18, 8, 30, 80, 10, 50, 3,
-                5, 3, 10, 2, 6, 8, 12);
+        return new SocialSettings(true, 8, 6, 16, 60, 8, 30, 80, 10, 50, 3,
+                5, 3, 10, 2, 6, 8, 12, 2);
     }
 
     public static SocialSettings load(ConfigurationSection section, java.util.logging.Logger logger) {
@@ -35,7 +35,8 @@ public record SocialSettings(boolean enabled, double encounterRadius, double bar
                 num(section, "greeting-friendship-gain", d.greetingFriendshipGain(), 0, 100),
                 num(section, "sniff-friendship-gain", d.sniffFriendshipGain(), 0, 100),
                 num(section, "chase-friendship-gain", d.chaseFriendshipGain(), 0, 100),
-                num(section, "max-friendship-gain-per-minute", d.maxFriendshipGainPerMinute(), 0, 100));
+                num(section, "max-friendship-gain-per-minute", d.maxFriendshipGainPerMinute(), 0, 100),
+                num(section, "search-interval-seconds", d.searchIntervalSeconds(), 0.5, 30));
     }
 
     private static double num(ConfigurationSection section, String key, double fallback, double min, double max) {

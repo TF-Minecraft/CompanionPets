@@ -28,7 +28,11 @@ final class PetToyAnticipation {
     private final Map<UUID, Long> nextOwnerVoice = new HashMap<>();
     PetToyAnticipation(PetRuntime runtime, PetActions actions) { this.runtime = runtime; this.actions = actions; }
     void tick(long now) {
-        for (Pet pet : runtime.store().all()) {
+        for (UUID id : List.copyOf(active.keySet())) {
+            Pet pet = runtime.store().get(id);
+            if (pet != null && (pet.stored() || pet.dead())) { interests.remove(id); cancel(pet); }
+        }
+        for (Pet pet : runtime.store().active()) {
             Player owner = Bukkit.getPlayer(pet.ownerId());
             ItemRef toy = owner != null && owner.isOnline() ? heldToy(pet, owner) : null;
             if (toy == null) { interests.remove(pet.id()); cancel(pet); continue; }

@@ -54,9 +54,9 @@ public final class PetVoice {
     public void eat(Entity body) { play(body, Event.EAT); }
 
     void tick(long now) {
-        for (Pet pet : runtime.store().all()) {
+        for (Pet pet : runtime.store().active()) {
             var type = runtime.config().type(pet.typeId());
-            if (pet.stored() || pet.dead() || type == null || type.sounds().ambientIntervalSeconds() == 0
+            if (type == null || type.sounds().ambientIntervalSeconds() == 0
                     || type.sounds().cue(Event.AMBIENT) == null) {
                 nextAmbient.remove(pet.id()); continue;
             }
@@ -69,7 +69,10 @@ public final class PetVoice {
                 if (due != null) ambient(body);
             }
         }
-        nextAmbient.keySet().removeIf(id -> runtime.store().get(id) == null);
+        nextAmbient.keySet().removeIf(id -> {
+            Pet pet = runtime.store().get(id);
+            return pet == null || pet.stored() || pet.dead();
+        });
         lastPlayed.keySet().removeIf(id -> runtime.store().get(id) == null);
     }
 

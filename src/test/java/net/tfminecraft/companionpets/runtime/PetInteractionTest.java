@@ -920,6 +920,16 @@ class PetInteractionTest {
         assertSame(goal, org.bukkit.Bukkit.getMobGoals().getGoal(body, key));
     }
 
+    @Test void newPetMeetingsAreSearchedOnlyAtTheConfiguredInterval() {
+        greetingGround = true; eagerGreeting(); var other = secondPet(body.getLocation().add(9, 0, 0));
+        long now = System.currentTimeMillis();
+        actions.social().tick(now); assertFalse(actions.social().engaged(pet));
+        runtime.entity(other).teleport(body.getLocation().add(0, 0, 1.2));
+        actions.social().tick(now + 500); actions.social().tick(now + 1500);
+        assertFalse(actions.social().engaged(pet), "Pets that just met wait for the next search");
+        actions.social().tick(now + 2000); assertTrue(actions.social().engaged(pet));
+    }
+
     @Test void separationRenewsGreetingButBriefDistanceAndInterruptionsDoNotAddFriendship() {
         greetingGround = true; eagerGreeting(); var other = secondPet(body.getLocation().add(0, 0, 1.2));
         var otherBody = runtime.entity(other); long now = System.currentTimeMillis();
@@ -927,11 +937,12 @@ class PetInteractionTest {
         assertEquals(2, actions.social().friendship(pet, other));
         otherBody.teleport(body.getLocation().add(9, 0, 0)); actions.social().tick(now + 4000);
         actions.social().tick(now + 11000); otherBody.teleport(body.getLocation().add(0, 0, 1.2));
-        actions.social().tick(now + 11500); assertFalse(actions.social().engaged(pet));
-        otherBody.teleport(body.getLocation().add(9, 0, 0)); actions.social().tick(now + 12000);
-        actions.social().tick(now + 23000); otherBody.teleport(body.getLocation().add(0, 0, 1.2));
-        actions.social().tick(now + 23500); assertTrue(actions.social().engaged(pet));
-        pet.order(PetOrder.LAY); actions.social().advance(pet, now + 24000);
+        // New meetings are searched every two seconds; this tick is a search.
+        actions.social().tick(now + 13000); assertFalse(actions.social().engaged(pet));
+        otherBody.teleport(body.getLocation().add(9, 0, 0)); actions.social().tick(now + 14000);
+        actions.social().tick(now + 25000); otherBody.teleport(body.getLocation().add(0, 0, 1.2));
+        actions.social().tick(now + 27000); assertTrue(actions.social().engaged(pet));
+        pet.order(PetOrder.LAY); actions.social().advance(pet, now + 27500);
         assertFalse(actions.social().engaged(other)); assertEquals(2, actions.social().friendship(pet, other));
         assertEquals(0, other.socialTailHz());
     }

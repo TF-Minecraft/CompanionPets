@@ -220,7 +220,7 @@ public final class PetTicker implements Runnable {
     }
 
     private void move(long now) {
-        for (Pet pet : runtime.store().all()) {
+        for (Pet pet : runtime.store().active()) {
             if (pet.stored() || pet.dead()) {
                 continue;
             }

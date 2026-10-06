@@ -60,6 +60,7 @@ public final class Pet {
     private long nextCriticalSoundAtMillis;
     private long pauseUntilMillis;
     private long refuseRestUntilMillis;
+    private Runnable indexChanged;
 
     public Pet(UUID id, UUID ownerId, String typeId, String name, PetSex sex) {
         this.id = id;
@@ -84,13 +85,24 @@ public final class Pet {
     }
 
     public void ownerId(UUID ownerId) {
-        if (!this.ownerId.equals(ownerId)) {
+        boolean changed = !this.ownerId.equals(ownerId);
+        if (changed) {
             lastOwnerNearbyMillis = 0;
             lastGreetingMillis = 0;
             carers.clear(); friends.clear();
             toyExcitedUntilMillis = 0;
         }
         this.ownerId = java.util.Objects.requireNonNull(ownerId);
+        if (changed) reindex();
+    }
+
+    /** Lets the owning store refresh its owner, body and active-pet lookups. */
+    public void indexChanged(Runnable listener) {
+        indexChanged = listener;
+    }
+
+    private void reindex() {
+        if (indexChanged != null) indexChanged.run();
     }
 
     public long lastOwnerNearbyMillis() { return lastOwnerNearbyMillis; }
@@ -163,7 +175,9 @@ public final class Pet {
     }
 
     public void stored(boolean stored) {
+        if (this.stored == stored) return;
         this.stored = stored;
+        reindex();
     }
 
     public String worldName() {
@@ -199,7 +213,9 @@ public final class Pet {
     }
 
     public void entityId(UUID entityId) {
+        if (java.util.Objects.equals(this.entityId, entityId)) return;
         this.entityId = entityId;
+        reindex();
     }
 
     public double need(Need need) {
@@ -286,7 +302,9 @@ public final class Pet {
     }
 
     public void dead(boolean dead) {
+        if (this.dead == dead) return;
         this.dead = dead;
+        reindex();
     }
 
     public String favoriteToy() {

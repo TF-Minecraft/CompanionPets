@@ -26,7 +26,7 @@ final class PetSpacing {
     static boolean free(PetRuntime runtime, Pet self, Location at) {
         Mob body = runtime.entity(self) instanceof Mob mob ? mob : null;
         double width = body == null ? 0.6 : body.getWidth();
-        for (Pet other : runtime.store().all()) {
+        for (Pet other : runtime.store().active()) {
             if (other.id().equals(self.id()) || other.stored() || !(runtime.entity(other) instanceof Mob entity)
                     || !entity.getWorld().equals(at.getWorld()) || Math.abs(entity.getLocation().getY() - at.getY()) > 1.5) continue;
             double clearance = Math.max(0.9, (width + entity.getWidth()) * 0.5 + 0.25);
@@ -41,7 +41,7 @@ final class PetSpacing {
     private static Formation formation(PetRuntime runtime, Pet pet, Player owner) {
         int count = 0, slot = 0;
         boolean included = false;
-        for (Pet other : runtime.store().all()) {
+        for (Pet other : runtime.store().active()) {
             if (!other.ownerId().equals(pet.ownerId()) || other.stored() || other.dead()
                     || other.activity() != Activity.TOY_FOCUS
                     || !(runtime.entity(other) instanceof Mob body) || !body.getWorld().equals(owner.getWorld())) continue;
