@@ -9,9 +9,9 @@ import org.bukkit.configuration.ConfigurationSection;
 
 import net.tfminecraft.companionpets.visual.PetAnimation;
 
-public record PetAppearance(String model, double scale, double runSpeed,
+public record PetAppearance(String model, double scale,
                             Map<PetAnimation, Clip> animations) {
-    public static final PetAppearance VANILLA = new PetAppearance(null, 1, 0.22, Map.of());
+    public static final PetAppearance VANILLA = new PetAppearance(null, 1, Map.of());
 
     public record Clip(String name, double speed, double blend) { }
 
@@ -40,18 +40,17 @@ public record PetAppearance(String model, double scale, double runSpeed,
             String legacy = pet.getString("model");
             if (legacy == null || legacy.isBlank()) return VANILLA;
             logger.warning("Pet " + id + ": move model to appearance.type: modelengine and appearance.model");
-            return model(legacy.trim(), 1, 0.22, null);
+            return model(legacy.trim(), 1, null);
         }
         String type = section.getString("type", "vanilla").trim().toLowerCase(Locale.ROOT);
         if (type.equals("vanilla")) return VANILLA;
         if (!type.equals("modelengine")) throw new IllegalArgumentException("unknown appearance.type " + type);
         String model = section.getString("model", "").trim();
         if (model.isEmpty()) throw new IllegalArgumentException("appearance.model is required for modelengine");
-        return model(model, positive(section, "scale", 1), positive(section, "run-speed", 0.22),
-                section.getConfigurationSection("animations"));
+        return model(model, positive(section, "scale", 1), section.getConfigurationSection("animations"));
     }
 
-    private static PetAppearance model(String model, double scale, double runSpeed, ConfigurationSection section) {
+    private static PetAppearance model(String model, double scale, ConfigurationSection section) {
         Map<PetAnimation, Clip> clips = new EnumMap<>(PetAnimation.class);
         for (PetAnimation animation : PetAnimation.values()) {
             clips.put(animation, new Clip(animation.name().toLowerCase(Locale.ROOT), 1, 0.15));
@@ -76,7 +75,7 @@ public record PetAppearance(String model, double scale, double runSpeed,
                 }
             }
         }
-        return new PetAppearance(model, scale, runSpeed, Map.copyOf(clips));
+        return new PetAppearance(model, scale, Map.copyOf(clips));
     }
 
     private static double positive(ConfigurationSection section, String key, double fallback) {

@@ -234,7 +234,7 @@ class PetInteractionTest {
         assertTrue(trainingGoal().shouldActivate());
     }
 
-    @Test void pushingDuringTrainingDoesNotAnimateRunningAndNativeMovementResumesAfterwards() {
+    @Test void trainingAttentionPausesForComeAndEndsWithTheSession() {
         visualGround = true; headTiltAvailable = true;
         testConfig.set("pets.wolf.appearance.type", "modelengine");
         testConfig.set("pets.wolf.appearance.model", "beagle");
@@ -253,7 +253,7 @@ class PetInteractionTest {
         body.setTicksLived(body.getTicksLived() + 1);
         body.teleport(body.getLocation().add(.4, 0, 0));
         ticker.run();
-        assertEquals(net.tfminecraft.companionpets.visual.PetAnimation.RUN, visualPose);
+        assertEquals(net.tfminecraft.companionpets.visual.PetAnimation.IDLE, visualPose, "ModelEngine animates the run itself");
         assertFalse(trainingAttention);
         pet.activity(Activity.NONE); ticker.run(); assertTrue(trainingAttention);
         player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
@@ -261,7 +261,7 @@ class PetInteractionTest {
         assertFalse(trainingAttention, "Clear the gesture immediately when the session ends");
         body.setTicksLived(body.getTicksLived() + 1);
         body.teleport(body.getLocation().add(.4, 0, 0)); ticker.run();
-        assertEquals(net.tfminecraft.companionpets.visual.PetAnimation.RUN, visualPose);
+        assertEquals(net.tfminecraft.companionpets.visual.PetAnimation.IDLE, visualPose);
     }
 
     private com.destroystokyo.paper.entity.ai.Goal<org.bukkit.entity.Mob> trainingGoal() {

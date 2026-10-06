@@ -95,7 +95,7 @@ public class PetsPlugin extends JavaPlugin {
         new net.tfminecraft.companionpets.listen.FurniturePetHouses(runtime).register();
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
-        visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 1L, 1L);
+        visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 1L, PetVisualTicker.PERIOD_TICKS);
         statusTicker = Bukkit.getScheduler().runTaskTimer(this, petTicker::lookBars, 1L, 1L);
         autosave = Bukkit.getScheduler().runTaskTimer(this, store::save, AUTOSAVE_TICKS, AUTOSAVE_TICKS);
         for (org.bukkit.World world : Bukkit.getWorlds()) {

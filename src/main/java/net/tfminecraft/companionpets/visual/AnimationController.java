@@ -6,6 +6,9 @@ import net.tfminecraft.companionpets.config.PetAppearance.Clip;
 
 /** One body pose or gesture, plus an optional head-only training gesture. */
 public final class AnimationController {
+    /** Poses ModelEngine plays from its default states; the plugin only adds postures and actions. */
+    public static final java.util.Set<PetAnimation> NATIVE = java.util.EnumSet.of(PetAnimation.IDLE,
+            PetAnimation.WALK, PetAnimation.RUN, PetAnimation.JUMP, PetAnimation.FALL, PetAnimation.FLY, PetAnimation.HOVER);
     private final AnimationPlayer player;
     private final Map<PetAnimation, Clip> clips;
     private PetAnimation pose = PetAnimation.IDLE;
@@ -46,14 +49,19 @@ public final class AnimationController {
             customAction = false;
         }
         if (trainingAttention && headPose()) play(PetAnimation.HEAD_TILT);
-        boolean airborne = pose == PetAnimation.JUMP || pose == PetAnimation.FALL;
-        Clip jump = clips.get(PetAnimation.JUMP);
-        Clip wanted = airborne && jump != null && !clips.containsKey(PetAnimation.FALL) ? jump : resolve(pose);
+        Clip wanted = nativeLocomotion(pose) ? null : resolve(pose);
         if (wanted == null) { stopActive(); return; }
-        if (wanted != null && (!wanted.equals(active) || !player.playing(wanted.name()))) {
+        if (!wanted.equals(active) || !player.playing(wanted.name())) {
             stopActive();
-            if (airborne && wanted == jump ? player.hold(wanted) : player.play(wanted, true)) active = wanted;
+            if (player.play(wanted, true)) active = wanted;
         }
+    }
+
+    /** ModelEngine's own idle, walk, jump and fly states render these without a plugin clip. */
+    private boolean nativeLocomotion(PetAnimation state) {
+        for (PetAnimation current = state; current != null; current = current.fallback())
+            if (clips.containsKey(current)) return NATIVE.contains(current);
+        return true;
     }
 
     public boolean play(PetAnimation next) {
@@ -163,10 +171,9 @@ public final class AnimationController {
     private Clip resolve(PetAnimation state) {
         for (PetAnimation current = state; current != null; current = current.fallback()) {
             Clip clip = clips.get(current);
-            if (clip != null) return state == PetAnimation.RUN && current == PetAnimation.WALK
-                    ? new Clip(clip.name(), clip.speed() * 1.5, clip.blend()) : clip;
+            if (clip != null) return clip;
         }
-        return clips.get(PetAnimation.IDLE);
+        return null;
     }
 
     private void stopActive() {
