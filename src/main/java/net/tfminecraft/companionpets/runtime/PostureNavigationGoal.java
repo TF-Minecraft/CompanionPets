@@ -66,10 +66,13 @@ final class PostureNavigationGoal implements Goal<Mob> {
         return System.currentTimeMillis() >= pet.listeningUntilMillis() && shouldActivate() && mode() == Locomotion.Mode.SLEEP;
     }
     @Override public boolean shouldStayActive() { return shouldActivate(); }
+    // A push would give the body speed that ModelEngine reads as walking before tick() clears it.
+    @Override public void stop() { body.setCollidable(true); }
     @Override public void tick() {
         if (!shouldActivate()) return;
         PetMotion.stop(body);
         body.setTarget(null);
+        if (body.isCollidable()) body.setCollidable(false);
     }
     @Override public GoalKey<Mob> getKey() { return key; }
     @Override public EnumSet<GoalType> getTypes() { return EnumSet.of(GoalType.MOVE, GoalType.JUMP); }

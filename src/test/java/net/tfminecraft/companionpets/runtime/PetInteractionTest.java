@@ -1634,6 +1634,7 @@ class PetInteractionTest {
         actions.onChat(player, "sit down Toby"); assertEquals(PetOrder.SIT, pet.order());
         pet.bindWord("stay", Trick.STAY); pet.progress(Trick.STAY, 100);
         actions.onChat(player, "Toby stay"); assertEquals(PetOrder.STAY, pet.order()); assertFalse(body.isSitting()); assertTrue(postureHeld());
+        assertFalse(body.isCollidable(), "A push cannot nudge a staying pet into its walk");
     }
 
     @Test void remoteOtherOwnerAndStoredPetsCannotHearNamedOrders() {
