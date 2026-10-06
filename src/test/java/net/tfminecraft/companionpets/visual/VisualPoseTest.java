@@ -8,10 +8,10 @@ import net.tfminecraft.companionpets.behavior.Locomotion.Mode;
 
 class VisualPoseTest {
     @Test
-    void movingPetsLeaveTheirPoseToModelEngineButStayPinsIdle() {
-        for (Mode mode : new Mode[]{Mode.FOLLOW, Mode.FETCH, Mode.PLAY})
+    void movingAndStandingPetsLeaveTheirPoseToModelEngine() {
+        for (Mode mode : new Mode[]{Mode.FOLLOW, Mode.FETCH, Mode.PLAY, Mode.STAY})
             assertTrue(AnimationController.NATIVE.contains(VisualPose.select(mode, false, false)));
-        assertEquals(PetAnimation.STAND, VisualPose.select(Mode.STAY, true, false), "Stay stands even if vanilla sat");
+        assertEquals(PetAnimation.IDLE, VisualPose.select(Mode.STAY, true, false), "Stay stands even if vanilla sat");
     }
 
     @Test

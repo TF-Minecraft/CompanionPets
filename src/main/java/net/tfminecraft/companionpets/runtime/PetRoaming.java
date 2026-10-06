@@ -170,8 +170,7 @@ final class PetRoaming {
         else PostureNavigationGoal.hold(runtime, pet, body);
         var type = runtime.config().type(pet.typeId());
         if (type != null) runtime.visual().update(body, type,
-                order == PetOrder.LAY ? PetAnimation.LIE : order == PetOrder.SIT ? PetAnimation.SIT
-                        : order == PetOrder.STAY ? PetAnimation.STAND : PetAnimation.IDLE);
+                order == PetOrder.LAY ? PetAnimation.LIE : order == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE);
         runtime.store().save();
     }
 

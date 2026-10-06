@@ -829,7 +829,7 @@ public final class PetActions {
             if (trick == Trick.COME) {
                 runtime.visual().update(entity, type, net.tfminecraft.companionpets.visual.PetAnimation.IDLE);
             } else if (trick == Trick.STAY) {
-                runtime.visual().update(entity, type, net.tfminecraft.companionpets.visual.PetAnimation.STAND);
+                runtime.visual().update(entity, type, net.tfminecraft.companionpets.visual.PetAnimation.IDLE);
             } else if (trick == Trick.LAY) {
                 runtime.visual().update(entity, type, net.tfminecraft.companionpets.visual.PetAnimation.LIE);
             } else runtime.visual().play(entity, type, trick.name());
