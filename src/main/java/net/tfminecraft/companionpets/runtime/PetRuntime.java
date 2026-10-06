@@ -87,6 +87,12 @@ public final class PetRuntime {
         return sessions;
     }
 
+    public boolean trainingFocused(Pet pet, org.bukkit.entity.Mob body) {
+        var session = sessions.training(pet.ownerId());
+        return session != null && session.petId().equals(pet.id())
+                && TrainingNavigationGoal.focused(this, pet, body, Bukkit.getPlayer(pet.ownerId()));
+    }
+
     public Bodies bodies() {
         return bodies;
     }

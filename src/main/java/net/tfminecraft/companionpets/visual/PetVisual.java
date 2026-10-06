@@ -13,6 +13,8 @@ public interface PetVisual {
 
     default void update(Entity entity, PetTypeDef type, PetAnimation pose) { }
 
+    default void trainingAttention(Entity entity, PetTypeDef type, boolean focused) { }
+
     default boolean holdsMovement(Entity entity) { return false; }
 
     default boolean attached(Entity entity) { return false; }

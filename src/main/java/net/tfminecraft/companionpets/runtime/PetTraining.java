@@ -178,6 +178,7 @@ final class PetTraining {
 
     public void endTraining(Player player, Pet pet, String reason) {
         runtime.sessions().clearTraining(player.getUniqueId());
+        if (pet != null) runtime.visual().trainingAttention(runtime.entity(pet), runtime.config().type(pet.typeId()), false);
         if (!player.isOnline()) {
             return;
         }
@@ -221,7 +222,7 @@ final class PetTraining {
         TrainingSession existing = runtime.sessions().training(player.getUniqueId());
         if (existing != null && existing.petId().equals(pet.id())) {
             if (entity instanceof Mob mob) TrainingNavigationGoal.begin(runtime, pet, mob, player);
-            trainingHeadTilt(player, pet, entity, System.currentTimeMillis());
+            runtime.visual().trainingAttention(entity, trainingType, entity instanceof Mob mob && runtime.trainingFocused(pet, mob));
             PetFx.bar(player, PetTexts.trainingPrompt(pet));
             return;
         }
@@ -240,7 +241,7 @@ final class PetTraining {
         if (entity instanceof Mob mob) {
             TrainingNavigationGoal.begin(runtime, pet, mob, player);
         }
-        trainingHeadTilt(player, pet, entity, now);
+        runtime.visual().trainingAttention(entity, trainingType, entity instanceof Mob mob && runtime.trainingFocused(pet, mob));
         PetFx.bar(player, PetTexts.trainingPrompt(pet));
         PetFx.tell(player, "Training " + pet.name() + ". Look at " + PetTexts.him(pet.sex()) + " and say a command in chat."
                 + practiceList(pet));

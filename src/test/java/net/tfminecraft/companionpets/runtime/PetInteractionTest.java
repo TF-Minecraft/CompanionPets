@@ -53,6 +53,9 @@ class PetInteractionTest {
     private boolean bellyAvailable, bellyActive;
     private boolean headTiltAvailable;
     private int headTiltPlays, actionCancels;
+    private boolean trainingAttention;
+    private boolean visualGround;
+    private net.tfminecraft.companionpets.visual.PetAnimation visualPose;
     private int headHolds, headReleases;
     private float heldBodyYaw, heldHeadYaw, heldPitch;
     private org.bukkit.Sound nativeSound = org.bukkit.Sound.ENTITY_FROG_AMBIENT;
@@ -102,6 +105,7 @@ class PetInteractionTest {
                     }
                     @Override public void lookAt(Location target, float speed, float pitch) { lookedAt = target.clone(); }
                     @Override public boolean isInWater() { return inWater; }
+                    @Override public boolean isOnGround() { return visualGround || super.isOnGround(); }
                     @Override public boolean hasLineOfSight(Entity entity) { return !blockedSocialSight; }
                     @Override public void setRemoveWhenFarAway(boolean remove) { }
                     @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() {
@@ -158,6 +162,11 @@ class PetInteractionTest {
                     items: {foods: [], treats: [], medicines: [], brushes: [], toys: []}
                 """);
         var visual = new PetVisual() {
+            @Override public void trainingAttention(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, boolean focused) {
+                if (focused && !trainingAttention && headTiltAvailable) headTiltPlays++;
+                trainingAttention = focused;
+            }
+            @Override public void update(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, net.tfminecraft.companionpets.visual.PetAnimation pose) { visualPose = pose; }
             @Override public boolean play(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, String action) {
                 if (action.equals("HEAD_TILT") && headTiltAvailable) { headTiltPlays++; return true; }
                 return false;
@@ -223,6 +232,36 @@ class PetInteractionTest {
         assertDoesNotThrow(() -> actions.useOnPet(player, body, treat));
         assertEquals(0, headTiltPlays);
         assertTrue(trainingGoal().shouldActivate());
+    }
+
+    @Test void pushingDuringTrainingDoesNotAnimateRunningAndNativeMovementResumesAfterwards() {
+        visualGround = true; headTiltAvailable = true;
+        testConfig.set("pets.wolf.appearance.type", "modelengine");
+        testConfig.set("pets.wolf.appearance.model", "beagle");
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        var treat = new ItemStack(Material.COD);
+        player.getInventory().setItemInMainHand(treat);
+        actions.useOnPet(player, body, treat);
+        var ticker = new net.tfminecraft.companionpets.visual.PetVisualTicker(runtime);
+        ticker.run();
+        body.setTicksLived(body.getTicksLived() + 1);
+        body.teleport(body.getLocation().add(.4, 0, 0));
+        ticker.run();
+        assertEquals(net.tfminecraft.companionpets.visual.PetAnimation.IDLE, visualPose);
+        assertTrue(trainingAttention);
+        pet.activity(Activity.ATTENDING); // Come must be allowed to run during training.
+        body.setTicksLived(body.getTicksLived() + 1);
+        body.teleport(body.getLocation().add(.4, 0, 0));
+        ticker.run();
+        assertEquals(net.tfminecraft.companionpets.visual.PetAnimation.RUN, visualPose);
+        assertFalse(trainingAttention);
+        pet.activity(Activity.NONE); ticker.run(); assertTrue(trainingAttention);
+        player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
+        new PetTicker(runtime, actions).run();
+        assertFalse(trainingAttention, "Clear the gesture immediately when the session ends");
+        body.setTicksLived(body.getTicksLived() + 1);
+        body.teleport(body.getLocation().add(.4, 0, 0)); ticker.run();
+        assertEquals(net.tfminecraft.companionpets.visual.PetAnimation.RUN, visualPose);
     }
 
     private com.destroystokyo.paper.entity.ai.Goal<org.bukkit.entity.Mob> trainingGoal() {

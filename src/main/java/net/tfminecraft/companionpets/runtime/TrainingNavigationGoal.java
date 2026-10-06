@@ -55,6 +55,10 @@ final class TrainingNavigationGoal implements Goal<Mob> {
     }
 
     @Override public boolean shouldActivate() {
+        return focused(runtime, pet, body, trainer);
+    }
+
+    static boolean focused(PetRuntime runtime, Pet pet, Mob body, Player trainer) {
         if (!body.isValid() || body.isDead() || pet.stored() || pet.dead() || pet.fetch() != null
                 || pet.activity() == Activity.SLEEPING || pet.activity() == Activity.ATTENDING
                 || WaterEscape.needed(body) || trainer == null || !trainer.isOnline()

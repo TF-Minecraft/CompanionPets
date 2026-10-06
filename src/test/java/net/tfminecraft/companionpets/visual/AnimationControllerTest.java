@@ -206,6 +206,56 @@ class AnimationControllerTest {
         assertEquals("play:idle:true", player.events.getLast());
     }
 
+    @Test void trainingHeadTiltLoopsWithoutRestartingAndEndsWithTheSession() {
+        Player player = new Player();
+        var now = new java.util.concurrent.atomic.AtomicLong();
+        AnimationController controller = new AnimationController(player, clips(), now::get);
+        controller.update(PetAnimation.IDLE);
+        controller.trainingAttention(true);
+        now.set(60_000);
+        controller.trainingAttention(true);
+        controller.update(PetAnimation.IDLE);
+        assertTrue(player.active.contains("head_tilt"));
+        assertEquals(1, player.events.stream().filter("play:head_tilt:true"::equals).count());
+        controller.trainingAttention(false);
+        controller.update(PetAnimation.IDLE);
+        assertFalse(player.active.contains("head_tilt"));
+        assertTrue(player.active.contains("idle"));
+    }
+
+    @Test void trainingAttentionYieldsToTricksAndWaterThenResumes() {
+        Player player = new Player();
+        var now = new java.util.concurrent.atomic.AtomicLong();
+        AnimationController controller = new AnimationController(player, clips(), now::get);
+        controller.trainingAttention(true);
+        assertTrue(controller.play(PetAnimation.PAW));
+        controller.update(PetAnimation.SIT);
+        assertFalse(player.active.contains("head_tilt"));
+        now.set(2000);
+        controller.update(PetAnimation.SIT);
+        assertTrue(player.active.contains("head_tilt"));
+        controller.update(PetAnimation.JUMP);
+        assertFalse(player.active.contains("head_tilt"));
+        controller.update(PetAnimation.LIE);
+        assertTrue(player.active.contains("head_tilt"));
+        controller.trainingAttention(false);
+        controller.update(PetAnimation.SWIM);
+        assertFalse(player.active.contains("head_tilt"));
+    }
+
+    @Test void staticTrainingHeadTiltStaysHeldAndMissingClipIsOptional() {
+        Player player = new Player(); player.lengths.put("head_tilt", 0.0);
+        var now = new java.util.concurrent.atomic.AtomicLong();
+        AnimationController controller = new AnimationController(player, clips(), now::get);
+        controller.trainingAttention(true);
+        now.set(60_000); controller.update(PetAnimation.SIT);
+        assertTrue(player.active.contains("head_tilt"));
+        assertEquals(1, player.events.stream().filter("hold:head_tilt"::equals).count());
+        var missing = clips(); missing.remove(PetAnimation.HEAD_TILT);
+        AnimationController optional = new AnimationController(new Player(), missing);
+        assertDoesNotThrow(() -> { optional.trainingAttention(true); optional.update(PetAnimation.IDLE); optional.trainingAttention(false); });
+    }
+
     private static final class Player implements AnimationPlayer {
         final List<String> events = new ArrayList<>();
         final Set<String> active = new HashSet<>();

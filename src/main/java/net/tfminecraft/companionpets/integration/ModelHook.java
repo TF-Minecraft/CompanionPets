@@ -100,6 +100,15 @@ public final class ModelHook implements PetVisual {
         }
     }
 
+    @Override public void trainingAttention(Entity entity, PetTypeDef type, boolean focused) {
+        if (entity == null || type == null) return;
+        if (focused) apply(entity, type);
+        Session session = sessions.get(entity.getUniqueId());
+        if (session == null) return;
+        try { session.controller.trainingAttention(focused); }
+        catch (RuntimeException ex) { fail(entity, session.type, ex); }
+    }
+
     @Override
     public boolean attached(Entity entity) {
         return entity != null && sessions.containsKey(entity.getUniqueId());

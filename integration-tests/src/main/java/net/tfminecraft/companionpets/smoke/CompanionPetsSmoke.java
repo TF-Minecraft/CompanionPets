@@ -284,6 +284,9 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                         new NamespacedKey(this, "training_navigation")));
                 check(focus != null && focus.shouldActivate(), type.id() + " training holds native movement");
                 checkStopped(body, type.id() + " training");
+                visual.cancelAction(body);
+                visual.trainingAttention(body, type, true);
+                visual.update(body, type, PetAnimation.IDLE);
                 trainees.add(new NativeTraining(body, origin, trainee, focus, type.id()));
             }
             var toyType = config.type("wolf");
@@ -321,7 +324,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                         check(nativeTicks(sample.body()) > sample.ticks(), sample.description() + " actually receives native ticks");
                         var after = sample.body().getLocation();
                         double dx = after.getX() - sample.origin().getX(), dz = after.getZ() - sample.origin().getZ();
-                        check(dx * dx + dz * dz < 0.0025, sample.description() + " remains in place after 20 native ticks");
+                        check(dx * dx + dz * dz < 0.0025, sample.description() + " remains in place after 180 native ticks");
                         checkStopped(sample.body(), sample.description() + " after native ticks");
                     }
                     for (NativeFollower follower : followers) {
@@ -331,10 +334,28 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                                         + follower.origin() + " -> " + after + ", grounded=" + follower.body().isOnGround());
                     }
                     for (NativeTraining trainee : trainees) {
+                        var type = config.type(trainee.type());
+                        visual.update(trainee.body(), type, PetAnimation.IDLE);
+                        if (type.appearance().modeled()) {
+                            var sessionsField = ModelHook.class.getDeclaredField("sessions"); sessionsField.setAccessible(true);
+                            var modelSessions = (Map<?, ?>) sessionsField.get(visual);
+                            var modelSession = modelSessions.get(trainee.body().getUniqueId());
+                            var controllerField = modelSession.getClass().getDeclaredField("controller"); controllerField.setAccessible(true);
+                            var controller = (AnimationController) controllerField.get(modelSession);
+                            var headField = AnimationController.class.getDeclaredField("headTilt"); headField.setAccessible(true);
+                            var playerField = AnimationController.class.getDeclaredField("player"); playerField.setAccessible(true);
+                            var animationPlayer = (AnimationPlayer) playerField.get(controller);
+                            var head = (net.tfminecraft.companionpets.config.PetAppearance.Clip) headField.get(controller);
+                            boolean hasHead = type.appearance().availableClips(visual.clips(type)).containsKey(PetAnimation.HEAD_TILT);
+                            check(hasHead ? head != null && animationPlayer.playing(head.name()) : head == null,
+                                    trainee.type() + " optional head tilt remains active after nine seconds");
+                            visual.trainingAttention(trainee.body(), type, false);
+                            check(headField.get(controller) == null, trainee.type() + " training end releases head tilt");
+                        }
                         check(nativeTicks(trainee.body()) > 0, trainee.type() + " training probe actually receives native ticks");
                         var after = trainee.body().getLocation();
                         double dx = after.getX() - trainee.origin().getX(), dz = after.getZ() - trainee.origin().getZ();
-                        check(dx * dx + dz * dz < .0025, trainee.type() + " training stays still over 20 native ticks");
+                        check(dx * dx + dz * dz < .0025, trainee.type() + " training stays still over 180 native ticks");
                         check(Bukkit.getMobGoals().getRunningGoals(trainee.body()).contains(trainee.goal()),
                                 trainee.type() + " real selector runs training movement guard: active=" + trainee.goal().shouldActivate()
                                         + ", aware=" + trainee.body().isAware() + ", ticks=" + nativeTicks(trainee.body())
@@ -356,7 +377,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                     checksComplete = true;
                 } catch (Throwable ex) { getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL", ex); }
                 finally { Bukkit.getPluginManager().disablePlugin(this); }
-            }, 20);
+            }, 180);
             deferred = true;
         } catch (Throwable ex) { getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL", ex); }
         finally { if (!deferred) Bukkit.getPluginManager().disablePlugin(this); }

@@ -15,6 +15,7 @@ public final class AnimationController {
     private final java.util.function.LongSupplier clock;
     private long headUntil, actionUntil;
     private boolean customAction;
+    private boolean trainingAttention;
     private PetAnimation belly;
     private long bellyUntil, bellyIdleMillis, stageUntil;
 
@@ -36,7 +37,7 @@ public final class AnimationController {
                 || next == PetAnimation.SWIM || next == PetAnimation.JUMP || next == PetAnimation.FALL)) cancelAction();
         pose = next;
         long now = clock.getAsLong();
-        if (headTilt != null && (now >= headUntil || !player.playing(headTilt.name()))) stopHeadTilt();
+        if (headTilt != null && ((!trainingAttention && now >= headUntil) || !player.playing(headTilt.name()))) stopHeadTilt();
         if (advanceBelly(now)) return;
         if (action != null || customAction) {
             if (now < actionUntil && active != null && player.playing(active.name())) return;
@@ -44,6 +45,7 @@ public final class AnimationController {
             action = null;
             customAction = false;
         }
+        if (trainingAttention && headPose()) play(PetAnimation.HEAD_TILT);
         boolean airborne = pose == PetAnimation.JUMP || pose == PetAnimation.FALL;
         Clip jump = clips.get(PetAnimation.JUMP);
         Clip wanted = airborne && jump != null && !clips.containsKey(PetAnimation.FALL) ? jump : resolve(pose);
@@ -61,10 +63,9 @@ public final class AnimationController {
         if (belly != null) return false;
         if ((next == PetAnimation.PET || next == PetAnimation.SHAKE) && (action != null || customAction)) return false;
         if (next == PetAnimation.HEAD_TILT) {
-            if (action != null || customAction || pose == PetAnimation.SLEEP || pose == PetAnimation.LIE
-                    || pose == PetAnimation.SWIM || pose == PetAnimation.JUMP || pose == PetAnimation.FALL) return false;
+            if (action != null || customAction || !headPose()) return false;
             if (headTilt != null && player.playing(headTilt.name())) return false;
-            if (player.length(clip.name()) <= 0 ? !player.hold(clip) : !player.play(clip, false)) return false;
+            if (player.length(clip.name()) <= 0 ? !player.hold(clip) : !player.play(clip, trainingAttention)) return false;
             headTilt = clip;
             headUntil = clock.getAsLong() + duration(clip, 1.2);
             return true;
@@ -88,6 +89,19 @@ public final class AnimationController {
         active = clip;
         actionUntil = clock.getAsLong() + duration(clip, staticSeconds);
         return true;
+    }
+
+    /** Keep the optional head gesture active until the training focus ends. */
+    public void trainingAttention(boolean focused) {
+        if (trainingAttention == focused) return;
+        trainingAttention = focused;
+        stopHeadTilt();
+        if (focused) play(PetAnimation.HEAD_TILT);
+    }
+
+    private boolean headPose() {
+        return pose == PetAnimation.IDLE || pose == PetAnimation.SIT
+                || trainingAttention && pose == PetAnimation.LIE;
     }
 
     private long duration(Clip clip, double staticSeconds) {

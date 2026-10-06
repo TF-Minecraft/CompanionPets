@@ -16,7 +16,7 @@ ItemsAdder are optional.
   where the owner is. Anyone nearby can feed, clean, and treat a pet.
 - **Training by voice** — teach tricks with treats and spoken words, then give
   orders by looking at a pet or saying its name. During training, pets stay still
-  and watch the trainer, with an optional head_tilt gesture when training starts;
+  and watch the trainer, keeping the optional head_tilt gesture throughout training;
   Come and swimming to safety can still move them.
 - **Persistent orders** — Sit, Stay, and Lay hold in place and survive
   restarts, while Follow and Come bring a pet back to its owner.
