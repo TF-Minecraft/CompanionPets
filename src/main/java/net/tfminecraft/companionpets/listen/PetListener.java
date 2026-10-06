@@ -226,7 +226,7 @@ public final class PetListener implements Listener {
                 event.getBlock().getX(),
                 event.getBlock().getY(),
                 event.getBlock().getZ()))) {
-            runtime.store().save();
+            runtime.store().requestSave();
         }
     }
 

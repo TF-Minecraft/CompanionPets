@@ -138,7 +138,7 @@ public final class PetActions {
             PetFx.sit(body, false); PetFx.lie(body, false);
             if (body instanceof Mob mob) mob.setAware(true);
         }
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.bar(player, pet.name() + " will follow you again (unless food, rest or health prevents it)");
     }
 
@@ -630,7 +630,7 @@ public final class PetActions {
             runtime.remember(pet, replacement);
             runtime.visual().removeBody(entity);
             entity = replacement;
-            runtime.store().save();
+            runtime.store().requestSave();
         }
         runtime.remember(pet, entity);
         runtime.bodies().reattach(entity, pet, type);
@@ -653,7 +653,7 @@ public final class PetActions {
         for (Entity candidate : chunk.getEntities()) {
             if (candidate.isValid() && !candidate.isDead() && pet.id().equals(runtime.bodies().readId(candidate))) {
                 reattach(candidate);
-                runtime.store().save();
+                runtime.store().requestSave();
                 return runtime.entity(pet);
             }
         }
@@ -663,7 +663,7 @@ public final class PetActions {
             pet.clearRuntimeMotion();
             runtime.remember(pet, body);
             pauseRestoredFollowing(pet, body);
-            runtime.store().save();
+            runtime.store().requestSave();
             runtime.plugin().getLogger().info("Restored missing body for pet " + pet.id() + " (" + pet.name() + ")");
         }
         return body;
@@ -868,7 +868,7 @@ public final class PetActions {
         if (body != null) {
             markSleep(body, false);
         }
-        runtime.store().save();
+        runtime.store().requestSave();
         Player owner = Bukkit.getPlayer(pet.ownerId());
         if (owner != null && owner.isOnline()) {
             PetFx.tell(owner, pet.name() + " has died");
@@ -909,7 +909,7 @@ public final class PetActions {
         pet.lastOwnerNearbyMillis(System.currentTimeMillis());
         runtime.remember(pet, entity);
         runtime.resumeFollowing(pet);
-        runtime.store().save();
+        runtime.store().requestSave();
     }
 
     private void releasePet(Player player, Pet pet) {
@@ -932,7 +932,7 @@ public final class PetActions {
             markSleep(entity, false);
             runtime.visual().removeBody(entity);
         }
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.tell(player, pet.name() + " is gone. " + PetTexts.He(pet.sex()) + " is no longer with you");
     }
 
@@ -1014,7 +1014,7 @@ public final class PetActions {
         if (!runtime.store().save()) {
             if (runtime.store().remove(pet.id())) {
                 runtime.visual().removeBody(entity);
-                runtime.store().save();
+                runtime.store().requestSave();
             } else {
                 runtime.plugin().getLogger().severe("Could not roll back unsaved pet " + pet.id());
             }
@@ -1049,7 +1049,7 @@ public final class PetActions {
         pet.entityId(null);
         pet.stored(true);
         pet.clearRuntimeMotion();
-        runtime.store().save();
+        runtime.store().requestSave();
     }
 
     private void call(Player player, Pet pet) {
@@ -1078,7 +1078,7 @@ public final class PetActions {
         runtime.resumeFollowing(pet);
         entity.teleport(PetRuntime.beside(player));
         runtime.remember(pet, entity);
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.bar(player, pet.name() + " comes running to your side");
     }
 
@@ -1093,7 +1093,7 @@ public final class PetActions {
         }
         place.setType(runtime.config().kennelBlock());
         runtime.store().kennel(PetStore.kennelKey(place.getWorld().getName(), place.getX(), place.getY(), place.getZ()), player.getUniqueId());
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.bar(player, "Pet House placed. Right-click it to look after your pets");
     }
 

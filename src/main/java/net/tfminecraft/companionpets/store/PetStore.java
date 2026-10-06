@@ -20,6 +20,12 @@ import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -51,6 +57,8 @@ public final class PetStore {
     private boolean loaded;
     private boolean deletionLogHealthy;
     private boolean sessionStarted;
+    private final AtomicBoolean dirty = new AtomicBoolean();
+    private ExecutorService writer;
 
     public PetStore(JavaPlugin plugin) {
         this(new File(plugin.getDataFolder(), "pets.yml"), plugin.getLogger());
@@ -151,69 +159,83 @@ public final class PetStore {
         }
     }
 
+    /** Marks pending changes for the next {@link #flush()}, so routine actions never wait for the disk. */
+    public void requestSave() {
+        dirty.set(true);
+    }
+
+    /**
+     * Writes pending changes on the writer thread. Call it on the main thread, which owns
+     * the pet records; the writer only serializes a private copy and never touches Bukkit.
+     */
+    public void flush() {
+        if (!dirty.getAndSet(false)) return;
+        Snapshot snapshot = snapshot();
+        if (snapshot == null) return;
+        try {
+            writer().execute(() -> {
+                if (!write(snapshot)) dirty.set(true);
+            });
+        } catch (RejectedExecutionException ex) {
+            dirty.set(true);
+        }
+    }
+
+    /** Whether changes are waiting for the next flush. */
+    public boolean pending() {
+        return dirty.get();
+    }
+
+    /** Waits for background writes already queued; for tests. */
+    void awaitWrites() throws InterruptedException, ExecutionException {
+        writer().submit(() -> { }).get();
+    }
+
+    /** Saves now and waits, for callers that must know the record reached the disk. */
     public boolean save() {
+        Snapshot snapshot = snapshot();
+        if (snapshot == null) return false;
+        dirty.set(false);
+        try {
+            // The single writer keeps this after any queued background write, so older data never wins.
+            if (writer().submit(() -> write(snapshot)).get()) return true;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException | RejectedExecutionException ex) {
+            logger.log(Level.SEVERE, "Could not save pets.yml", ex);
+        }
+        dirty.set(true);
+        return false;
+    }
+
+    private ExecutorService writer() {
+        if (writer == null || writer.isShutdown()) {
+            writer = Executors.newSingleThreadExecutor(task -> {
+                Thread thread = new Thread(task, "CompanionPets pets.yml writer");
+                thread.setDaemon(true);
+                return thread;
+            });
+        }
+        return writer;
+    }
+
+    private record Snapshot(Map<String, Map<String, Object>> pets, List<Map<String, Object>> kennels) { }
+
+    private Snapshot snapshot() {
         if (!loaded || !deletionLogHealthy) {
-            return false;
+            return null;
         }
-        YamlConfiguration yaml = new YamlConfiguration();
-        yaml.set("version", 1);
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
         for (Pet pet : pets.values()) {
-            String path = "pets." + pet.id();
-            yaml.set(path + ".owner", pet.ownerId().toString());
-            yaml.set(path + ".type", pet.typeId());
-            yaml.set(path + ".name", pet.name());
-            yaml.set(path + ".sex", pet.sex().name());
-            yaml.set(path + ".personality", pet.personality().name());
-            yaml.set(path + ".born-at", pet.bornAt());
-            yaml.set(path + ".last-owner-nearby-millis", pet.lastOwnerNearbyMillis());
-            yaml.set(path + ".last-greeting-millis", pet.lastGreetingMillis());
-            writeMemories(yaml, path + ".carers", pet.carers());
-            writeMemories(yaml, path + ".friends", pet.friends());
-            yaml.set(path + ".order", pet.order().name());
-            yaml.set(path + ".staying", pet.staying());
-            yaml.set(path + ".stored", pet.stored());
-            yaml.set(path + ".world", pet.worldName());
-            yaml.set(path + ".x", pet.x());
-            yaml.set(path + ".y", pet.y());
-            yaml.set(path + ".z", pet.z());
-            yaml.set(path + ".yaw", pet.yaw());
-            yaml.set(path + ".entity", pet.entityId() == null ? "" : pet.entityId().toString());
-            for (Need need : Need.values()) {
-                yaml.set(path + "." + need.name().toLowerCase(Locale.ROOT), pet.need(need));
-            }
-            yaml.set(path + ".bond", pet.bond());
-            yaml.set(path + ".critical-millis", pet.criticalMillis());
-            yaml.set(path + ".dirty-millis", pet.dirtyMillis());
-            yaml.set(path + ".illness", pet.illness().name());
-            yaml.set(path + ".treated", pet.treated());
-            yaml.set(path + ".favorite-toy", pet.favoriteToy());
-            yaml.set(path + ".carried-toy", pet.carriedToy());
-            List<String> announced = new ArrayList<>();
-            for (Need need : pet.announcedLowView()) {
-                announced.add(need.name());
-            }
-            yaml.set(path + ".announced", announced);
-            java.util.List<java.util.Map<String, Object>> wordRows = new ArrayList<>();
-            for (Map.Entry<String, Trick> entry : pet.words().entrySet()) {
-                java.util.Map<String, Object> row = new LinkedHashMap<>();
-                row.put("word", entry.getKey());
-                row.put("trick", entry.getValue().name());
-                wordRows.add(row);
-            }
-            yaml.set(path + ".words", wordRows);
-            for (Trick trick : pet.progressView().keySet()) {
-                if (pet.progress(trick) > 0.0) {
-                    yaml.set(path + ".progress." + trick.name(), pet.progress(trick));
-                }
-            }
+            rows.put(pet.id().toString(), row(pet));
         }
-        java.util.List<java.util.Map<String, Object>> kennelRows = new ArrayList<>();
+        List<Map<String, Object>> kennelRows = new ArrayList<>();
         for (Map.Entry<String, UUID> entry : kennels.entrySet()) {
             String[] parts = entry.getKey().split(",", 4);
             if (parts.length != 4) {
                 continue;
             }
-            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            Map<String, Object> row = new LinkedHashMap<>();
             row.put("world", parts[0]);
             row.put("x", Integer.parseInt(parts[1]));
             row.put("y", Integer.parseInt(parts[2]));
@@ -221,7 +243,74 @@ public final class PetStore {
             row.put("owner", entry.getValue().toString());
             kennelRows.add(row);
         }
-        yaml.set("kennels", kennelRows);
+        return new Snapshot(rows, kennelRows);
+    }
+
+    private static Map<String, Object> row(Pet pet) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        put(row, "owner", pet.ownerId().toString());
+        put(row, "type", pet.typeId());
+        put(row, "name", pet.name());
+        put(row, "sex", pet.sex().name());
+        put(row, "personality", pet.personality().name());
+        put(row, "born-at", pet.bornAt());
+        put(row, "last-owner-nearby-millis", pet.lastOwnerNearbyMillis());
+        put(row, "last-greeting-millis", pet.lastGreetingMillis());
+        put(row, "carers", memories(pet.carers()));
+        put(row, "friends", memories(pet.friends()));
+        put(row, "order", pet.order().name());
+        put(row, "staying", pet.staying());
+        put(row, "stored", pet.stored());
+        put(row, "world", pet.worldName());
+        put(row, "x", pet.x());
+        put(row, "y", pet.y());
+        put(row, "z", pet.z());
+        put(row, "yaw", pet.yaw());
+        put(row, "entity", pet.entityId() == null ? "" : pet.entityId().toString());
+        for (Need need : Need.values()) {
+            put(row, need.name().toLowerCase(Locale.ROOT), pet.need(need));
+        }
+        put(row, "bond", pet.bond());
+        put(row, "critical-millis", pet.criticalMillis());
+        put(row, "dirty-millis", pet.dirtyMillis());
+        put(row, "illness", pet.illness().name());
+        put(row, "treated", pet.treated());
+        put(row, "favorite-toy", pet.favoriteToy());
+        put(row, "carried-toy", pet.carriedToy());
+        List<String> announced = new ArrayList<>();
+        for (Need need : pet.announcedLowView()) {
+            announced.add(need.name());
+        }
+        put(row, "announced", announced);
+        List<Map<String, Object>> wordRows = new ArrayList<>();
+        for (Map.Entry<String, Trick> entry : pet.words().entrySet()) {
+            Map<String, Object> word = new LinkedHashMap<>();
+            word.put("word", entry.getKey());
+            word.put("trick", entry.getValue().name());
+            wordRows.add(word);
+        }
+        put(row, "words", wordRows);
+        Map<String, Object> progress = new LinkedHashMap<>();
+        for (Trick trick : pet.progressView().keySet()) {
+            if (pet.progress(trick) > 0.0) {
+                progress.put(trick.name(), pet.progress(trick));
+            }
+        }
+        put(row, "progress", progress);
+        return row;
+    }
+
+    /** Mirrors YamlConfiguration.set: no key for null values or empty sections. */
+    private static void put(Map<String, Object> row, String key, Object value) {
+        if (value == null || value instanceof Map<?, ?> map && map.isEmpty()) return;
+        row.put(key, value);
+    }
+
+    private boolean write(Snapshot snapshot) {
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.set("version", 1);
+        snapshot.pets().forEach((id, row) -> yaml.createSection("pets." + id, row));
+        yaml.set("kennels", snapshot.kennels());
         File temp = new File(file.getParentFile(), file.getName() + ".tmp");
         try {
             yaml.save(temp);
@@ -261,7 +350,16 @@ public final class PetStore {
     }
 
     public boolean close() {
-        if (!save()) return false;
+        boolean saved = save();
+        if (writer != null) {
+            writer.shutdown();
+            try {
+                writer.awaitTermination(30, TimeUnit.SECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        if (!saved) return false;
         if (sessionStarted) {
             try {
                 Files.delete(session.toPath());
@@ -385,12 +483,15 @@ public final class PetStore {
         return pet;
     }
 
-    private static void writeMemories(YamlConfiguration yaml, String path, net.tfminecraft.companionpets.pet.RelationshipMemory memory) {
+    private static Map<String, Object> memories(net.tfminecraft.companionpets.pet.RelationshipMemory memory) {
+        Map<String, Object> rows = new LinkedHashMap<>();
         memory.entries().forEach((id, entry) -> {
-            String at = path + "." + id;
-            yaml.set(at + ".trust", entry.trust()); yaml.set(at + ".reinforced-at", entry.reinforcedAt());
-            yaml.set(at + ".nearby-at", entry.nearbyAt()); yaml.set(at + ".greeted-at", entry.greetedAt());
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("trust", entry.trust()); row.put("reinforced-at", entry.reinforcedAt());
+            row.put("nearby-at", entry.nearbyAt()); row.put("greeted-at", entry.greetedAt());
+            rows.put(id.toString(), row);
         });
+        return rows;
     }
 
     private static void readMemories(ConfigurationSection section, net.tfminecraft.companionpets.pet.RelationshipMemory memory) {

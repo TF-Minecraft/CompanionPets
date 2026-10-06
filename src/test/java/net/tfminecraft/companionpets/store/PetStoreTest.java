@@ -55,6 +55,28 @@ class PetStoreTest {
         assertEquals(1, store.all().size()); assertTrue(store.load()); assertTrue(store.all().isEmpty());
     }
 
+    @Test void pendingChangesAreWrittenInTheBackgroundLikeADirectSave() throws Exception {
+        var store = store(); assertTrue(store.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
+        pet.bindWord("sit", Trick.SIT); pet.progress(Trick.SIT, 40); pet.favoriteToy("STICK");
+        pet.carers().restore(UUID.randomUUID(), new net.tfminecraft.companionpets.pet.RelationshipMemory.Memory(12, 1, 2, 3));
+        store.add(pet);
+        File file = new File(directory.toFile(), "pets.yml");
+        store.flush(); store.awaitWrites();
+        assertFalse(file.exists(), "Nothing is written until a save is requested");
+        store.requestSave(); assertTrue(store.pending());
+        store.flush(); assertFalse(store.pending()); store.awaitWrites();
+        String background = Files.readString(file.toPath());
+        assertTrue(store.save());
+        assertEquals(background, Files.readString(file.toPath()), "Both paths write the same file");
+        var reloaded = store(); assertTrue(reloaded.load());
+        assertEquals(Trick.SIT, reloaded.get(pet.id()).trickFor("sit"));
+        assertEquals(40, reloaded.get(pet.id()).progress(Trick.SIT));
+        assertEquals("STICK", reloaded.get(pet.id()).favoriteToy());
+        assertEquals(1, reloaded.get(pet.id()).carers().entries().size());
+        assertTrue(store.close());
+    }
+
     @Test void activeOwnerAndBodyLookupsFollowRecordChanges() {
         var store = store(); assertTrue(store.load());
         var owner = UUID.randomUUID(); var body = UUID.randomUUID();

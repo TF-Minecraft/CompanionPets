@@ -171,7 +171,7 @@ final class PetRoaming {
         var type = runtime.config().type(pet.typeId());
         if (type != null) runtime.visual().update(body, type,
                 order == PetOrder.LAY ? PetAnimation.LIE : order == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE);
-        runtime.store().save();
+        runtime.store().requestSave();
     }
 
     void cancel(Pet pet) { cancelAttention(pet); }

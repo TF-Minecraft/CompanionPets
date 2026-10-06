@@ -1142,6 +1142,7 @@ class PetInteractionTest {
         pet.entityId(realBody);
         actions.greetings().tick(now + 500);
         assertTrue(actions.greeting(pet)); assertTrue(runtime.followingAllowed(pet, player));
+        assertTrue(runtime.store().pending()); runtime.store().save();
         var restored = loadedStore(runtime.plugin()).get(pet.id());
         assertEquals(now + 500, restored.lastGreetingMillis());
     }

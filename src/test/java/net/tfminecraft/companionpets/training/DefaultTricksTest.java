@@ -105,6 +105,7 @@ class DefaultTricksTest {
         assertEquals(100, pet.progress(Trick.FOLLOW)); assertEquals(Trick.FOLLOW, pet.trickFor("follow"));
         yaml.set("training.default-tricks", List.of("follow", "lay")); runtime.config(CompanionConfig.load(plugin, yaml));
         assertEquals(100, pet.progress(Trick.LAY)); assertEquals(53, pet.progress(Trick.JUMP));
+        assertTrue(store.pending()); store.save();
         var reloaded = new PetStore(plugin); assertTrue(reloaded.load());
         assertEquals(Trick.LAY, reloaded.get(pet.id()).trickFor("lay")); assertEquals(100, reloaded.get(pet.id()).progress(Trick.LAY));
     }

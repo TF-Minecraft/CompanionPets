@@ -143,7 +143,7 @@ public final class PetTicker implements Runnable {
             if (pet.dead()) {
                 if (body != null && body.isSilent()) runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.DEATH);
                 if (!runtime.store().remove(pet.id())) continue;
-                runtime.store().save();
+                runtime.store().requestSave();
                 actions.clearInteractions(pet);
                 if (body instanceof org.bukkit.entity.LivingEntity living && runtime.visual().attached(body)) {
                     living.setHealth(0);

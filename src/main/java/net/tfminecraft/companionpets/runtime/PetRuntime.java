@@ -76,7 +76,7 @@ public final class PetRuntime {
     private void applyDefaultTricks() {
         boolean changed = false;
         for (Pet pet : store.all()) changed |= net.tfminecraft.companionpets.training.DefaultTricks.apply(config, pet);
-        if (changed) store.save();
+        if (changed) store.requestSave();
     }
 
     public PetStore store() {

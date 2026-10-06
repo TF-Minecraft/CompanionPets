@@ -85,7 +85,7 @@ final class PetGreetings {
                 pet.lastOwnerNearbyMillis(now);
         }
         // Persist the last proximity even when the owner's chunk unloads immediately after quitting.
-        runtime.store().save();
+        runtime.store().requestSave();
     }
 
     boolean trigger(Pet pet, Player owner, long now) {
@@ -119,7 +119,7 @@ final class PetGreetings {
         job.phase = runtime.behaves(pet, PetBehavior.GREETING_CIRCLES) && feeling.intensity() >= 0.3 ? Phase.CIRCLE : Phase.FRONT;
         job.phaseUntil = now + circleMillis();
         GreetingNavigationGoal.ensure(runtime, pet, body, this);
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.bar(owner, pet.name() + (!reunion ? " recognizes you" : !mobile ? " notices you've returned" : " is happy to see you!"));
         advance(pet, now);
         return true;

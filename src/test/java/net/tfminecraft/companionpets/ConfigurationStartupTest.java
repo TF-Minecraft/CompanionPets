@@ -24,7 +24,7 @@ class ConfigurationStartupTest {
         var plugin = assertDoesNotThrow(() -> MockBukkit.load(InvalidLimitsPlugin.class));
         assertFalse(plugin.isEnabled());
         assertFalse(new java.io.File(plugin.getDataFolder(), "pets.yml").exists());
-        for (String name : new String[]{"store", "ticker", "visualTicker", "tailTicker", "autosave"}) {
+        for (String name : new String[]{"store", "ticker", "visualTicker", "tailTicker", "autosave", "flusher"}) {
             var field = PetsPlugin.class.getDeclaredField(name);
             field.setAccessible(true);
             assertNull(field.get(plugin));
