@@ -248,7 +248,10 @@ items:
 pets:
   # HOW TO ADD A PET
   # 1. Copy a complete example below and give it a unique lowercase key.
-  # 2. Choose its entity, appearance and egg, then its food and toys.
+  # 2. Choose entity: WOLF or CAT, then appearance, egg, food and toys.
+  #    entity chooses native movement/instincts; appearance chooses the visible model.
+  #    behaviors chooses optional plugin actions; sounds chooses the voice.
+  #    These are separate settings: changing the model does not change AI or sounds.
   # 3. Optionally restrict its tricks. Omit tricks to allow all existing tricks.
   # 4. Omit default-tricks to inherit training.default-tricks. A pet-specific
   #    list REPLACES the global list. [] gives no initial learning for that type.
@@ -281,9 +284,18 @@ pets:
   #   Keep this key stable once pets exist; changing it does not migrate them.
   # entity: Minecraft entity type in uppercase, WOLF or CAT. Other entity types are not supported.
   #   This supplies the body and AI; it does not select a custom model/skin.
+  #   WOLF retains wolf follow/wandering; CAT also retains cat resting/block-seeking AI.
+  #   Keep CAT for cats and WOLF for dogs to preserve their native differences.
+  #   Unsupported types (including FOX, FROG and PARROT) are skipped, not converted.
+  #   Their saved pets are retained. A model does not enable an unsupported entity.
+  #   A different species modeled on WOLF/CAT would inherit that base's instincts;
+  #   this requires a deliberate configuration choice, not automatic substitution.
   # native-combat: false (default) prevents native targeting/attacks while keeping
   #   native movement. Set true to allow the base entity's combat AI.
   # sounds: omit to retain native audio and normal plugin interaction sounds.
+  #   Without a profile, voice follows entity, NOT the model ID or pet type name.
+  #   A model using a different base needs an explicit voice profile to avoid
+  #   unwanted base sounds. A sound preset does not enable a new entity type.
   #   A mapping replaces native audio with a configurable profile. sounds: false
   #   silences the pet's voice. Each event accepts a sound name, list, false/[], or
   #   {sounds: [...], volume: 0.8, pitch: 1.0, min-interval-seconds: 0}.
