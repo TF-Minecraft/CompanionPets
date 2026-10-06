@@ -51,9 +51,9 @@ final class PetCareActions {
             pet.need(Need.MOOD, pet.need(Need.MOOD) - runtime.config().care().overfeedMoodPenalty());
             pet.need(Need.HEALTH, pet.need(Need.HEALTH) - runtime.config().care().overfeedHealthPenalty());
             if (entity != null) {
-                PetFx.eat(entity);
+                runtime.voice().eat(entity);
                 runtime.visual().play(entity, runtime.config().type(pet.typeId()), "EAT");
-                PetFx.sad(entity);
+                runtime.voice().sad(entity);
                 PetFx.particle(entity, Particle.SMOKE, 4);
             }
             PetFx.bar(player, PetTexts.overfed(pet.name(), pet.sex()));
@@ -66,7 +66,7 @@ final class PetCareActions {
         }
         comfort(pet, System.currentTimeMillis());
         if (entity != null) {
-            PetFx.eat(entity);
+            runtime.voice().eat(entity);
             runtime.visual().play(entity, runtime.config().type(pet.typeId()), "EAT");
             PetFx.hearts(entity, favorite ? 4 : 2);
         }

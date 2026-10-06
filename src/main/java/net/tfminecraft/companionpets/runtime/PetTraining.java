@@ -294,7 +294,7 @@ final class PetTraining {
         session.clearReward();
         Entity entity = runtime.entity(pet);
         if (entity != null) {
-            PetFx.eat(entity);
+            runtime.voice().eat(entity);
             runtime.visual().play(entity, runtime.config().type(pet.typeId()), "EAT");
             if (success) {
                 PetFx.hearts(entity, 3);

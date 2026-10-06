@@ -20,7 +20,7 @@ class DefaultTricksTest {
         yaml.loadFromString("""
                 pets:
                   wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}
-                  frog: {entity: FROG, egg: FROG_SPAWN_EGG, tricks: [tongue], default-tricks: [follow, tongue]}
+                  custom: {entity: WOLF, egg: FROG_SPAWN_EGG, tricks: [tongue], default-tricks: [follow, tongue]}
                   cat: {entity: CAT, egg: CAT_SPAWN_EGG, default-tricks: []}
                 custom-tricks:
                   tongue: {fallback-text: Tongue}
@@ -40,12 +40,12 @@ class DefaultTricksTest {
     @Test void overridesReplaceGlobalsAndCanIncludeCustomTricksOrBeEmpty() {
         yaml.set("training.default-tricks", List.of("follow", "sit"));
         var config = CompanionConfig.load(plugin, yaml);
-        var wolf = pet("wolf"); var frog = pet("frog"); var cat = pet("cat");
-        DefaultTricks.apply(config, wolf); DefaultTricks.apply(config, frog); DefaultTricks.apply(config, cat);
-        assertEquals(100, wolf.progress(Trick.SIT)); assertEquals(0, frog.progress(Trick.SIT));
-        assertEquals(100, frog.progress(Trick.valueOf("tongue"))); assertEquals(Trick.valueOf("tongue"), frog.trickFor("tongue"));
+        var wolf = pet("wolf"); var custom = pet("custom"); var cat = pet("cat");
+        DefaultTricks.apply(config, wolf); DefaultTricks.apply(config, custom); DefaultTricks.apply(config, cat);
+        assertEquals(100, wolf.progress(Trick.SIT)); assertEquals(0, custom.progress(Trick.SIT));
+        assertEquals(100, custom.progress(Trick.valueOf("tongue"))); assertEquals(Trick.valueOf("tongue"), custom.trickFor("tongue"));
         assertEquals(0, cat.progress(Trick.FOLLOW)); assertTrue(cat.words().isEmpty());
-        assertTrue(config.type("frog").allowsTrick(Trick.FOLLOW), "Default tricks are enabled alongside the explicit tricks list");
+        assertTrue(config.type("custom").allowsTrick(Trick.FOLLOW), "Default tricks are enabled alongside the explicit tricks list");
     }
 
     @Test void invalidDefaultListsAreRejectedInsteadOfSilentlyLosingBasicControl() {
@@ -53,7 +53,7 @@ class DefaultTricksTest {
             yaml.set("training.default-tricks", bad);
             assertThrows(IllegalArgumentException.class, () -> CompanionConfig.load(plugin, yaml));
         }
-        yaml.set("training.default-tricks", List.of("follow")); yaml.set("pets.frog.default-tricks", List.of("unknown"));
+        yaml.set("training.default-tricks", List.of("follow")); yaml.set("pets.custom.default-tricks", List.of("unknown"));
         assertThrows(IllegalArgumentException.class, () -> CompanionConfig.load(plugin, yaml));
     }
 

@@ -168,9 +168,9 @@ final class PetGreetings {
                 PetFx.holdLooking(body, runtime.visual()); PetFx.look(body, owner.getEyeLocation());
             }
             if (greeting.nextSoundAt == 0) {
-                Sound sound = body.getType() == EntityType.WOLF && pet.illness() != Illness.NONE
-                        ? Sound.ENTITY_WOLF_WHINE : PetFx.ambientSound(body);
-                if (sound != null) body.getWorld().playSound(body.getLocation(), sound, 0.35f, 1);
+                runtime.voice().play(body, pet.illness() != Illness.NONE
+                        ? net.tfminecraft.companionpets.config.PetSounds.Event.SAD
+                        : net.tfminecraft.companionpets.config.PetSounds.Event.GREETING, .4f, 1);
                 if (pet.illness() == Illness.NONE && pet.need(Need.HEALTH) >= 50) PetFx.hearts(body, 1);
                 greeting.nextSoundAt = Long.MAX_VALUE;
             }
@@ -179,10 +179,8 @@ final class PetGreetings {
         double excitement = mood(pet, greeting).intensity();
         if (now >= greeting.nextSoundAt) {
             boolean cat = runtime.behaves(pet, PetBehavior.GREETING_MEOWS);
-            Sound sound = cat ? Sound.ENTITY_CAT_AMBIENT
-                    : body.getType() == EntityType.WOLF ? Sound.ENTITY_WOLF_AMBIENT : body.getAmbientSound();
-            if (sound != null) body.getWorld().playSound(body.getLocation(), sound, (float) ((cat ? 0.8 : 0.9) * (0.5 + 0.5 * excitement)),
-                    cat ? (float) (0.95 + runtime.random().nextDouble() * 0.2) : 1.1f);
+            runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.GREETING,
+                    (float) (0.5 + 0.5 * excitement), cat ? (float) (.95 + runtime.random().nextDouble() * .2) : 1);
             PetFx.hearts(body, 1);
             double interval = cat ? runtime.config().greeting().catSoundIntervalSeconds()
                     : runtime.config().greeting().soundIntervalSeconds();

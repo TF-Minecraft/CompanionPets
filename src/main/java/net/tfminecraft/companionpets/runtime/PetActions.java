@@ -345,7 +345,7 @@ public final class PetActions {
         PetFx.look(entity, player);
         if (!ownerNearby(pet)) {
             PetFx.bar(player, PetTexts.missesOwner(pet.name(), pet.sex()));
-            PetFx.sad(entity);
+            runtime.voice().sad(entity);
             return;
         }
         if (pet.illness() != Illness.NONE) {
@@ -353,21 +353,21 @@ public final class PetActions {
             cheer(pet, now, runtime.config().care().playMoodGain());
             PetFx.bar(player, PetTexts.illnessCheck(pet.name(), pet.sex(), pet.illness(), medicine)
                     + ". A little attention still cheers " + PetTexts.him(pet.sex()) + " up");
-            PetFx.sad(entity);
+            runtime.voice().sad(entity);
             PetFx.hearts(entity, 1);
             return;
         }
         Need need = DominantNeed.select(pet);
         if (need != null) {
             PetFx.bar(player, PetTexts.needCheck(pet.name(), pet.sex(), need, NeedBand.of(pet.need(need)) == NeedBand.CRITICAL));
-            PetFx.sad(entity);
+            runtime.voice().sad(entity);
             return;
         }
         comfort(pet, now);
         cheer(pet, now, PET_MOOD_GAIN);
         if (runtime.sessions().resting(pet.id(), now)) {
             PetFx.bar(player, PetTexts.restingCheck(pet.name(), pet.sex()));
-            PetFx.happy(entity, false);
+            runtime.voice().happy(entity, false);
             PetFx.hearts(entity, 1);
             return;
         }
@@ -381,7 +381,7 @@ public final class PetActions {
         PetFx.bar(player, PetTexts.petted(pet.name(), pet.sex(), pet.typeId(), devoted));
         if (!runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.AFFECTION)) return;
         boolean animatedPet = runtime.visual().play(entity, type, "PET");
-        PetFx.happy(entity, runtime.random().nextInt(3) == 0);
+        runtime.voice().happy(entity, runtime.random().nextInt(3) == 0);
         PetFx.hearts(entity, devoted ? 4 : 2);
         if (!animatedPet && !runtime.visual().holdsMovement(entity)
                 && devoted && runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.AFFECTION_JUMPS)
@@ -610,9 +610,29 @@ public final class PetActions {
             runtime.visual().removeBody(entity);
             return;
         }
-        pet.entityId(entity.getUniqueId());
-        runtime.remember(pet, entity);
         PetTypeDef type = runtime.config().type(pet.typeId());
+        if (type == null) {
+            runtime.remember(pet, entity);
+            if (entity instanceof Mob mob) net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+            runtime.plugin().getLogger().warning("Pet " + pet.id() + " retains its saved body and data, but its type "
+                    + pet.typeId() + " is unavailable; correct its configuration before taking it out");
+            return;
+        }
+        if (!runtime.bodies().compatible(entity, type)) {
+            // Prepare a replacement before removing the old body. Pet identity and saved care never change.
+            Entity replacement = runtime.bodies().spawn(pet, type, entity.getLocation(), Bukkit.getPlayer(pet.ownerId()));
+            if (replacement == null) {
+                runtime.remember(pet, entity);
+                if (entity instanceof Mob mob) net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+                return;
+            }
+            clearInteractions(pet);
+            runtime.remember(pet, replacement);
+            runtime.visual().removeBody(entity);
+            entity = replacement;
+            runtime.store().save();
+        }
+        runtime.remember(pet, entity);
         runtime.bodies().reattach(entity, pet, type);
         pauseRestoredFollowing(pet, entity);
     }
@@ -634,7 +654,7 @@ public final class PetActions {
             if (candidate.isValid() && !candidate.isDead() && pet.id().equals(runtime.bodies().readId(candidate))) {
                 reattach(candidate);
                 runtime.store().save();
-                return candidate;
+                return runtime.entity(pet);
             }
         }
         Location location = new Location(world, pet.x(), pet.y(), pet.z(), pet.yaw(), 0);
@@ -765,7 +785,7 @@ public final class PetActions {
             }
             case SPEAK -> {
                 if (entity != null) {
-                    PetFx.ambient(entity);
+                    runtime.voice().ambient(entity);
                 }
             }
             case JUMP -> {

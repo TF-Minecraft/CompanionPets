@@ -29,6 +29,7 @@ public final class PetRuntime {
     private final NamespacedKey petKey;
     private final NamespacedKey toyKey;
     private final Random random = new Random();
+    private final PetVoice voice = new PetVoice(this);
     private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
 
     public PetRuntime(
@@ -63,6 +64,12 @@ public final class PetRuntime {
 
     public void config(CompanionConfig config) {
         this.config = java.util.Objects.requireNonNull(config);
+        voice.clear();
+        for (Pet pet : store.all()) {
+            Entity entity = entity(pet);
+            var type = config.type(pet.typeId());
+            if (entity != null && type != null && entity.getType() == type.entity()) bodies.configure(entity, type);
+        }
         applyDefaultTricks();
     }
 
@@ -100,6 +107,8 @@ public final class PetRuntime {
         return random;
     }
 
+    public PetVoice voice() { return voice; }
+
     public boolean behaves(Pet pet, net.tfminecraft.companionpets.config.PetBehavior behavior) {
         var type = config.type(pet.typeId());
         return type != null && type.behaves(behavior);
@@ -120,7 +129,7 @@ public final class PetRuntime {
     public boolean followingAllowed(Pet pet, Player owner) {
         if (owner == null || !owner.isOnline() || distance(owner, pet) == Double.POSITIVE_INFINITY) return false;
         if (suspendedFollowing.contains(pet.id())
-                && distance(owner, pet) <= Math.min(config.ownerNearRadius(), config.followTeleportBlocks()))
+                && distance(owner, pet) <= Math.min(config.ownerNearRadius(), 12))
             suspendedFollowing.remove(pet.id());
         return !suspendedFollowing.contains(pet.id());
     }

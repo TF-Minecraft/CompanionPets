@@ -13,7 +13,7 @@ import org.junit.jupiter.api.*;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.entity.WolfMock;
-import org.mockbukkit.mockbukkit.entity.FrogMock;
+import org.mockbukkit.mockbukkit.entity.CatMock;
 import org.mockbukkit.mockbukkit.block.BlockMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
 import net.tfminecraft.companionpets.body.Bodies;
@@ -31,7 +31,7 @@ class TestPetSpawnTest {
     private PlayerMock player;
 
     @BeforeEach void setup() throws Exception {
-        var server = MockBukkit.mock();
+        var server = MockBukkit.mock(new net.tfminecraft.companionpets.testutil.GoalServerMock());
         JavaPlugin plugin = MockBukkit.createMockPlugin();
         var world = new WorldMock() {
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
@@ -40,8 +40,8 @@ class TestPetSpawnTest {
                     body = new WolfMock(server, java.util.UUID.randomUUID()) {
                         @Override public void setRemoveWhenFarAway(boolean remove) { }
                     };
-                } else if (type == org.bukkit.entity.Frog.class) {
-                    body = new FrogMock(server, java.util.UUID.randomUUID()) {
+                } else if (type == org.bukkit.entity.Cat.class) {
+                    body = new CatMock(server, java.util.UUID.randomUUID()) {
                         @Override public void setRemoveWhenFarAway(boolean remove) { }
                     };
                 } else return super.spawn(at, type);
@@ -69,8 +69,8 @@ class TestPetSpawnTest {
                   follow: {fallback-text: Custom follow trick}
                 pets:
                   wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}
-                  frog:
-                    entity: FROG
+                  performer:
+                    entity: CAT
                     egg: FROG_SPAWN_EGG
                     tricks: [come, stay, lay, jump, tongue, croak, missing, salute]
                 """);
@@ -78,7 +78,7 @@ class TestPetSpawnTest {
         PetVisual visual = new PetVisual() {
             @Override public void apply(Entity entity, PetTypeDef type) { }
             @Override public boolean hasClip(Entity entity, PetTypeDef type, String clip) {
-                return type.id().equals("frog") && Set.of("tongue", "croak").contains(clip);
+                return type.id().equals("performer") && Set.of("tongue", "croak").contains(clip);
             }
         };
         var petKey = new NamespacedKey(plugin, "pet");
@@ -97,11 +97,11 @@ class TestPetSpawnTest {
     private Pet onlyPet() { return runtime.store().all().iterator().next(); }
 
     @Test void choosesConfiguredTypeAndLearnsCompatibleCustomTricks() {
-        assertTrue(actions.spawnTestPet(player, "FROG", "  Rana   de prueba "));
+        assertTrue(actions.spawnTestPet(player, "PERFORMER", "  Michi   de prueba "));
         Pet pet = onlyPet();
-        assertEquals("frog", pet.typeId());
-        assertEquals("Rana de prueba", pet.name());
-        assertEquals(EntityType.FROG, runtime.entity(pet).getType());
+        assertEquals("performer", pet.typeId());
+        assertEquals("Michi de prueba", pet.name());
+        assertEquals(EntityType.CAT, runtime.entity(pet).getType());
         for (String word : Set.of("follow", "stay", "lay", "jump", "tongue", "croak", "salute")) {
             assertEquals(100, pet.progress(Trick.valueOf(word)));
             assertEquals(Trick.valueOf(word), pet.trickFor(word));
@@ -120,6 +120,22 @@ class TestPetSpawnTest {
         assertEquals(before, player.getWorld().getEntities().size());
     }
 
+    @Test void changingConfiguredBaseReplacesBodyAndPreservesPetIdentityAndCare() {
+        assertTrue(actions.spawnTestPet(player, "wolf", "Toby"));
+        Pet pet = onlyPet(); Entity original = runtime.entity(pet);
+        pet.need(net.tfminecraft.companionpets.pet.Need.HUNGER, 42);
+        pet.progress(Trick.SPEAK, 71); pet.bindWord("hello", Trick.SPEAK);
+        var yaml = new YamlConfiguration(); yaml.set("pets.wolf.entity", "CAT"); yaml.set("pets.wolf.egg", "WOLF_SPAWN_EGG");
+        runtime.config(CompanionConfig.load(runtime.plugin(), yaml)); actions.reattach(original);
+        assertSame(pet, onlyPet()); assertFalse(original.isValid());
+        assertEquals(EntityType.CAT, runtime.entity(pet).getType());
+        assertEquals(42, pet.need(net.tfminecraft.companionpets.pet.Need.HUNGER));
+        assertEquals(71, pet.progress(Trick.SPEAK)); assertEquals(Trick.SPEAK, pet.trickFor("hello"));
+        assertEquals(player.getUniqueId(), ((org.bukkit.entity.Tameable) runtime.entity(pet)).getOwner().getUniqueId());
+        actions.reattach(original); assertEquals(EntityType.CAT, runtime.entity(pet).getType());
+        assertEquals(1, runtime.store().all().size(), "Late old body never duplicates its replacement");
+    }
+
     @Test void followAliasDoesNotOverwriteConfiguredCustomTrick() {
         assertTrue(actions.spawnTestPet(player, "wolf", "Test"));
         Pet pet = onlyPet();
@@ -129,10 +145,10 @@ class TestPetSpawnTest {
     }
 
     @Test void defaultsNameAndHonorsActivePetLimit() {
-        assertTrue(actions.spawnTestPet(player, "frog", ""));
-        assertEquals("frog", onlyPet().name());
+        assertTrue(actions.spawnTestPet(player, "performer", ""));
+        assertEquals("performer", onlyPet().name());
         assertTrue(actions.spawnTestPet(player, "wolf", "Second"));
-        assertFalse(actions.spawnTestPet(player, "frog", "Third"));
+        assertFalse(actions.spawnTestPet(player, "performer", "Third"));
         assertEquals(2, runtime.store().all().size());
     }
 

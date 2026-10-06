@@ -23,7 +23,8 @@ plugins directory is not writable.
 Look for `COMPANIONPETS_INTEGRATION PASS checks=...` or
 `COMPANIONPETS_INTEGRATION FAIL` in the log. Checks use the active config: every
 type's body, egg identity, model attachment and available mapped/custom clips;
-native AI pause/resume and frozen needs; adoption and body restoration without
+native owner-follow goals and movement without plugin follow commands,
+audio-profile muting, native AI pause/resume and frozen needs; adoption and body restoration without
 losing learning; persistent postures and default learned Follow;
 modeled wolves starting shake with the native shake clock; duplicate removal,
 owner/staff Pet House, confirmed

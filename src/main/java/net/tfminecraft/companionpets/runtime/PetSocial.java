@@ -265,10 +265,9 @@ final class PetSocial {
                 && runtime.behaves(pet, PetBehavior.SOCIAL_PROTEST)) { growl(body); e.positive = false; }
         else if (mood.intensity() >= 0.2 && mood.reaction() != PetMeetingMood.Reaction.GUARD
                 && runtime.behaves(pet, PetBehavior.SOCIAL_VOCALIZING)) {
-            Sound sound = body.getType() == org.bukkit.entity.EntityType.WOLF ? Sound.ENTITY_WOLF_WHINE : PetFx.ambientSound(body);
-            if (sound != null) {
+            if (runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.SOCIAL,
+                    1, (float) (.95 + mood.intensity() * .15))) {
                 runtime.visual().play(body, runtime.config().type(pet.typeId()), "SPEAK");
-                body.getWorld().playSound(body.getLocation(), sound, 0.3f, (float) (1.05 + mood.intensity() * 0.15));
             }
         }
     }
@@ -309,11 +308,7 @@ final class PetSocial {
     private void growl(Mob body) {
         Pet pet = runtime.byEntity(body);
         if (pet != null) runtime.visual().play(body, runtime.config().type(pet.typeId()), "SPEAK");
-        Sound sound = switch (body.getType()) {
-            case WOLF -> Sound.ENTITY_WOLF_GROWL; case CAT -> Sound.ENTITY_CAT_HISS;
-            case FOX -> Sound.ENTITY_FOX_AGGRO; default -> PetFx.ambientSound(body);
-        };
-        if (sound != null) body.getWorld().playSound(body.getLocation(), sound, 0.45f, 0.9f);
+        runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.PROTEST);
     }
 
     private boolean ownersNearby(Pet a, Mob bodyA, Pet b, Mob bodyB) {

@@ -37,7 +37,6 @@ public final class CompanionConfig {
     public double hearingRadius() { return hearingRadius; }
     private final double hearingRadius;
     private final double awayRate;
-    private final double followTeleportBlocks;
     private final double cryIntervalSeconds;
     private final ItemRef kennel;
     private final Material kennelBlock;
@@ -67,7 +66,6 @@ public final class CompanionConfig {
             double ownerNearRadius,
             double hearingRadius,
             double awayRate,
-            double followTeleportBlocks,
             double cryIntervalSeconds,
             ItemRef kennel,
             Material kennelBlock,
@@ -88,7 +86,6 @@ public final class CompanionConfig {
         if (hearingRadius <= 0 || hearingRadius > 64) throw new IllegalArgumentException("orders.hearing-radius must be greater than 0 and at most 64");
         this.hearingRadius = hearingRadius;
         this.awayRate = awayRate;
-        this.followTeleportBlocks = followTeleportBlocks;
         this.cryIntervalSeconds = cryIntervalSeconds;
         this.kennel = kennel;
         this.kennelBlock = kennelBlock;
@@ -176,7 +173,8 @@ public final class CompanionConfig {
         ConfigurationSection presence = config.getConfigurationSection("presence");
         double near = num(logger, presence, "owner-near-radius", 32);
         double away = num(logger, presence, "away-rate", 0.25);
-        double teleport = num(logger, presence, "follow-teleport-blocks", 16);
+        if (presence != null && presence.contains("follow-teleport-blocks"))
+            logger.warning("presence.follow-teleport-blocks is obsolete; native owner-follow controls teleportation");
         double cry = num(logger, presence, "cry-interval-seconds", 45);
 
         ConfigurationSection items = PetItems.explicitSection(config, "items");
@@ -215,7 +213,6 @@ public final class CompanionConfig {
                 near,
                 num(logger, config.getConfigurationSection("orders"), "hearing-radius", 12),
                 away,
-                teleport,
                 cry,
                 kennel,
                 kennelBlock,
@@ -267,6 +264,14 @@ public final class CompanionConfig {
             }
             if (entity == null && (mythicMob == null || mythicMob.isBlank())) {
                 logger.warning("Skipping pet type " + id + " because it has no entity or mythic-mob");
+                continue;
+            }
+            if (entity == null) {
+                entity = EntityType.WOLF;
+                logger.warning("Pet " + id + ": declare entity: WOLF or CAT for MythicMobs; assuming WOLF");
+            }
+            if (!PetBase.supported(entity)) {
+                logger.warning("Skipping pet type " + id + ": native following requires entity WOLF or CAT; found " + entity);
                 continue;
             }
             ItemRef egg = parseItem(ItemRef.yamlToken(section.get("egg", "EGG")), logger);
@@ -338,7 +343,8 @@ public final class CompanionConfig {
                     eggCustomModelData,
                     sexMode,
                     appearance,
-                    petItems, tricks, defaults, PetBehavior.read(section, entity, logger)));
+                    petItems, tricks, defaults, PetBehavior.read(section, entity, logger),
+                    PetSounds.read(section, entity, logger), section.getBoolean("native-combat", false)));
         }
         return Collections.unmodifiableMap(types);
     }
@@ -459,10 +465,6 @@ public final class CompanionConfig {
 
     public double awayRate() {
         return awayRate;
-    }
-
-    public double followTeleportBlocks() {
-        return followTeleportBlocks;
     }
 
     public double cryIntervalSeconds() {

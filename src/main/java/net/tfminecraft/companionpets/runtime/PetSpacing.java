@@ -9,7 +9,7 @@ import net.tfminecraft.companionpets.pet.*;
 final class PetSpacing {
     private PetSpacing() { }
     static Location toyFront(PetRuntime runtime, Pet pet, Player owner) {
-        int slot = Math.max(0, formation(runtime, pet, owner, true).slot());
+        int slot = Math.max(0, formation(runtime, pet, owner).slot());
         double yaw = Math.toRadians(owner.getLocation().getYaw());
         double width = runtime.entity(pet) instanceof Mob body ? body.getWidth() : 0.6;
         double lateral = switch (slot % 3) { case 1 -> -1; case 2 -> 1; default -> 0; } * Math.max(1.35, width + 0.5);
@@ -36,31 +36,14 @@ final class PetSpacing {
         }
         return true;
     }
-    static Location follow(PetRuntime runtime, Pet pet, Player owner) {
-        Formation formation = formation(runtime, pet, owner, false);
-        if (formation.count() <= 1) return owner.getLocation();
-        int slot = formation.slot();
-        if (slot < 0) return owner.getLocation();
-        double angle = Math.toRadians(owner.getLocation().getYaw()) + Math.PI
-                + 2 * Math.PI * slot / Math.max(4, formation.count());
-        double radius = 2.2 + 0.6 * (slot / 6);
-        for (int attempt = 0; attempt < 4; attempt++) {
-            double candidate = angle + attempt * 0.3;
-            Location point = PetGreetings.safeGround(owner.getLocation().add(
-                    -Math.sin(candidate) * radius, 0, Math.cos(candidate) * radius));
-            if (point != null && free(runtime, pet, point)) return point;
-        }
-        return null;
-    }
-
     private record Formation(int count, int slot) { }
 
-    private static Formation formation(PetRuntime runtime, Pet pet, Player owner, boolean toy) {
+    private static Formation formation(PetRuntime runtime, Pet pet, Player owner) {
         int count = 0, slot = 0;
         boolean included = false;
         for (Pet other : runtime.store().all()) {
             if (!other.ownerId().equals(pet.ownerId()) || other.stored() || other.dead()
-                    || (toy ? other.activity() != Activity.TOY_FOCUS : other.order() != PetOrder.FOLLOW || other.staying())
+                    || other.activity() != Activity.TOY_FOCUS
                     || !(runtime.entity(other) instanceof Mob body) || !body.getWorld().equals(owner.getWorld())) continue;
             count++;
             if (other.id().compareTo(pet.id()) < 0) slot++;

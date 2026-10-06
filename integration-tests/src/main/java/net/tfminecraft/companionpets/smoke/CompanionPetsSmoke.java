@@ -44,7 +44,9 @@ public final class CompanionPetsSmoke extends JavaPlugin {
         }
     }
     private final Set<org.bukkit.Chunk> forcedChunks = new HashSet<>();
+    private final List<org.bukkit.block.BlockState> temporaryFloor = new ArrayList<>();
     private record Held(Mob body, Location origin, int ticks, String description) { }
+    private record NativeFollower(Mob body, Location origin, Location ownerAt, String type) { }
     private void check(boolean ok, String message) { if (!ok) throw new AssertionError(message); checks++; }
     @Override public void onEnable() { Bukkit.getScheduler().runTaskLater(this, this::run, 240); }
 
@@ -72,6 +74,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
             var tests = new net.tfminecraft.companionpets.staff.TestCommands(runtime, actions, staff);
             UUID owner = UUID.randomUUID();
             var held = new ArrayList<Held>();
+            var followers = new ArrayList<NativeFollower>();
             for (var type : config.types().values()) {
                 var oldIds = new HashSet<UUID>(); store.all().forEach(p -> oldIds.add(p.id()));
                 try {
@@ -97,6 +100,11 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                 trackedPets.add(pet.id()); store.add(pet);
                 check(pet.id().equals(runtime.bodies().readId(body)), type.id() + " tagged identity");
                 check(((Mob) body).isAware(), type.id() + " ordinary pet has native AI");
+                check(Bukkit.getMobGoals().hasGoal((org.bukkit.entity.Tameable) body,
+                        com.destroystokyo.paper.entity.ai.VanillaGoal.FOLLOW_OWNER), type.id() + " retains native FollowOwner");
+                check(Bukkit.getMobGoals().getGoal((Mob) body, com.destroystokyo.paper.entity.ai.GoalKey.of(Mob.class,
+                        new NamespacedKey(this, "follow_navigation"))) == null, type.id() + " has no custom follow goal");
+                check(body.isSilent() == !type.sounds().nativeSounds(), type.id() + " audio profile controls inherited body sound");
                 check(type.matchesEgg(type.eggIcon()), type.id() + " egg identity");
                 var orderOwner = ownerFixture(owner, at);
                 for (Trick posture : List.of(Trick.SIT, Trick.STAY, Trick.LAY)) {
@@ -104,7 +112,7 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                     String word = posture.name().toLowerCase(Locale.ROOT); pet.bindWord(word, posture); pet.progress(posture, 100);
                     seedMovement((Mob) body);
                     actions.onChat(orderOwner, pet.name() + " " + word);
-                    check(pet.order().name().equals(posture.name()) && !((Mob) body).isAware(), type.id() + " named " + word + " holds native AI");
+                    check(pet.order().name().equals(posture.name()) && postureHeld((Mob) body, posture), type.id() + " named " + word + " holds movement with appropriate head tracking");
                     checkStopped((Mob) body, type.id() + " " + word);
                     if (posture == Trick.STAY && body instanceof org.bukkit.entity.Tameable tameable) {
                         var far = at.clone().add(40, 0, 0); far.setY(world.getHighestBlockYAt(far) + 1);
@@ -123,13 +131,13 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                         check(body.getLocation().distanceSquared(origin) < 0.0001 && !((org.bukkit.entity.Sittable) body).isSitting(), type.id() + " Stay remains standing at its original position");
                     }
                     new PetTicker(runtime, actions).run();
-                    check(pet.order().name().equals(posture.name()) && !((Mob) body).isAware(), type.id() + " posture persists at full energy");
+                    check(pet.order().name().equals(posture.name()) && postureHeld((Mob) body, posture), type.id() + " posture persists at full energy");
                     if (type.allowsTrick(Trick.COME)) {
                         pet.bindWord("come", Trick.COME); pet.progress(Trick.COME, 100);
                         actions.onChat(orderOwner, pet.name() + " come");
                         check(pet.order() == PetOrder.FOLLOW && pet.activity() == Activity.ATTENDING && ((Mob) body).isAware(), type.id() + " Come gets up for a temporary trip");
                         new PetTicker(runtime, actions).run();
-                        check(pet.order().name().equals(posture.name()) && !((Mob) body).isAware(), type.id() + " Come restores posture if owner disconnects");
+                        check(pet.order().name().equals(posture.name()) && postureHeld((Mob) body, posture), type.id() + " Come restores posture if owner disconnects");
                         checkStopped((Mob) body, type.id() + " interrupted Come " + word);
                     }
                     actions.onChat(orderOwner, "follow " + pet.name());
@@ -215,6 +223,35 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                     actions.onChat(orderOwner, resting.name() + " " + word);
                     held.add(new Held(mob, mob.getLocation(), nativeTicks(mob), type.id() + " " + word));
                 }
+                // Use a native living owner so these isolated checks need no connected player.
+                // FollowOwner accepts a LivingEntity; the live plugin still tames pets to their actual player.
+                Location origin = nativeFollowPlatform(at.clone().add(20 + followers.size() * 14, 0, 20));
+                Location ownerAt = origin.clone().add(10.5, 0, 0);
+                var followPet = new Pet(UUID.randomUUID(), owner, type.id(), "Native follow " + type.id(), PetSex.MALE);
+                // Leave this probe out of the store: the safety ticker correctly pauses
+                // managed pets when their real player owner is offline.
+                Mob follower = (Mob) runtime.bodies().spawn(followPet, type, origin, null);
+                entities.add(follower); runtime.remember(followPet, follower);
+                follower.setCollidable(false);
+                for (var chunk : List.of(origin.getChunk(), ownerAt.getChunk()))
+                    if (!chunk.isForceLoaded()) { chunk.setForceLoaded(true); forcedChunks.add(chunk); }
+                var nativeOwnerBody = world.spawn(ownerAt, org.bukkit.entity.ArmorStand.class, stand -> {
+                    stand.setVisible(false); stand.setMarker(true); stand.setGravity(false);
+                    stand.setInvulnerable(true); stand.setPersistent(false);
+                }); entities.add(nativeOwnerBody);
+                var nativeOwner = nativeOwnerBody.getClass().getMethod("getHandle").invoke(nativeOwnerBody);
+                var nativeFollower = handle(follower);
+                // Entity activation needs nearby players; this isolated test has none.
+                nativeFollower.getClass().getField("activatedTick").setLong(nativeFollower, Long.MAX_VALUE);
+                nativeFollower.getClass().getMethod("setOwner", Class.forName("net.minecraft.world.entity.LivingEntity"))
+                        .invoke(nativeFollower, nativeOwner);
+                var nativeGoal = Bukkit.getMobGoals().getGoal((org.bukkit.entity.Tameable) follower,
+                        com.destroystokyo.paper.entity.ai.VanillaGoal.FOLLOW_OWNER);
+                check(nativeGoal.shouldActivate(), type.id() + " native following activates at normal distance");
+                nativeGoal.start(); nativeGoal.tick();
+                // Fresh spawns are not on the ground until their first physics tick;
+                // let the real selector calculate a route when navigation becomes available.
+                followers.add(new NativeFollower(follower, origin, ownerAt, type.id()));
             }
             var toyType = config.type("wolf");
             check(toyType != null && !toyType.toys().isEmpty(), "Wolf test toy configured");
@@ -254,6 +291,12 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                         check(dx * dx + dz * dz < 0.0025, sample.description() + " remains in place after 20 native ticks");
                         checkStopped(sample.body(), sample.description() + " after native ticks");
                     }
+                    for (NativeFollower follower : followers) {
+                        var after = follower.body().getLocation();
+                        check(after.distanceSquared(follower.ownerAt()) + .25 < follower.origin().distanceSquared(follower.ownerAt()),
+                                follower.type() + " actually approaches its native owner without plugin path commands: "
+                                        + follower.origin() + " -> " + after + ", grounded=" + follower.body().isOnGround());
+                    }
                     checkedTypes = new LinkedHashSet<>(config.types().keySet());
                     checksComplete = true;
                 } catch (Throwable ex) { getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL", ex); }
@@ -265,6 +308,25 @@ public final class CompanionPetsSmoke extends JavaPlugin {
     }
 
     private static Object handle(Mob body) throws Exception { return body.getClass().getMethod("getHandle").invoke(body); }
+    private Location nativeFollowPlatform(Location start) {
+        var world = start.getWorld();
+        int floor = world.getMinHeight();
+        for (int x = 0; x <= 12; x++) for (int z = -1; z <= 1; z++)
+            floor = Math.max(floor, world.getHighestBlockYAt(start.getBlockX() + x, start.getBlockZ() + z) + 3);
+        if (floor >= world.getMaxHeight() - 3) throw new AssertionError("No airspace for isolated native follow platform");
+        for (int x = 0; x <= 12; x++) for (int z = -1; z <= 1; z++) {
+            var block = world.getBlockAt(start.getBlockX() + x, floor, start.getBlockZ() + z);
+            check(block.getType().isAir(), "Temporary native follow floor only replaces air");
+            temporaryFloor.add(block.getState()); block.setType(org.bukkit.Material.STONE, false);
+        }
+        return new Location(world, start.getBlockX() + .5, floor + 1, start.getBlockZ() + .5);
+    }
+    private boolean postureHeld(Mob body, Trick posture) {
+        if (posture == Trick.STAY) return !body.isAware();
+        var goal = Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(Mob.class,
+                new NamespacedKey(this, "posture_navigation")));
+        return body.isAware() && goal != null && goal.shouldActivate();
+    }
     private static int nativeTicks(Mob body) throws Exception { var nativeBody = handle(body); return nativeBody.getClass().getField("tickCount").getInt(nativeBody); }
     private static void seedMovement(Mob body) throws Exception {
         var nativeBody = handle(body); var type = nativeBody.getClass();
@@ -353,6 +415,14 @@ public final class CompanionPetsSmoke extends JavaPlugin {
                 getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL: store shutdown", ex);
             }
         }
+        for (var state : temporaryFloor) {
+            try { if (!state.update(true, false)) throw new IllegalStateException("Could not restore temporary test floor"); }
+            catch (Throwable ex) {
+                cleanupSucceeded = false;
+                getLogger().log(java.util.logging.Level.SEVERE, "COMPANIONPETS_INTEGRATION FAIL: floor cleanup", ex);
+            }
+        }
+        temporaryFloor.clear();
         for (var chunk : forcedChunks) {
             try { chunk.setForceLoaded(false); }
             catch (Throwable ex) {
