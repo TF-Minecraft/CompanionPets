@@ -4,8 +4,8 @@
 
 CompanionPets gives players a companion that lives beyond a single entity. Each
 pet hatches from an egg with its own name, sex, personality, and favourite toy,
-and keeps its needs, bond, and learned tricks between summons. Vanilla wolves
-and cats need no model plugin; ModelEngine, MythicMobs, MMOItems, and
+and keeps its needs, bond, and learned tricks between summons. Vanilla wolves,
+cats, and foxes need no model plugin; ModelEngine, MythicMobs, MMOItems, and
 ItemsAdder are optional.
 
 ## Features
@@ -15,9 +15,7 @@ ItemsAdder are optional.
 - **Care and needs** — hunger, energy, cleanliness, mood, and health change with
   where the owner is. Anyone nearby can feed, clean, and treat a pet.
 - **Training by voice** — teach tricks with treats and spoken words, then give
-  orders by looking at a pet or saying its name. During training, pets stay still
-  and watch the trainer, keeping the optional head_tilt gesture throughout training;
-  Come and swimming to safety can still move them.
+  orders by looking at a pet or saying its name.
 - **Persistent orders** — Sit, Stay, and Lay hold in place and survive
   restarts, while Follow and Come bring a pet back to its owner.
 - **Play and social life** — pets anticipate held toys, lose interest when play
@@ -30,29 +28,6 @@ ItemsAdder are optional.
   and audit every staff intervention.
 - **Durable saves** — atomic saves, a deletion journal, and recovery for pets left
   outside across restarts.
-
-Normal movement uses the wolf or cat's native owner-follow, wandering and
-catch-up teleportation. The plugin takes control for explicit interactions,
-games, training, greetings and rest, then releases movement to vanilla AI.
-It no longer computes follow formations or idle exploration routes.
-
-Only `entity: WOLF` and `entity: CAT` are supported in this version. Other saved
-types keep their records, learning and needs; loaded bodies remain paused until
-their type is supported again. Removing a type does not delete its pets. Normal
-pace and follow distance are vanilla; `presence.follow-teleport-blocks` and the
-old `roam` behavior no longer control movement. The remaining `roaming` settings
-only affect interaction timing. Model animations still track actual movement.
-
-Per-type `sounds` profiles configure voices separately from movement and
-behaviors, including resource-pack keys, volume, pitch and minimum intervals.
-Omitting `sounds` preserves native audio; adding a profile silences inherited
-body audio and supplies the configured voice. `sounds: false` silences voices.
-See the examples in [config.yml](src/main/resources/config.yml). Native combat
-is disabled by default and can be enabled with `native-combat: true`.
-
-This removes plugin follow/idle path requests; vanilla AI, model updates and
-interaction checks still use server resources. No CPU saving percentage has
-been measured.
 
 ## Documentation
 
