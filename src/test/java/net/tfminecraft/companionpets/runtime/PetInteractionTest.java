@@ -1755,16 +1755,6 @@ class PetInteractionTest {
         assertEquals(PetOrder.FOLLOW, pet.order()); assertTrue(body.isAware());
     }
 
-    // MockBukkit cannot hide display entities, so only the card's content is checked here.
-    @Test void statsCardListsEveryNeedAndTheBond() {
-        pet.need(Need.HUNGER, 10);
-        String text = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-                .serialize(net.tfminecraft.companionpets.gui.StatLook.card(pet));
-        assertEquals(6, text.lines().count());
-        for (String label : new String[]{"Hunger", "Mood", "Energy", "Cleanliness", "Health", "Bond"})
-            assertTrue(text.contains(label), label);
-    }
-
     @Test void petsThatCannotComeStillLookAtWhoeverSaysTheirName() {
         var ticker = new PetTicker(runtime, actions);
         for (PetOrder order : new PetOrder[]{PetOrder.STAY, PetOrder.SIT, PetOrder.LAY}) {

@@ -45,8 +45,6 @@ import net.tfminecraft.companionpets.runtime.PetRuntime;
 import net.tfminecraft.companionpets.store.PetStore;
 
 public final class PetListener implements Listener {
-    /** Long enough to read the stats card after an interaction. */
-    private static final long STAT_CARD_TICKS = 100L;
     private final PetRuntime runtime;
     private final PetActions actions;
     private final Map<UUID, Click> lastClicks = new HashMap<>();
@@ -88,11 +86,8 @@ public final class PetListener implements Listener {
         Click previous = lastClicks.get(player.getUniqueId());
         int tick = Bukkit.getCurrentTick();
         if (previous != null && previous.tick() == tick && previous.entity().equals(entity.getUniqueId())) return true;
-        Pet pet = runtime.byEntity(entity);
         boolean handled = actions.useOnPet(player, entity, player.getInventory().getItemInMainHand());
         if (handled) lastClicks.put(player.getUniqueId(), new Click(entity.getUniqueId(), tick));
-        if (pet != null && pet.ownerId().equals(player.getUniqueId()) && !pet.stored() && !pet.dead())
-            actions.holograms().card(player, entity, () -> net.tfminecraft.companionpets.gui.StatLook.card(pet), STAT_CARD_TICKS);
         return handled;
     }
 
