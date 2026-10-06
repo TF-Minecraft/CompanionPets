@@ -193,6 +193,16 @@ public final class ModelHook implements PetVisual {
         }
     }
 
+    @Override public void animateTails() {
+        for (Session session : sessions.values()) {
+            if (!session.attachment.wagging()) continue;
+            try { session.attachment.advanceTail(); }
+            catch (RuntimeException ex) {
+                if (warnedTail.add(session.type)) logger.log(Level.WARNING, "Pet " + session.type + ": tail gesture unavailable", ex);
+            }
+        }
+    }
+
     @Override
     public void remove(Entity entity) {
         if (entity == null) return;

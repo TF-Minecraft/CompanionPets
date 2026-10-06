@@ -199,7 +199,8 @@ final class ModelEngineBridge {
         private Boolean previousRotationLock;
         private final Map<Object, TailMotion> tails = new java.util.IdentityHashMap<>();
         private boolean checkedTails;
-        private long wagStartedAt;
+        private double tailHz, tailPhase;
+        private long tailMovedAt;
         private TailAccess tailAccess;
 
         Attachment(Entity entity, Object owner, Object model, String id, Map<PetAnimation, Clip> clips, Map<?, ?> available) {
@@ -266,7 +267,8 @@ final class ModelEngineBridge {
             }
             if (!checkedTails) {
                 checkedTails = true;
-                wagStartedAt = System.nanoTime();
+                tailPhase = 0;
+                tailMovedAt = System.nanoTime();
                 Map<?, ?> bones = (Map<?, ?>) call(access.bones, model);
                 for (Object bone : bones.values()) {
                     String name = (String) call(access.boneId, bone);
@@ -281,10 +283,22 @@ final class ModelEngineBridge {
                     call(access.setAnimator, bone, animator);
                 }
             }
-            float angle = TailWag.angle(System.nanoTime() - wagStartedAt, hz);
+            tailHz = hz;
+            advanceTail();
+        }
+
+        boolean wagging() { return !tails.isEmpty(); }
+
+        // ModelEngine renders every tick; sampling a 4-5 Hz wag less often makes it crawl and stutter.
+        void advanceTail() {
+            if (tails.isEmpty()) return;
+            long now = System.nanoTime();
+            tailPhase = TailWag.advance(tailPhase, now - tailMovedAt, tailHz);
+            tailMovedAt = now;
+            float angle = TailWag.angle(tailPhase);
             for (TailMotion tail : tails.values()) {
-                call(access.setRotation, tail.rotation, tail.base);
-                call(access.rotateY, tail.rotation, angle);
+                call(tailAccess.setRotation, tail.rotation, tail.base);
+                call(tailAccess.rotateY, tail.rotation, angle);
             }
         }
 

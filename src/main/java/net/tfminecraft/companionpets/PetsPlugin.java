@@ -44,6 +44,7 @@ public class PetsPlugin extends JavaPlugin {
     private BukkitTask ticker;
     private BukkitTask autosave;
     private BukkitTask visualTicker;
+    private BukkitTask tailTicker;
     private PetVisual visual;
     private PetRuntime runtime;
     private PetListener petListener;
@@ -95,6 +96,7 @@ public class PetsPlugin extends JavaPlugin {
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
         visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 1L, PetVisualTicker.PERIOD_TICKS);
+        tailTicker = Bukkit.getScheduler().runTaskTimer(this, visual::animateTails, 1L, 1L);
         autosave = Bukkit.getScheduler().runTaskTimer(this, store::save, AUTOSAVE_TICKS, AUTOSAVE_TICKS);
         for (org.bukkit.World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {
@@ -113,6 +115,7 @@ public class PetsPlugin extends JavaPlugin {
             }
         }
         if (visualTicker != null) visualTicker.cancel();
+        if (tailTicker != null) tailTicker.cancel();
         if (ticker != null) {
             ticker.cancel();
         }
