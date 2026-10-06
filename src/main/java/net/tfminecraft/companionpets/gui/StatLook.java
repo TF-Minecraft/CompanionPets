@@ -7,6 +7,8 @@ import net.kyori.adventure.text.format.TextDecoration;
 
 import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.NeedBand;
+import net.tfminecraft.companionpets.pet.Pet;
+import net.tfminecraft.companionpets.text.PetTexts;
 
 public final class StatLook {
     private static final int SEGMENTS = 10;
@@ -67,6 +69,17 @@ public final class StatLook {
             case CLEANLINESS -> pick(band, "Spotless", "Scruffy", "Filthy");
             case HEALTH -> pick(band, "Healthy", "Weak", "In danger");
         };
+    }
+
+    /** The needs and bond card shown above a pet for a few seconds after its owner interacts. */
+    public static Component card(Pet pet) {
+        TextComponent.Builder card = Component.text();
+        for (Need need : Need.values()) {
+            card.append(bar(pet.need(need)))
+                    .append(Component.text(" " + PetTexts.needName(need), theme(need)))
+                    .append(Component.newline());
+        }
+        return card.append(bar(pet.bond(), BOND)).append(Component.text(" Bond", BOND)).build();
     }
 
     public static String bondState(double bond) {
