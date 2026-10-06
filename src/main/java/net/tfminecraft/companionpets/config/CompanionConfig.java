@@ -47,6 +47,8 @@ public final class CompanionConfig {
     private final Map<Trick, CustomTrick> customTricks;
     private final BellySettings belly;
     public BellySettings belly() { return belly; }
+    private final GreetingSettings greeting;
+    public GreetingSettings greeting() { return greeting; }
     public CustomTrick customTrick(Trick trick) { return customTricks.get(trick); }
     public java.util.List<Trick> tricks() {
         var result = new ArrayList<>(List.of(Trick.values()));
@@ -73,7 +75,8 @@ public final class CompanionConfig {
             PetItems items,
             Map<String, PetTypeDef> types,
             Map<Trick, CustomTrick> customTricks,
-            BellySettings belly) {
+            BellySettings belly,
+            GreetingSettings greeting) {
         this.care = care;
         this.play = play;
         this.training = training;
@@ -94,6 +97,7 @@ public final class CompanionConfig {
         this.types = types;
         this.customTricks = customTricks;
         this.belly = belly;
+        this.greeting = greeting;
     }
 
     public static CompanionConfig load(JavaPlugin plugin) {
@@ -136,7 +140,10 @@ public final class CompanionConfig {
         ConfigurationSection play = config.getConfigurationSection("play");
         PlaySettings playSettings = new PlaySettings(
                 num(logger, play, "throw-speed-low", PlaySettings.defaults().throwSpeedLow()),
-                num(logger, play, "throw-speed-high", PlaySettings.defaults().throwSpeedHigh()));
+                num(logger, play, "throw-speed-high", PlaySettings.defaults().throwSpeedHigh()),
+                num(logger, play, "toy-attention-seconds", PlaySettings.defaults().toyAttentionSeconds()),
+                num(logger, play, "favorite-toy-attention-seconds", PlaySettings.defaults().favoriteToyAttentionSeconds()),
+                num(logger, play, "fetch-speed-multiplier", PlaySettings.defaults().fetchSpeedMultiplier()));
 
         ConfigurationSection training = config.getConfigurationSection("training");
         TrainingSettings trainingDefaults = TrainingSettings.defaults();
@@ -216,7 +223,8 @@ public final class CompanionConfig {
                 interactionItems,
                 types,
                 custom,
-                BellySettings.read(config.getConfigurationSection("moments.belly-up"), logger));
+                BellySettings.read(config.getConfigurationSection("moments.belly-up"), logger),
+                GreetingSettings.read(config.getConfigurationSection("moments.greeting"), logger));
     }
 
     private static List<Trick> readDefaultTricks(ConfigurationSection section, String key, List<Trick> inherited, Map<Trick, CustomTrick> custom) {
@@ -330,7 +338,7 @@ public final class CompanionConfig {
                     eggCustomModelData,
                     sexMode,
                     appearance,
-                    petItems, tricks, defaults));
+                    petItems, tricks, defaults, PetBehavior.read(section, entity, logger)));
         }
         return Collections.unmodifiableMap(types);
     }

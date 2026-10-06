@@ -8,6 +8,9 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.LivingEntity;
+import net.tfminecraft.companionpets.integration.PetHeadRotation;
+import net.tfminecraft.companionpets.visual.PetVisual;
 
 import com.destroystokyo.paper.entity.ai.Goal;
 import com.destroystokyo.paper.entity.ai.GoalKey;
@@ -21,6 +24,10 @@ final class PetLookGoal implements Goal<Mob> {
     private Entity target;
     private Location point;
     private int expiresAt;
+    private int targetExpiresAt;
+    private Float restingYaw;
+    private RestingLook.Angles restingAngles;
+    private PetVisual visual;
 
     PetLookGoal(Mob body) { this.body = body; }
 
@@ -35,16 +42,36 @@ final class PetLookGoal implements Goal<Mob> {
     void track(Entity target) {
         this.target = target;
         point = null;
-        expiresAt = body.getTicksLived() + HOLD_TICKS;
+        targetExpiresAt = expiresAt = body.getTicksLived() + HOLD_TICKS;
     }
 
     void track(Location point) {
         target = null;
         this.point = point.clone();
+        targetExpiresAt = expiresAt = body.getTicksLived() + HOLD_TICKS;
+    }
+
+    // A goal callback may release attention while GoalSelector is iterating.
+    // Keep the bounded per-body goal registered and make it inactive instead.
+    static void remove(Mob body) { release(body); }
+
+    static void hold(Mob body, PetVisual visual) {
+        ensure(body).hold(visual);
+    }
+
+    void hold(PetVisual visual) {
+        if (restingYaw == null) {
+            restingYaw = RestingLook.wrap(body.getBodyYaw());
+            restingAngles = new RestingLook.Angles(restingYaw, 0);
+        }
+        this.visual = visual;
         expiresAt = body.getTicksLived() + HOLD_TICKS;
     }
 
-    static void remove(Mob body) { Bukkit.getMobGoals().removeGoal(body, KEY); }
+    static void release(Mob body) {
+        Goal<Mob> registered = Bukkit.getMobGoals().getGoal(body, KEY);
+        if (registered instanceof PetLookGoal goal) goal.stop();
+    }
 
     private static PetLookGoal ensure(Mob body) {
         Goal<Mob> registered = Bukkit.getMobGoals().getGoal(body, KEY);
@@ -59,23 +86,44 @@ final class PetLookGoal implements Goal<Mob> {
             stop();
             return false;
         }
-        boolean valid = target != null ? target.isValid() && !target.isDead()
+        boolean valid = body.getTicksLived() < targetExpiresAt && (target != null ? target.isValid() && !target.isDead()
                 && (!(target instanceof Player player) || player.isOnline())
                 && body.getWorld().equals(target.getWorld())
-                : point != null && body.getWorld().equals(point.getWorld());
-        if (!valid) stop();
-        return valid;
+                : point != null && body.getWorld().equals(point.getWorld()));
+        if (!valid) { target = null; point = null; }
+        return valid || restingYaw != null;
     }
 
     @Override public void tick() {
         if (!shouldActivate()) return;
+        if (restingYaw != null) {
+            Location desired = target instanceof LivingEntity living ? living.getEyeLocation()
+                    : target != null ? target.getLocation() : point;
+            restingAngles = RestingLook.next(restingYaw, restingAngles, body.getEyeLocation(), desired);
+            Location direction = body.getEyeLocation();
+            direction.setYaw(restingAngles.yaw()); direction.setPitch(restingAngles.pitch());
+            Location aim = direction.clone().add(direction.getDirection());
+            boolean applied = PetHeadRotation.apply(body, restingYaw, restingAngles.yaw(), restingAngles.pitch());
+            // Keep LookControl engaged so its idle recentering cannot undo the head pose.
+            // LookControl resets pitch to zero first; allow it to restore exactly
+            // this tick's bounded pitch, while leaving the head yaw untouched.
+            body.lookAt(aim, applied ? 0 : RestingLook.STEP,
+                    applied ? Math.abs(restingAngles.pitch()) : RestingLook.STEP);
+            visual.holdHeadLook(body, restingYaw, restingAngles.yaw(), restingAngles.pitch());
+            return;
+        }
         // These Mob overloads use LookControl's gradual head/body rotation, rather
         // than LivingEntity.lookAt(..., LookAnchor), which sets the angles at once.
         if (target != null) body.lookAt(target, body.getHeadRotationSpeed(), body.getMaxHeadPitch());
         else body.lookAt(point, body.getHeadRotationSpeed(), body.getMaxHeadPitch());
     }
 
-    @Override public void stop() { target = null; point = null; }
+    @Override public void stop() {
+        target = null; point = null;
+        expiresAt = targetExpiresAt = 0;
+        if (restingYaw != null) visual.releaseHeadLook(body);
+        restingYaw = null; restingAngles = null; visual = null;
+    }
     @Override public GoalKey<Mob> getKey() { return KEY; }
     @Override public EnumSet<GoalType> getTypes() { return EnumSet.of(GoalType.LOOK); }
 }

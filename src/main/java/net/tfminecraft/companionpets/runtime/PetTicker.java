@@ -59,6 +59,8 @@ public final class PetTicker implements Runnable {
         }
         actions.roaming().tickOwners(now);
         actions.fetchActions().tick(now);
+        actions.anticipation().tick(now);
+        actions.greetings().tick(now);
         actions.social().tick(now);
         move(now);
         watchTraining(now);
@@ -233,6 +235,7 @@ public final class PetTicker implements Runnable {
                 WaterNavigationGoal.ensure(runtime, pet, mob, actions);
                 continue;
             }
+            if (actions.greeting(pet) || actions.anticipation().active(pet)) continue;
             Locomotion.Mode mode = Locomotion.choose(
                     pet.illness(),
                     pet.need(Need.HEALTH),
@@ -253,7 +256,6 @@ public final class PetTicker implements Runnable {
             actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
             if (mode == Locomotion.Mode.SLEEP || pet.activity() == Activity.SLEEPING) PetFx.stopLooking(mob);
             if (actions.moments().tickBelly(pet, mob, owner)) {
-                PetFx.stopLooking(mob);
                 continue;
             }
             boolean held = mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.STAY
@@ -279,7 +281,10 @@ public final class PetTicker implements Runnable {
                 actions.roaming().cancelPlan(pet);
                 continue;
             }
-            stepMode(pet, mob, owner, mode, now);
+            if (mode == Locomotion.Mode.FOLLOW)
+                FollowNavigationGoal.ensure(runtime, actions, pet, mob, owner,
+                        () -> stepMode(pet, mob, owner, Locomotion.Mode.FOLLOW, System.currentTimeMillis())).advance(now);
+            else stepMode(pet, mob, owner, mode, now);
             express(pet, mob, owner, mode, now);
             actions.moments().tick(pet, mob, owner, mode, now);
         }
@@ -314,11 +319,24 @@ public final class PetTicker implements Runnable {
                     mob.getPathfinder().stopPathfinding();
                 } else if (actions.roaming().step(pet, mob, owner, speed, now)) {
                     // The owner is resting, so this pet explores nearby instead of staring at them.
-                } else if (distance > Locomotion.followDistance(pet.bond())) {
-                    mob.getPathfinder().moveTo(owner.getLocation(), speed);
                 } else {
-                    mob.getPathfinder().stopPathfinding();
-                    PetFx.look(mob, owner);
+                    var destination = PetSpacing.follow(runtime, pet, owner);
+                    // A crowded or obstructed formation slot must not halt a distant follower.
+                    if (destination == null && distance > Locomotion.followDistance(pet.bond())) destination = owner.getLocation();
+                    if (destination != null && (distance > Locomotion.followDistance(pet.bond())
+                            || !destination.equals(owner.getLocation()) && mob.getLocation().distanceSquared(destination) > 2.25)) {
+                        var path = mob.getPathfinder().findPath(destination);
+                        if (!destination.equals(owner.getLocation()) && (path == null || !path.canReachFinalPoint())) {
+                            var fallback = mob.getPathfinder().findPath(owner.getLocation());
+                            if (fallback != null && (fallback.canReachFinalPoint() || usefulFollowPath(mob, owner, fallback))) path = fallback;
+                        }
+                        if (path != null && (path.canReachFinalPoint() || usefulFollowPath(mob, owner, path)))
+                            mob.getPathfinder().moveTo(path, speed);
+                        // Keep an existing useful path if this new request temporarily fails.
+                        else if (!mob.getPathfinder().hasPath()) mob.getPathfinder().stopPathfinding();
+                    } else {
+                        mob.getPathfinder().stopPathfinding(); PetFx.look(mob, owner);
+                    }
                 }
             }
             case SIT, STAY -> {
@@ -362,6 +380,12 @@ public final class PetTicker implements Runnable {
         }
     }
 
+    private static boolean usefulFollowPath(Mob body, Player owner, com.destroystokyo.paper.entity.Pathfinder.PathResult path) {
+        var end = path.getFinalPoint();
+        return end != null && end.getWorld().equals(owner.getWorld())
+                && end.distanceSquared(owner.getLocation()) + 1 < body.getLocation().distanceSquared(owner.getLocation());
+    }
+
     private void express(Pet pet, Mob mob, Player owner, Locomotion.Mode mode, long now) {
         boolean critical = pet.causeCritical() || pet.illness() != Illness.NONE;
         if (critical && now >= pet.nextCriticalSoundAtMillis()) {
@@ -382,7 +406,8 @@ public final class PetTicker implements Runnable {
             double distance = runtime.distance(owner, pet);
             if (distance > runtime.config().ownerNearRadius() && now >= pet.nextCryAtMillis()) {
                 pet.nextCryAtMillis(now + Math.round(runtime.config().cryIntervalSeconds() * 1000.0));
-                mob.getWorld().playSound(mob.getLocation(), PetFx.ambientSound(mob.getType()), 0.45f, 0.8f);
+                Sound sound = PetFx.ambientSound(mob);
+                if (sound != null) mob.getWorld().playSound(mob.getLocation(), sound, 0.45f, 0.8f);
                 PetFx.particle(mob, Particle.SPLASH, 3);
             }
         }

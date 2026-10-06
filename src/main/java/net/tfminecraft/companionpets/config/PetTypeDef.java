@@ -22,12 +22,16 @@ public record PetTypeDef(
         PetAppearance appearance,
         PetItems items,
         Set<Trick> tricks,
-        List<Trick> defaultTricks) {
+        List<Trick> defaultTricks,
+        Set<PetBehavior> behaviors) {
 
     public PetTypeDef {
         tricks = Set.copyOf(tricks);
         defaultTricks = List.copyOf(defaultTricks);
+        behaviors = Set.copyOf(behaviors);
     }
+
+    public boolean behaves(PetBehavior behavior) { return behaviors.contains(behavior); }
 
     public boolean allowsTrick(Trick trick) {
         return trick != null && tricks.contains(trick);

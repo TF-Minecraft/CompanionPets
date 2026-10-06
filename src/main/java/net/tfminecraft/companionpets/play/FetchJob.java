@@ -10,6 +10,8 @@ public final class FetchJob {
     private final UUID throwerId;
     private final Set<UUID> favorites = new HashSet<>();
     private final java.util.Map<UUID, Double> speeds = new java.util.HashMap<>();
+    private final java.util.Map<UUID, Long> inspectUntil = new java.util.HashMap<>();
+    public long inspectUntil(UUID petId, long now) { return inspectUntil.computeIfAbsent(petId, ignored -> now + 500); }
     private UUID carrierId;
     private FetchPhase phase;
     private UUID projectileId;
@@ -34,6 +36,7 @@ public final class FetchJob {
     }
     public boolean favorite(UUID petId) { return favorites.contains(petId); }
 
+    /** Cache normal locomotion pace; the shared play multiplier is applied by the caller. */
     public double speed(UUID petId, double initialSpeed) {
         return speeds.computeIfAbsent(petId, ignored -> initialSpeed);
     }

@@ -60,7 +60,8 @@ public final class PetListener implements Listener {
     public void onTeleport(EntityTeleportEvent event) {
         Pet pet = runtime.byEntity(event.getEntity());
         if (pet == null || pet.stored() || pet.dead()) return;
-        if (actions.fetchingOrReturning(pet) || pet.staying() || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW
+        if (actions.fetchingOrReturning(pet) || actions.greeting(pet) || actions.socializing(pet) || pet.activity() == net.tfminecraft.companionpets.pet.Activity.TOY_FOCUS
+                || pet.staying() || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW
                 || pet.activity() == net.tfminecraft.companionpets.pet.Activity.SLEEPING
                 || !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId()))
                 || System.currentTimeMillis() < pet.forcedSitUntilMillis()) event.setCancelled(true);
@@ -234,6 +235,7 @@ public final class PetListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        actions.ownerDeparted(event.getPlayer());
         actions.ownerSessionChanged(event.getPlayer());
         lastClicks.remove(event.getPlayer().getUniqueId());
         runtime.sessions().clearPlayer(event.getPlayer().getUniqueId());

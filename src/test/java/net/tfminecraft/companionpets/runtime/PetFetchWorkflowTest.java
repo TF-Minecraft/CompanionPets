@@ -51,6 +51,7 @@ class PetFetchWorkflowTest {
                             return switch (method.getName()) {
                                 case "getGoal" -> goals.get(id + ":" + args[1]);
                                 case "addGoal" -> { goals.put(id + ":" + ((com.destroystokyo.paper.entity.ai.Goal<?>) args[2]).getKey(), (com.destroystokyo.paper.entity.ai.Goal<?>) args[2]); yield null; }
+                                case "removeGoal" -> { goals.remove(id + ":" + (args[1] instanceof com.destroystokyo.paper.entity.ai.Goal<?> goal ? goal.getKey() : args[1])); yield null; }
                                 default -> throw new AssertionError("Unexpected goals call: " + method.getName());
                             };
                         });
@@ -89,6 +90,7 @@ class PetFetchWorkflowTest {
 
     public static class FetchWolf extends WolfMock {
             boolean inWater;
+            int navigationRequests;
             final NativeClock clock = new NativeClock();
             public FetchWolf(ServerMock server, UUID id, java.util.Map<UUID, Location> navigationTargets,
                     java.util.Map<UUID, Double> navigationSpeeds) {
@@ -98,6 +100,7 @@ class PetFetchWorkflowTest {
                             getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class},
                             (proxy, method, args) -> switch (method.getName()) {
                                 case "moveTo" -> {
+                                    navigationRequests++;
                                     navigationTargets.put(getUniqueId(), ((Location) args[0]).clone());
                                     navigationSpeeds.put(getUniqueId(), ((Number) args[1]).doubleValue()); yield true;
                                 }
@@ -111,6 +114,9 @@ class PetFetchWorkflowTest {
                             });
             }
             private final com.destroystokyo.paper.entity.Pathfinder pathfinder;
+            private float bodyYaw;
+            @Override public float getBodyYaw() { return bodyYaw; }
+            @Override public void setBodyYaw(float yaw) { bodyYaw = yaw; }
             @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() { return pathfinder; }
             @Override public boolean isInWater() { return inWater; }
             @Override public boolean isOnGround() { return true; }
@@ -147,6 +153,87 @@ class PetFetchWorkflowTest {
         return world.getEntities().stream().filter(Item.class::isInstance).map(Item.class::cast).toList();
     }
 
+    @Test void oneConfiguredPaceAppliesToCarrierAndFollowersWithoutFavoriteBonus() {
+        var yaml = new YamlConfiguration();
+        yaml.set("items.toys", java.util.List.of("STICK")); yaml.set("pets.wolf.entity", "WOLF");
+        yaml.set("pets.wolf.egg", "WOLF_SPAWN_EGG");
+        yaml.set("play.fetch-speed-multiplier", 1.1);
+        runtime.config(CompanionConfig.load(runtime.plugin(), yaml));
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
+        pet.bond(50); other.bond(50); other.favoriteToy("STICK");
+        double base = net.tfminecraft.companionpets.behavior.Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), false);
+        Snowball ball = throwToy();
+        assertEquals(base * 1.1, navigationSpeeds.get(pet.entityId()), 0.0001);
+        assertEquals(base * 1.1, navigationSpeeds.get(other.entityId()), 0.0001);
+        land(ball); items().getFirst().teleport(new Location(world, 12, 64, 0));
+        var carrier = (org.bukkit.entity.Mob) runtime.entity(pet);
+        var follower = (org.bukkit.entity.Mob) runtime.entity(other);
+        carrier.teleport(items().getFirst().getLocation()); assertTrue(actions.fetchActions().claim(pet));
+        pet.bond(100); other.bond(0);
+        actions.fetchActions().step(pet, carrier); actions.fetchActions().step(other, follower);
+        assertEquals(base * 1.1, actions.fetchActions().movementSpeed(pet), 0.0001);
+        assertEquals(base * 1.1, actions.fetchActions().movementSpeed(other), 0.0001);
+        follower.teleport(new Location(world, 8, 64, 0)); carrier.teleport(owner.getLocation());
+        actions.fetchActions().step(pet, carrier);
+        assertEquals(Activity.ATTENDING, other.activity());
+        assertEquals(base * 1.1, actions.roaming().movementSpeed(other), 0.0001);
+    }
+
+    @Test void fetchRefreshesRoutesAtItsCadenceButPicksUpAndDeliversImmediately() {
+        Snowball ball = throwToy();
+        var body = (FetchWolf) runtime.entity(pet);
+        int requests = body.navigationRequests;
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < 20; i++) actions.fetchActions().step(pet, body, now + i);
+        assertEquals(requests, body.navigationRequests);
+        actions.fetchActions().step(pet, body, now + 300);
+        assertEquals(requests + 1, body.navigationRequests);
+        land(ball); actions.fetchActions().step(pet, body, now + 301);
+        assertEquals(items().getFirst().getLocation(), navigationTargets.get(body.getUniqueId()), "Landing redirects without waiting");
+        body.teleport(items().getFirst().getLocation()); actions.fetchActions().step(pet, body, now + 302);
+        assertEquals(FetchPhase.CARRY, pet.fetch().phase()); assertTrue(items().isEmpty());
+        body.teleport(owner.getLocation()); actions.fetchActions().step(pet, body, now + 303);
+        assertNull(pet.fetch()); assertEquals(1, items().size());
+    }
+
+    @Test void throwingTheWatchedToyReleasesAttentionAndStartsNormalFetch() {
+        owner.getInventory().setItemInMainHand(toy.clone());
+        actions.anticipation().tick(System.currentTimeMillis());
+        assertTrue(actions.anticipation().active(pet)); assertEquals(Activity.TOY_FOCUS, pet.activity());
+        Snowball ball = throwToy();
+        assertNotNull(ball); assertNotNull(pet.fetch()); assertEquals(Activity.PLAYING, pet.activity());
+        assertFalse(actions.anticipation().active(pet)); assertTrue(navigationTargets.containsKey(pet.entityId()));
+        assertFalse(server.getMobGoals().getGoal((org.bukkit.entity.Mob) runtime.entity(pet),
+                com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
+                        new NamespacedKey(runtime.plugin(), "toy_navigation"))).shouldActivate());
+    }
+
+    @Test void favoriteToyGivesMoreMoodButNoExtraOutboundSpeed() {
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
+        pet.bond(50); other.bond(50); pet.favoriteToy(null); other.favoriteToy("STICK");
+        pet.need(Need.MOOD, 10); other.need(Need.MOOD, 10); Snowball ball = throwToy();
+        assertEquals(navigationSpeeds.get(pet.entityId()), navigationSpeeds.get(other.entityId()));
+        assertFalse(pet.fetch().favorite(pet.id())); assertTrue(other.fetch().favorite(other.id()));
+        land(ball); var item = items().getFirst();
+        runtime.entity(other).teleport(item.getLocation()); assertTrue(actions.fetchActions().claim(other));
+        runtime.entity(other).teleport(owner.getLocation()); actions.fetchActions().step(other, (org.bukkit.entity.Mob) runtime.entity(other));
+        assertEquals(10 + runtime.config().care().playMoodGain() * runtime.config().care().favoriteMoodMultiplier(), other.need(Need.MOOD));
+    }
+
+    @Test void configurableCatPlayInspectsBeforeCollectingRatherThanChangingSpeed() {
+        var yaml = new YamlConfiguration();
+        yaml.set("items.toys", java.util.List.of("STICK")); yaml.set("pets.wolf.entity", "WOLF");
+        yaml.set("pets.wolf.egg", "WOLF_SPAWN_EGG"); yaml.set("pets.wolf.behaviors", java.util.List.of("fetch", "cat-play"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), yaml));
+        Snowball ball = throwToy(); double speed = navigationSpeeds.get(pet.entityId()); land(ball);
+        var body = (org.bukkit.entity.Mob) runtime.entity(pet); body.teleport(items().getFirst().getLocation());
+        var job = pet.fetch(); actions.fetchActions().step(pet, body, 1000);
+        assertEquals(FetchPhase.GROUND, job.phase()); assertNull(navigationTargets.get(pet.entityId()));
+        actions.fetchActions().step(pet, body, 1499); assertEquals(FetchPhase.GROUND, job.phase());
+        actions.fetchActions().step(pet, body, 1500); assertEquals(FetchPhase.CARRY, job.phase());
+        assertEquals(speed, actions.fetchActions().movementSpeed(pet));
+    }
+
     @Test void throwSucceedsWithOnlyASickPetAndLandsAsOnePickableToy() {
         pet.illness(Illness.WEAKENED); pet.need(Need.HEALTH, 0);
         Snowball ball = throwToy();
@@ -173,7 +260,7 @@ class PetFetchWorkflowTest {
         runtime.entity(other).teleport(new Location(world, 5, 64, 0));
         assertTrue(actions.fetchActions().claim(other));
         assertFalse(actions.fetchActions().claim(pet));
-        assertEquals(other.id(), job.carrierId()); assertNull(pet.fetch()); assertTrue(items().isEmpty());
+        assertEquals(other.id(), job.carrierId()); assertSame(job, pet.fetch()); assertTrue(items().isEmpty());
         actions.releaseFetch(other, foreignOwner, true);
         assertEquals(1, items().size()); assertTrue(toy.isSimilar(items().getFirst().getItemStack()));
         assertTrue(items().getFirst().getLocation().distance(owner.getLocation()) < 3);
@@ -221,7 +308,7 @@ class PetFetchWorkflowTest {
         otherBody.teleport(target);
         actions.fetchActions().step(other, otherBody);
         assertEquals(FetchPhase.CARRY, other.fetch().phase());
-        assertNull(pet.fetch());
+        assertSame(other.fetch(), pet.fetch());
     }
 
     @Test void wetWolfKeepsFetchingAndCanShakeOnlyAfterReturningTheToy() {
@@ -252,7 +339,7 @@ class PetFetchWorkflowTest {
         assertFalse(body.clock.isWet);
     }
 
-    @Test void losingPetRunsBackWithoutTeleportEvenAfterWinnerReturnsAndCallTimeoutPasses() {
+    @Test void losingPetFollowsMovingCarrierThenFinishesItsReturnWithoutTeleport() {
         Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
         land(throwToy());
         Location far = new Location(world, 30, 64, 0);
@@ -261,16 +348,24 @@ class PetFetchWorkflowTest {
         var loser = (FetchWolf) runtime.entity(other);
         winner.teleport(far); loser.teleport(far.clone().add(0, 0, 1));
         assertTrue(actions.fetchActions().claim(pet));
-        assertNull(other.fetch()); assertEquals(Activity.ATTENDING, other.activity());
-        assertEquals(owner.getLocation(), navigationTargets.get(loser.getUniqueId()));
+        assertSame(pet.fetch(), other.fetch()); assertEquals(Activity.PLAYING, other.activity());
+        assertTrue(navigationTargets.get(loser.getUniqueId()).distance(winner.getLocation()) < 3);
+        assertTrue(navigationTargets.get(loser.getUniqueId()).distance(owner.getLocation()) > 25);
         var teleport = new org.bukkit.event.entity.EntityTeleportEvent(loser, loser.getLocation(), owner.getLocation());
         listener.onTeleport(teleport); assertTrue(teleport.isCancelled());
         var goal = server.getMobGoals().getGoal(loser, com.destroystokyo.paper.entity.ai.GoalKey.of(
-                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "call_navigation")));
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "fetch_navigation")));
         assertNotNull(goal); assertTrue(goal.shouldActivate());
+        winner.teleport(new Location(world, 20, 64, 4)); goal.tick();
+        assertTrue(navigationTargets.get(loser.getUniqueId()).distance(winner.getLocation()) < 3);
+        assertTrue(navigationTargets.get(loser.getUniqueId()).distance(owner.getLocation()) > 18);
         Location before = loser.getLocation();
         winner.teleport(owner.getLocation()); actions.fetchActions().step(pet, winner);
         assertNull(pet.fetch()); assertEquals(Activity.ATTENDING, other.activity());
+        assertNull(other.fetch()); assertFalse(goal.shouldActivate());
+        goal = server.getMobGoals().getGoal(loser, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "call_navigation")));
+        assertNotNull(goal);
         new PetTicker(runtime, actions).run(); goal.tick();
         actions.roaming().tickAttention(other, loser, System.currentTimeMillis() + 60_000);
         assertEquals(before, loser.getLocation()); assertTrue(goal.shouldActivate());
@@ -305,7 +400,7 @@ class PetFetchWorkflowTest {
         water.start();
         assertEquals(loserOutbound, navigationSpeeds.get(loser.getUniqueId()));
         assertEquals(outboundSwim, loser.getVelocity().clone().setY(0).length(), 1e-9);
-        assertTrue(loser.getVelocity().getX() < 0);
+        assertTrue(loser.getVelocity().getX() > 0, "The loser swims toward the carrier, not directly back to the thrower");
         actions.fetchActions().step(pet, winner);
         assertEquals(winnerOutbound, navigationSpeeds.get(winner.getUniqueId()));
         winner.inWater = true; new PetTicker(runtime, actions).run();
@@ -353,7 +448,7 @@ class PetFetchWorkflowTest {
         assertSame(job, pet.fetch()); assertEquals(owner.getLocation(), navigationTargets.get(body.getUniqueId()));
     }
 
-    @Test void losingPetAlsoKeepsItsReturnRouteWhileSwimming() {
+    @Test void losingPetFollowsTheCarrierWhileSwimming() {
         Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
         land(throwToy());
         var body = (FetchWolf) runtime.entity(other);
@@ -361,12 +456,12 @@ class PetFetchWorkflowTest {
         runtime.entity(pet).teleport(items().getFirst().getLocation());
         assertTrue(actions.fetchActions().claim(pet));
         new PetTicker(runtime, actions).run();
-        assertEquals(Activity.ATTENDING, other.activity());
+        assertEquals(Activity.PLAYING, other.activity()); assertSame(pet.fetch(), other.fetch());
         var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
                 org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
         goal.start();
-        assertEquals(owner.getLocation(), navigationTargets.get(body.getUniqueId()));
-        assertTrue(body.getVelocity().getX() < 0); assertEquals(Activity.ATTENDING, other.activity());
+        assertEquals(actions.fetchActions().destination(other), navigationTargets.get(body.getUniqueId()));
+        assertTrue(body.getVelocity().getX() > 0); assertEquals(Activity.PLAYING, other.activity());
     }
 
     @Test void visualTickerDoesNotStopFetchingOrPlayShakeForAModeledWetWolf() throws Exception {
@@ -432,12 +527,31 @@ class PetFetchWorkflowTest {
         assertFalse(job.favorite(pet.id())); assertTrue(job.favorite(other.id()));
         runtime.entity(other).teleport(new Location(world, 5, 64, 0));
         actions.fetchActions().step(other, (org.bukkit.entity.Mob) runtime.entity(other));
-        assertEquals(FetchPhase.CARRY, job.phase()); assertNull(pet.fetch());
+        assertEquals(FetchPhase.CARRY, job.phase()); assertSame(job, pet.fetch());
         runtime.entity(other).teleport(owner.getLocation());
         actions.fetchActions().step(other, (org.bukkit.entity.Mob) runtime.entity(other));
-        assertNull(other.fetch()); assertEquals(1, items().size());
+        assertNull(other.fetch()); assertNull(pet.fetch()); assertEquals(1, items().size());
         assertEquals(10, pet.need(Need.MOOD)); assertEquals(43, other.need(Need.MOOD));
         assertTrue(items().getFirst().getLocation().distance(owner.getLocation()) < 3);
+    }
+
+    @Test void multipleFollowersHaveSeparateCarrierRoutesAndLeavingDoesNotStealOrDuplicateToy() {
+        Pet first = outsidePet(owner.getUniqueId(), "Luna", 2);
+        Pet second = outsidePet(owner.getUniqueId(), "Sol", -2);
+        land(throwToy()); var job = pet.fetch();
+        var carrier = (org.bukkit.entity.Mob) runtime.entity(pet);
+        carrier.teleport(items().getFirst().getLocation()); assertTrue(actions.fetchActions().claim(pet));
+        Location firstAt = actions.fetchActions().destination(first), secondAt = actions.fetchActions().destination(second);
+        assertTrue(firstAt.distance(secondAt) >= 1.2);
+        assertTrue(firstAt.distance(carrier.getLocation()) < 3); assertTrue(secondAt.distance(carrier.getLocation()) < 3);
+        assertSame(job, first.fetch()); assertSame(job, second.fetch()); assertTrue(items().isEmpty());
+        actions.releaseFetch(first, owner, true);
+        assertNull(first.fetch()); assertSame(job, pet.fetch()); assertSame(job, second.fetch());
+        assertEquals(pet.id(), job.carrierId()); assertTrue(items().isEmpty());
+        carrier.teleport(owner.getLocation()); actions.fetchActions().step(pet, carrier);
+        assertNull(second.fetch()); assertNull(pet.fetch()); assertEquals(1, items().size());
+        assertTrue(toy.isSimilar(items().getFirst().getItemStack()));
+        actions.releaseFetch(second, owner, true); assertEquals(1, items().size());
     }
 
     @Test void orphanedFlightsAndUnreachableGroundToysAreReleasedExactlyOnce() {

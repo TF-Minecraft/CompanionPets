@@ -25,6 +25,11 @@ public interface PetVisual {
     default boolean rubBelly(Entity entity) { return false; }
 
     default void cancelAction(Entity entity) { }
+    /** Hz > 0 enables an independent tail gesture; zero restores its normal animation. */
+    default void wagTail(Entity entity, double hz) { }
+
+    default void holdHeadLook(Entity entity, float bodyYaw, float headYaw, float pitch) { }
+    default void releaseHeadLook(Entity entity) { }
 
     default void remove(Entity entity) { }
 

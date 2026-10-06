@@ -44,6 +44,7 @@ public final class PetStore {
     private final File session;
     private final Set<UUID> deleted = new LinkedHashSet<>();
     private final Map<UUID, Pet> pets = new LinkedHashMap<>();
+    private List<Pet> snapshot;
     private final Map<String, UUID> kennels = new LinkedHashMap<>();
     private boolean loaded;
     private boolean deletionLogHealthy;
@@ -91,6 +92,7 @@ public final class PetStore {
         }
         if (!file.exists() && !backup.exists() && !deletions.exists()) {
             pets.clear();
+            snapshot = null;
             kennels.clear();
             loaded = true;
             return true;
@@ -135,6 +137,7 @@ public final class PetStore {
             pets.clear();
             pets.putAll(nextPets);
             deleted.forEach(pets::remove);
+            snapshot = null;
             kennels.clear();
             kennels.putAll(nextKennels);
             loaded = true;
@@ -159,6 +162,10 @@ public final class PetStore {
             yaml.set(path + ".sex", pet.sex().name());
             yaml.set(path + ".personality", pet.personality().name());
             yaml.set(path + ".born-at", pet.bornAt());
+            yaml.set(path + ".last-owner-nearby-millis", pet.lastOwnerNearbyMillis());
+            yaml.set(path + ".last-greeting-millis", pet.lastGreetingMillis());
+            writeMemories(yaml, path + ".carers", pet.carers());
+            writeMemories(yaml, path + ".friends", pet.friends());
             yaml.set(path + ".order", pet.order().name());
             yaml.set(path + ".staying", pet.staying());
             yaml.set(path + ".stored", pet.stored());
@@ -297,6 +304,10 @@ public final class PetStore {
                 section.getString("name", "Mascota"),
                 enumValue(PetSex.class, section.getString("sex"), PetSex.FEMALE));
         pet.bornAt(section.getLong("born-at", 0L));
+        pet.lastOwnerNearbyMillis(section.getLong("last-owner-nearby-millis", 0L));
+        pet.lastGreetingMillis(section.getLong("last-greeting-millis", 0L));
+        readMemories(section.getConfigurationSection("carers"), pet.carers());
+        readMemories(section.getConfigurationSection("friends"), pet.friends());
         pet.personality(enumValue(PetPersonality.class, section.getString("personality"), PetPersonality.forId(id)));
         pet.order(enumValue(PetOrder.class, section.getString("order"), PetOrder.FOLLOW));
         pet.staying(section.getBoolean("staying"));
@@ -371,6 +382,26 @@ public final class PetStore {
         return pet;
     }
 
+    private static void writeMemories(YamlConfiguration yaml, String path, net.tfminecraft.companionpets.pet.RelationshipMemory memory) {
+        memory.entries().forEach((id, entry) -> {
+            String at = path + "." + id;
+            yaml.set(at + ".trust", entry.trust()); yaml.set(at + ".reinforced-at", entry.reinforcedAt());
+            yaml.set(at + ".nearby-at", entry.nearbyAt()); yaml.set(at + ".greeted-at", entry.greetedAt());
+        });
+    }
+
+    private static void readMemories(ConfigurationSection section, net.tfminecraft.companionpets.pet.RelationshipMemory memory) {
+        if (section == null) return;
+        for (String key : section.getKeys(false)) {
+            try {
+                var entry = section.getConfigurationSection(key);
+                if (entry == null) continue;
+                memory.restore(UUID.fromString(key), new net.tfminecraft.companionpets.pet.RelationshipMemory.Memory(
+                        entry.getDouble("trust"), entry.getLong("reinforced-at"), entry.getLong("nearby-at"), entry.getLong("greeted-at")));
+            } catch (IllegalArgumentException ignored) { }
+        }
+    }
+
     private static <T extends Enum<T>> T enumValue(Class<T> type, String raw, T fallback) {
         if (raw == null || raw.isBlank()) {
             return fallback;
@@ -390,7 +421,10 @@ public final class PetStore {
     }
 
     public Collection<Pet> all() {
-        return List.copyOf(pets.values());
+        // Keep immutable iteration safe when callbacks add or remove pets, without
+        // copying every saved record on each animation and behavior tick.
+        if (snapshot == null) snapshot = List.copyOf(pets.values());
+        return snapshot;
     }
 
     public Pet get(UUID id) {
@@ -400,6 +434,7 @@ public final class PetStore {
     public void add(Pet pet) {
         if (deleted.contains(pet.id())) throw new IllegalArgumentException("Cannot reuse a deleted pet ID");
         pets.put(pet.id(), pet);
+        snapshot = null;
     }
 
     /** Persist a terminal transition before a caller removes its body. */
@@ -420,6 +455,7 @@ public final class PetStore {
         }
         deleted.add(id);
         pets.remove(id);
+        snapshot = null;
         return true;
     }
 

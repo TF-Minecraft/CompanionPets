@@ -100,6 +100,17 @@ public final class PetRuntime {
         return random;
     }
 
+    public boolean behaves(Pet pet, net.tfminecraft.companionpets.config.PetBehavior behavior) {
+        var type = config.type(pet.typeId());
+        return type != null && type.behaves(behavior);
+    }
+
+    public void recordCare(Player player, Pet pet, double gain, long now) {
+        if (!pet.ownerId().equals(player.getUniqueId())
+                && behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.RECOGNIZE_CARERS))
+            pet.carers().reinforce(player.getUniqueId(), gain, now, 60_000);
+    }
+
     public void suspendFollowing(UUID ownerId) {
         for (Pet pet : store.of(ownerId)) suspendedFollowing.add(pet.id());
     }

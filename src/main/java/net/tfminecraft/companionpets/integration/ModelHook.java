@@ -27,6 +27,7 @@ public final class ModelHook implements PetVisual {
     private final Set<String> failedTypes = new HashSet<>();
     private final Set<String> warnedMotion = new HashSet<>();
     private final Map<String, Long> retryAfter = new HashMap<>();
+    private final Set<String> warnedTail = new HashSet<>();
 
     public ModelHook(Logger logger) { this.logger = logger; }
 
@@ -160,6 +161,29 @@ public final class ModelHook implements PetVisual {
         }
     }
 
+    @Override public void holdHeadLook(Entity entity, float bodyYaw, float headYaw, float pitch) {
+        Session session = sessions.get(entity.getUniqueId());
+        if (session == null) return;
+        try { session.attachment.holdHeadLook(bodyYaw, headYaw, pitch); }
+        catch (RuntimeException ex) { fail(entity, session.type, ex); }
+    }
+
+    @Override public void releaseHeadLook(Entity entity) {
+        Session session = sessions.get(entity.getUniqueId());
+        if (session == null) return;
+        try { session.attachment.releaseHeadLook(); }
+        catch (RuntimeException ex) { fail(entity, session.type, ex); }
+    }
+
+    @Override public void wagTail(Entity entity, double hz) {
+        Session session = entity == null ? null : sessions.get(entity.getUniqueId());
+        if (session == null) return;
+        try { session.attachment.wagTail(hz); }
+        catch (RuntimeException ex) {
+            if (warnedTail.add(session.type)) logger.log(Level.WARNING, "Pet " + session.type + ": tail gesture unavailable", ex);
+        }
+    }
+
     @Override
     public void remove(Entity entity) {
         if (entity == null) return;
@@ -185,7 +209,12 @@ public final class ModelHook implements PetVisual {
     @Override
     public void retain(Set<UUID> loaded) {
         // Saved attachments survive chunk unloads; death renderers belong to ModelEngine.
-        sessions.keySet().removeIf(id -> !loaded.contains(id));
+        for (UUID id : java.util.List.copyOf(sessions.keySet())) {
+            if (!loaded.contains(id)) {
+                wagTail(sessions.get(id).attachment.entity, 0);
+                sessions.remove(id);
+            }
+        }
     }
 
     @Override
@@ -194,6 +223,7 @@ public final class ModelHook implements PetVisual {
         failedTypes.clear();
         warnedMotion.clear();
         retryAfter.clear();
+        warnedTail.clear();
     }
 
     private void fail(Entity entity, String type, RuntimeException ex) {

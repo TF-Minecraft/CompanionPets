@@ -21,6 +21,7 @@ import org.bukkit.inventory.ItemStack;
 
 import net.tfminecraft.companionpets.behavior.Locomotion;
 import net.tfminecraft.companionpets.config.MomentSettings;
+import net.tfminecraft.companionpets.config.PetBehavior;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.pet.Activity;
 import net.tfminecraft.companionpets.pet.Illness;
@@ -35,9 +36,11 @@ final class PetMoments {
     private final Map<Pet, Long> nextAt = new WeakHashMap<>();
     private final Map<Pet, GiftJob> gifts = new WeakHashMap<>();
     private final Map<Pet, Long> nextBellyAt = new WeakHashMap<>();
+    private final java.util.Set<Pet> bellyLooking = java.util.Collections.newSetFromMap(new WeakHashMap<>());
 
     private boolean bellyReady(Pet pet, Mob body, Player owner) {
         return runtime.config().moments().enabled() && runtime.config().belly().enabled()
+                && runtime.behaves(pet, PetBehavior.BELLY_RUB)
                 && pet.illness() == Illness.NONE && net.tfminecraft.companionpets.care.DominantNeed.select(pet) == null
                 && pet.need(Need.HUNGER) >= 60 && pet.need(Need.ENERGY) >= 40 && pet.need(Need.HEALTH) >= 70
                 && pet.need(Need.MOOD) >= runtime.config().belly().minMood()
@@ -75,18 +78,28 @@ final class PetMoments {
         if (!runtime.visual().startBelly(body, runtime.config().type(pet.typeId()), Math.round(runtime.config().belly().idleSeconds() * 1000))) return false;
         PetFx.sit(body, false);
         body.getPathfinder().stopPathfinding();
+        bellyLooking.add(pet);
+        PostureNavigationGoal.hold(runtime, pet, body);
+        PetFx.look(body, owner.getEyeLocation());
         PetFx.bar(owner, pet.name() + " rolls onto its back. Right-click to scratch its belly");
         return true;
     }
 
     boolean tickBelly(Pet pet, Mob body, Player owner) {
-        if (!runtime.visual().belly(body)) return false;
+        if (!runtime.visual().belly(body)) { releaseBellyLook(pet, body); return false; }
         if (!bellyReady(pet, body, owner)) {
             runtime.visual().cancelAction(body);
+            releaseBellyLook(pet, body);
             return false;
         }
         body.getPathfinder().stopPathfinding();
+        PetFx.holdLooking(body, runtime.visual());
+        if (owner != null) PetFx.look(body, owner.getEyeLocation());
         return true;
+    }
+
+    private void releaseBellyLook(Pet pet, Entity body) {
+        if (bellyLooking.remove(pet) && body instanceof Mob mob) PetFx.releaseLooking(mob);
     }
 
     PetMoments(PetRuntime runtime) {
@@ -182,6 +195,7 @@ final class PetMoments {
     }
 
     private void askForAffection(Pet pet, Mob body, Player owner) {
+        if (!runtime.behaves(pet, PetBehavior.AFFECTION)) return;
         PetFx.look(body, owner);
         PetFx.sad(body);
         MomentSettings settings = runtime.config().moments();
@@ -190,11 +204,13 @@ final class PetMoments {
     }
 
     boolean triggerAffection(Pet pet, Mob body, Player owner) {
+        if (!runtime.behaves(pet, PetBehavior.AFFECTION)) return false;
         askForAffection(pet, body, owner);
         return true;
     }
 
     boolean triggerBark(Pet pet, Mob body, Player owner) {
+        if (!runtime.behaves(pet, PetBehavior.SOCIAL_PROTEST)) return false;
         List<LivingEntity> nearby = nearbyLiving(body, owner);
         LivingEntity target = nearby.isEmpty() ? owner : nearby.get(runtime.random().nextInt(nearby.size()));
         barkAt(pet, body, owner, target);
@@ -210,12 +226,14 @@ final class PetMoments {
     }
 
     void cancel(Pet pet) {
+        releaseBellyLook(pet, runtime.entity(pet));
         runtime.visual().cancelAction(runtime.entity(pet));
         gifts.remove(pet);
         nextAt.remove(pet);
     }
 
     void clear() {
+        for (Pet pet : List.copyOf(bellyLooking)) cancel(pet);
         for (Pet pet : List.copyOf(gifts.keySet())) {
             cancel(pet);
         }
@@ -225,7 +243,7 @@ final class PetMoments {
 
     private boolean startGift(Pet pet, Mob body, Player owner, long now) {
         MomentSettings settings = runtime.config().moments();
-        if (!settings.diggingEnabled() || gifts.containsKey(pet) || pet.fetch() != null
+        if (!runtime.behaves(pet, PetBehavior.DIG_GIFTS) || !settings.diggingEnabled() || gifts.containsKey(pet) || pet.fetch() != null
                 || pet.carriedToy() != null || owner == null || !owner.isOnline()) {
             return false;
         }
@@ -291,6 +309,7 @@ final class PetMoments {
     }
 
     private boolean reactToStranger(Pet pet, Mob body, Player owner) {
+        if (!runtime.behaves(pet, PetBehavior.SOCIAL_PROTEST)) return false;
         List<LivingEntity> nearby = nearbyLiving(body, owner);
         if (nearby.isEmpty()) {
             return false;
@@ -318,9 +337,9 @@ final class PetMoments {
             case WOLF -> Sound.ENTITY_WOLF_GROWL;
             case CAT -> Sound.ENTITY_CAT_HISS;
             case FOX -> Sound.ENTITY_FOX_AGGRO;
-            default -> PetFx.ambientSound(body.getType());
+            default -> PetFx.ambientSound(body);
         };
-        body.getWorld().playSound(body.getLocation(), sound, 0.8f, 1.0f);
+        if (sound != null) body.getWorld().playSound(body.getLocation(), sound, 0.8f, 1.0f);
         if (body.getType() == org.bukkit.entity.EntityType.WOLF) {
             body.getWorld().playSound(body.getLocation(), Sound.ENTITY_WOLF_AMBIENT, 0.7f, 1.1f);
         }
@@ -331,7 +350,7 @@ final class PetMoments {
 
     private boolean misbehave(Pet pet, Mob body, Player owner) {
         MomentSettings settings = runtime.config().moments();
-        if (!settings.plantBreakingEnabled()
+        if (!runtime.behaves(pet, PetBehavior.MISCHIEF) || !settings.plantBreakingEnabled()
                 || settings.respectMobGriefing() && !Boolean.TRUE.equals(body.getWorld().getGameRuleValue(GameRule.MOB_GRIEFING))) {
             return false;
         }

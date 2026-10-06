@@ -18,10 +18,12 @@ ItemsAdder are optional.
   orders by looking at a pet or saying its name.
 - **Persistent orders** — Sit, Stay, and Lay hold in place and survive
   restarts, while Follow and Come bring a pet back to its owner.
-- **Play and social life** — pets fetch thrown toys, dig up gifts, sniff and
-  chase each other, and can be calmed when they bark.
+- **Play and social life** — pets anticipate held toys, lose interest when play
+  stalls, fetch together, greet returning owners and recognise carers and friends.
+  They sniff and chase each other, and can be calmed when they bark.
 - **Configurable species** — per-type bodies, eggs, interaction items, learnable
-  tricks, and custom tricks, with optional ModelEngine models and animations.
+  tricks, optional behaviours, and custom tricks, with optional ModelEngine models
+  and animations. Resting pets look around with bounded head movement.
 - **Staff tools** — browse, locate, and create pets for any player, give eggs,
   and audit every staff intervention.
 - **Durable saves** — atomic saves, a deletion journal, and recovery for pets left

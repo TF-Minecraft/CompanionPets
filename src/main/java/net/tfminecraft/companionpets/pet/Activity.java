@@ -5,5 +5,7 @@ public enum Activity {
     PLAYING,
     SLEEPING,
     TRICK,
-    ATTENDING
+    ATTENDING,
+    GREETING,
+    TOY_FOCUS
 }

@@ -95,7 +95,7 @@ public class PetsPlugin extends JavaPlugin {
         new net.tfminecraft.companionpets.listen.FurniturePetHouses(runtime).register();
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
-        visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 2L, 2L);
+        visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 1L, 1L);
         statusTicker = Bukkit.getScheduler().runTaskTimer(this, petTicker::lookBars, 1L, 1L);
         autosave = Bukkit.getScheduler().runTaskTimer(this, store::save, AUTOSAVE_TICKS, AUTOSAVE_TICKS);
         for (org.bukkit.World world : Bukkit.getWorlds()) {
@@ -161,7 +161,7 @@ public class PetsPlugin extends JavaPlugin {
         for (String available : onTabComplete(sender, command, label, new String[]{""})) {
             String example = switch (available) {
                 case "reload" -> "reload - reload configuration";
-                case "moment" -> "moment <affection|bark|mischief|dig|belly> - look at your pet";
+                case "moment" -> "moment <affection|bark|mischief|dig|belly|greeting> - look at your pet";
                 case "testpet" -> "testpet <type> [name] - spawn a pet with all compatible tricks learned";
                 case "list" -> "list <player> [pet name] - their pets and read-only pet details";
                 case "find" -> "find <player> [pet name] - show pet locations";

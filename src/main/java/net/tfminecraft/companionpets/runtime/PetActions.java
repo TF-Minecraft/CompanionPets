@@ -67,6 +67,8 @@ public final class PetActions {
     private final PetMenus menus;
     private final PetHolograms holograms;
     private final PetMoments moments;
+    private final PetGreetings greetings;
+    private final PetToyAnticipation anticipation;
     private final PetSocial social;
     private final PetRoaming roaming;
     private final PlayerHints hints;
@@ -80,6 +82,8 @@ public final class PetActions {
         this.moments = new PetMoments(runtime);
         this.roaming = new PetRoaming(runtime, this::markSleep);
         this.social = new PetSocial(runtime, roaming);
+        this.greetings = new PetGreetings(runtime, this);
+        this.anticipation = new PetToyAnticipation(runtime, this);
         this.hints = new PlayerHints(runtime.plugin());
         hatching = new PetHatching(runtime);
         careActions = new PetCareActions(runtime);
@@ -96,6 +100,11 @@ public final class PetActions {
     PetFetchActions fetchActions() { return fetchActions; }
     public void releaseFetch(Pet pet, Player owner, boolean toOwner) { fetchActions.releaseFetch(pet, toOwner); }
     public boolean fetchingOrReturning(Pet pet) { return pet.fetch() != null || roaming.returningFromFetch(pet); }
+    public boolean greeting(Pet pet) { return greetings.active(pet); }
+    public boolean socializing(Pet pet) { return social.engaged(pet); }
+    PetToyAnticipation anticipation() { return anticipation; }
+    public void ownerDeparted(Player owner) { greetings.ownerDeparted(owner, System.currentTimeMillis()); }
+    PetGreetings greetings() { return greetings; }
     public void dropPlain(Location location, String toy) { fetchActions.dropPlain(location, toy); }
 
     public PetMenus menus() {
@@ -134,6 +143,8 @@ public final class PetActions {
     }
 
     public void clearInteractions(Pet pet) {
+        anticipation.cancel(pet);
+        greetings.cancel(pet);
         roaming.cancel(pet);
         calming.remove(pet.id());
         moments.cancel(pet);
@@ -141,6 +152,8 @@ public final class PetActions {
     }
 
     public void clearInteractions() {
+        anticipation.clear();
+        greetings.clear();
         roaming.clear();
         calming.clear();
         moments.clear();
@@ -206,6 +219,16 @@ public final class PetActions {
         if (pet == null || pet.stored() || !pet.ownerId().equals(player.getUniqueId()) || !(target instanceof Mob body)) {
             PetFx.tell(player, "Look at one of your pets that is outside the Pet House first.");
             return false;
+        }
+        if (moment.equalsIgnoreCase("pet-greeting")) {
+            boolean started = social.trigger(player, pet, "greeting");
+            if (!started) PetFx.tell(player, "Bring another awake, following pet within five blocks, with both owners nearby. Pet greetings must be enabled; finish playing or training first.");
+            return started;
+        }
+        if (moment.equalsIgnoreCase("greeting")) {
+            boolean started = greetings.trigger(pet, player, System.currentTimeMillis());
+            if (!started) PetFx.tell(player, "Greeting must be enabled for this pet and needs you nearby on land. Finish playing or training first; sit, lay and stay are allowed. Tired or ill pets greet quietly.");
+            return started;
         }
         Locomotion.Mode mode = Locomotion.choose(pet.illness(), pet.need(Need.HEALTH),
                 pet.need(Need.ENERGY), pet.need(Need.HUNGER), pet.activity(), pet.fetch() != null,
@@ -295,6 +318,7 @@ public final class PetActions {
             return true;
         }
         if (type.acceptsToy(hand)) {
+            if (!type.behaves(net.tfminecraft.companionpets.config.PetBehavior.FETCH)) return false;
             PetFx.bar(player, "Throw it into the air for nearby pets to chase");
             return true;
         }
@@ -348,17 +372,20 @@ public final class PetActions {
             return;
         }
         boolean devoted = pet.bond() >= 85.0;
+        runtime.recordCare(player, pet, 4, now);
         if (entity instanceof Mob mob && moments.petBelly(pet, mob, player, now)) {
             social.cancel(pet);
             roaming.cancel(pet);
             return;
         }
-        boolean animatedPet = runtime.visual().play(entity, type, "PET");
         PetFx.bar(player, PetTexts.petted(pet.name(), pet.sex(), pet.typeId(), devoted));
+        if (!runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.AFFECTION)) return;
+        boolean animatedPet = runtime.visual().play(entity, type, "PET");
         PetFx.happy(entity, runtime.random().nextInt(3) == 0);
         PetFx.hearts(entity, devoted ? 4 : 2);
         if (!animatedPet && !runtime.visual().holdsMovement(entity)
-                && devoted && pet.order() == PetOrder.FOLLOW && !pet.staying()) {
+                && devoted && runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.AFFECTION_JUMPS)
+                && pet.order() == PetOrder.FOLLOW && !pet.staying()) {
             PetFx.jump(entity, true);
         }
     }
@@ -412,7 +439,7 @@ public final class PetActions {
         if ((holder.kind() == MenuHolder.Kind.TRICK || holder.kind() == MenuHolder.Kind.LEARNED)
                 && slot == PetMenus.TRICKS_NEXT_SLOT) {
             Pet pet = runtime.store().get(holder.petId());
-            if (pet != null && pet.ownerId().equals(player.getUniqueId())) {
+            if (pet != null && (holder.kind() == MenuHolder.Kind.LEARNED || pet.ownerId().equals(player.getUniqueId()))) {
                 if (!net.tfminecraft.companionpets.gui.MenuNavigation.turn(player, holder.page(), holder.pages(), rightClick)) return;
                 int page = holder.page() + (rightClick ? -1 : 1);
                 holder.navigating(true);
@@ -428,7 +455,7 @@ public final class PetActions {
         if (holder.kind() == MenuHolder.Kind.LEARNED) {
             if (slot == PetMenus.TRICKS_BACK_SLOT) {
                 Pet pet = runtime.store().get(holder.petId());
-                if (pet != null && pet.ownerId().equals(player.getUniqueId())) {
+                if (pet != null) {
                     menus.openCare(player, pet, holder.petHouseBack(), holder.petHousePage());
                 }
             }
@@ -465,9 +492,14 @@ public final class PetActions {
 
     private void clickCare(Player player, MenuHolder holder, int slot) {
         Pet pet = runtime.store().get(holder.petId());
-        if (pet == null || !pet.ownerId().equals(player.getUniqueId())) {
+        if (pet == null) return;
+        boolean owner = pet.ownerId().equals(player.getUniqueId());
+        int tricksSlot = owner ? PetMenus.careSlot(PetMenus.TRICKS_SLOT, holder.petHouseBack()) : PetMenus.TRICKS_SLOT;
+        if (slot == tricksSlot) {
+            menus.openLearned(player, pet);
             return;
         }
+        if (!owner) return;
         if (slot == PetMenus.NAME_SLOT) {
             beginRename(player, pet);
             player.closeInventory();
@@ -475,10 +507,6 @@ public final class PetActions {
         }
         if (slot == PetMenus.BACK_SLOT) {
             if (holder.petHouseBack()) menus.openKennel(player, holder.petHousePage());
-            return;
-        }
-        if (slot == PetMenus.careSlot(PetMenus.TRICKS_SLOT, holder.petHouseBack())) {
-            menus.openLearned(player, pet);
             return;
         }
         if (slot == PetMenus.careSlot(PetMenus.RELEASE_SLOT, holder.petHouseBack())) {
@@ -863,6 +891,7 @@ public final class PetActions {
     }
 
     private void releasePet(Player player, Pet pet) {
+        if (!pet.ownerId().equals(player.getUniqueId())) return;
         if (!runtime.store().remove(pet.id())) {
             PetFx.tell(player, "Could not save the release. Your pet is still with you; contact an administrator.");
             return;
@@ -886,6 +915,7 @@ public final class PetActions {
     }
 
     private void beginRelease(Player player, Pet pet) {
+        if (!pet.ownerId().equals(player.getUniqueId())) return;
         runtime.sessions().release(player.getUniqueId(), new ReleasePrompt(pet.id(), System.currentTimeMillis() + PROMPT_MILLIS));
         player.closeInventory();
         PetFx.tell(player, "Release " + pet.name() + " forever? Type \"yes\" to confirm, or \"no\" to cancel.");
@@ -977,7 +1007,7 @@ public final class PetActions {
     }
 
     private void storePet(Player player, Pet pet) {
-        if (pet.stored()) {
+        if (!pet.ownerId().equals(player.getUniqueId()) || pet.stored()) {
             return;
         }
         if (!Quota.canStore(runtime.store().countStored(player.getUniqueId()), runtime.config().limits().maxStored())) {

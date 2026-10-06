@@ -34,6 +34,13 @@ care:
   rest-again-seconds: 45
 
 play:
+  # Multiplier of normal pet pace for chasing, following its carrier and returning.
+  # Favorites never add a speed bonus.
+  fetch-speed-multiplier: 1.2
+  # Lose interest in a held toy if the owner stays still without throwing it.
+  # Moving at least half a block, changing toys or putting it away renews interest.
+  toy-attention-seconds: 20
+  favorite-toy-attention-seconds: 35
   throw-speed-low: 0.6
   throw-speed-high: 1.1
 
@@ -87,6 +94,22 @@ presence:
   cry-interval-seconds: 45
 
 moments:
+  # One happy reunion after a sustained offline or physical absence.
+  # /companionpets moment greeting skips absence/cooldown, including sit/lay/stay.
+  greeting:
+    enabled: true
+    absence-seconds: 300
+    near-radius: 8
+    cooldown-seconds: 300
+    duration-seconds: 8
+    circle-radius: 2
+    speed: 1.35
+    sound-interval-seconds: 1.2
+    jump-enabled: true
+    tail-wag-hz: 3                    # Independent model tail gesture for WOLF bodies
+    cat-circle-radius: 1.4
+    cat-speed: 0.8                    # Walking circles; cats do not hop at the owner
+    cat-sound-interval-seconds: 0.65  # Meows, with small timing/pitch variations and pauses
   enabled: true
   # Empty-hand petting by the owner can start this optional modeled moment.
   # Requires ALL THREE clips: lie_back, belly_up, get_up (or their mappings).
@@ -150,6 +173,14 @@ moments:
 social:
   enabled: true
   encounter-radius: 8
+  greeting-radius: 5
+  greeting-seconds: 3
+  # A new initial greeting needs this long apart, beyond greeting-radius + 2.
+  separation-seconds: 10
+  greeting-friendship-gain: 2
+  sniff-friendship-gain: 6
+  chase-friendship-gain: 8
+  max-friendship-gain-per-minute: 12
   bark-radius: 6
   owner-radius: 16
   encounter-cooldown-seconds: 18
@@ -228,6 +259,27 @@ pets:
   # 4. Omit default-tricks to inherit training.default-tricks. A pet-specific
   #    list REPLACES the global list. [] gives no initial learning for that type.
   #    Example inside a pet: default-tricks: [follow, sit, lay]
+  # 5. Optionally choose behaviors: a list REPLACES the species defaults.
+  #    Omitted = defaults for entity; [] = no optional spontaneous behaviors.
+  #    Essential care/rest and taught tricks still work independently.
+  #    Available IDs: greeting, greeting-circles, greeting-approach, greeting-jumps,
+  #    greeting-tail-wag, greeting-meows, toy-anticipation, toy-vocalizing,
+  #    toy-jumps, toy-tail-wag, fetch, cat-play, roam,
+  #    social-greeting, social-tail-wag, social-jumps, social-vocalizing,
+  #    social-sniff, social-chase, social-protest, affection, affection-jumps,
+  #    belly-rub, mischief, dig-gifts, recognize-carers, pet-friendships.
+  #    Add greeting to enable a welcome; the other greeting-* IDs select its gestures.
+  #    cat-play adds a brief stalk/inspection before collecting a thrown toy (with fetch).
+  #    toy-anticipation prioritizes any held toy over spontaneous activities until put away/thrown.
+  #    toy-vocalizing, toy-jumps and toy-tail-wag repeat while the held toy is a favorite.
+  #    Dogs have all three; cats/foxes only vocalize; frogs croak and make small hops.
+  #    belly-rub still requires its three model clips. Tail wag needs a model tail bone.
+  #    Example inside a cat: behaviors: [greeting, greeting-circles, greeting-meows,
+  #      affection, belly-rub, roam, toy-anticipation, fetch, cat-play,
+  #      social-sniff, social-chase, social-protest, recognize-carers, pet-friendships]
+  #    Dogs normally also jump/wag on greeting, dig gifts and do mischief.
+  #    Frogs normally approach, croak and make up to two safe approaching hops;
+  #    they also play/fetch toys, but do not dig, roll for belly rubs or wag a tail by default.
   # Use spaces, not tabs. Keep each pet key at the same indentation as wolf.
   #
   # COMMON FIELDS (apply to vanilla AND ModelEngine pets)

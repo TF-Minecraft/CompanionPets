@@ -42,8 +42,10 @@ public final class PetVisualTicker implements Runnable {
             UUID id = body.getUniqueId();
             loaded.add(id);
             boolean fetching = pet.fetch() != null;
+            boolean greeting = pet.activity() == net.tfminecraft.companionpets.pet.Activity.GREETING;
+            boolean toyFocus = pet.activity() == net.tfminecraft.companionpets.pet.Activity.TOY_FOCUS;
             if (body instanceof Wolf wolf) {
-                if (fetching) net.tfminecraft.companionpets.integration.WolfShake.defer(wolf);
+                if (fetching || greeting || toyFocus || pet.socialTailHz() > 0) net.tfminecraft.companionpets.integration.WolfShake.defer(wolf);
                 else net.tfminecraft.companionpets.integration.WolfShake.restore(wolf);
             }
             if (!type.appearance().modeled()) continue;
@@ -70,8 +72,18 @@ public final class PetVisualTicker implements Runnable {
                     && (pose == PetAnimation.WALK || pose == PetAnimation.RUN)) pose = PetAnimation.CROUCH;
             if (fetching) runtime.visual().cancelAction(body);
             runtime.visual().update(body, type, pose);
+            // Let the lying/sitting pose blend to standing before capturing the tail's base transform.
+            double feeling = net.tfminecraft.companionpets.behavior.GreetingMood.of(pet, pet.bond()).intensity();
+            double tailHz = greeting && now - pet.lastGreetingMillis() >= 300
+                    ? 1 + (runtime.config().greeting().tailWagHz() - 1) * feeling
+                    : toyFocus
+                            ? 3.2 + 1.3 * feeling + (now < pet.toyExcitedUntilMillis() ? 0.8 : 0) : pet.socialTailHz();
+            runtime.visual().wagTail(body, runtime.behaves(pet, toyFocus
+                    ? net.tfminecraft.companionpets.config.PetBehavior.TOY_TAIL_WAG
+                    : greeting ? net.tfminecraft.companionpets.config.PetBehavior.GREETING_TAIL_WAG
+                    : net.tfminecraft.companionpets.config.PetBehavior.SOCIAL_TAIL_WAG) ? tailHz : 0);
             if (!fetching && runtime.visual().holdsMovement(body)) net.tfminecraft.companionpets.integration.PetMotion.stop(body);
-            boolean shaking = !fetching && body instanceof Wolf wolf && net.tfminecraft.companionpets.integration.WolfShake.shaking(wolf);
+            boolean shaking = !fetching && !greeting && !toyFocus && body instanceof Wolf wolf && net.tfminecraft.companionpets.integration.WolfShake.shaking(wolf);
             if (shaking && (previous == null || !previous.shaking)) {
                 runtime.visual().play(body, type, "SHAKE");
             }
