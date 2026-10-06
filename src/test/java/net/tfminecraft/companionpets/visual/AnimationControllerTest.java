@@ -14,6 +14,17 @@ import org.junit.jupiter.api.Test;
 import net.tfminecraft.companionpets.config.PetAppearance.Clip;
 
 class AnimationControllerTest {
+    @Test void stayPlaysTheIdleClipSoAPushDoesNotLookLikeWalking() {
+        Player player = new Player();
+        AnimationController controller = new AnimationController(player, standless());
+        controller.update(PetAnimation.IDLE);
+        assertTrue(player.active.isEmpty(), "ModelEngine plays idle itself");
+        controller.update(PetAnimation.STAND);
+        assertTrue(player.active.contains("idle"));
+        controller.update(PetAnimation.IDLE);
+        assertTrue(player.active.isEmpty());
+    }
+
     @Test void shakingNeverStopsNavigationAndWalkingInterruptsTheGesture() {
         Player player = new Player();
         AnimationController controller = new AnimationController(player, clips());
@@ -99,6 +110,13 @@ class AnimationControllerTest {
         assertEquals(List.of("play:sit:true"), player.events);
         assertFalse(controller.play(PetAnimation.PAW));
         assertEquals(List.of("play:sit:true"), player.events);
+    }
+
+    /** Models have no stand clip; Stay falls back to idle. */
+    private static Map<PetAnimation, Clip> standless() {
+        Map<PetAnimation, Clip> clips = clips();
+        clips.remove(PetAnimation.STAND);
+        return clips;
     }
 
     private static Map<PetAnimation, Clip> clips() {

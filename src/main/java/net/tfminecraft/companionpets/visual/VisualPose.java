@@ -10,7 +10,7 @@ public final class VisualPose {
         if (water) return PetAnimation.SWIM;
         if (mode == Locomotion.Mode.SLEEP) return PetAnimation.SLEEP;
         if (mode == Locomotion.Mode.LIE) return PetAnimation.LIE;
-        if (mode == Locomotion.Mode.STAY) return PetAnimation.IDLE;
+        if (mode == Locomotion.Mode.STAY) return PetAnimation.STAND;
         if (mode == Locomotion.Mode.SIT || sitting) return PetAnimation.SIT;
         return PetAnimation.IDLE;
     }

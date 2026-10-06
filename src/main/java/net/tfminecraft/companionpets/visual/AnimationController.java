@@ -59,6 +59,8 @@ public final class AnimationController {
 
     /** ModelEngine's own idle, walk, jump and fly states render these without a plugin clip. */
     private boolean nativeLocomotion(PetAnimation state) {
+        // Stay pins the idle clip, so a push does not let ModelEngine switch to walking.
+        if (state == PetAnimation.STAND) return false;
         for (PetAnimation current = state; current != null; current = current.fallback())
             if (clips.containsKey(current)) return NATIVE.contains(current);
         return true;
@@ -108,7 +110,7 @@ public final class AnimationController {
     }
 
     private boolean headPose() {
-        return pose == PetAnimation.IDLE || pose == PetAnimation.SIT
+        return pose == PetAnimation.IDLE || pose == PetAnimation.STAND || pose == PetAnimation.SIT
                 || trainingAttention && pose == PetAnimation.LIE;
     }
 
