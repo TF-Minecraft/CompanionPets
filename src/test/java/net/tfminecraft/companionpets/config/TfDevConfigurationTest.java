@@ -35,7 +35,10 @@ class TfDevConfigurationTest {
             for (var pet : config.types().values()) {
                 var saved = original.getConfigurationSection("pets." + (pet.id().equals("fox") ? "fox_custom" : pet.id()));
                 assertEquals(ItemRef.parse(saved.getString("egg")), pet.egg(), pet.id() + " egg");
-                assertFalse(pet.behaves(PetBehavior.ROAM));
+                BehaviorProfile expectedProfile = pet.id().equals("frog") ? BehaviorProfile.BASIC
+                        : pet.id().equals("fox") || Set.of("cat", "catblack", "catfunny", "catorange", "mainecoon").contains(pet.id())
+                        ? BehaviorProfile.CAT : BehaviorProfile.DOG;
+                assertEquals(expectedProfile, pet.behavior(), pet.id());
                 if (saved.getString("sex", "random").equals("choose")) assertEquals(SexMode.CHOOSE, pet.sexMode());
                 String model = saved.getString("appearance.model");
                 if (model != null) assertEquals(model, pet.appearance().model(), pet.id() + " model");
@@ -54,7 +57,10 @@ class TfDevConfigurationTest {
                 assertTrue(report.animations().containsKey(PetAnimation.IDLE), pet.id() + " idle");
                 assertTrue(report.animations().containsKey(PetAnimation.WALK), pet.id() + " walk");
                 assertTrue(report.animations().containsKey(PetAnimation.LIE), pet.id() + " rest");
-                if (pet.behaves(PetBehavior.BELLY_RUB)) assertFalse(report.disabledBehaviors().containsKey(PetBehavior.BELLY_RUB), pet.id());
+                if (pet.behaves(PetBehavior.BELLY_RUB)) {
+                    boolean complete = Set.of(PetAnimation.LIE_BACK, PetAnimation.BELLY_UP, PetAnimation.GET_UP).stream().allMatch(report.animations()::containsKey);
+                    assertEquals(!complete, report.disabledBehaviors().containsKey(PetBehavior.BELLY_RUB), pet.id());
+                }
                 if (pet.behaves(PetBehavior.TOY_TAIL_WAG)) assertTrue(tail, pet.id() + " tail");
                 for (Trick trick : pet.tricks()) {
                     var custom = config.customTrick(trick);

@@ -162,13 +162,46 @@ final class PetFetchActions {
             }
             if (!mob.getWorld().equals(item.getWorld())) { actions.releaseFetch(pet, owner, true); return; }
             if (runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.CAT_PLAY)
-                    && mob.getLocation().distanceSquared(item.getLocation()) <= 4
-                    && now < job.inspectUntil(pet.id(), now)) {
-                mob.getPathfinder().stopPathfinding(); PetFx.look(mob, item.getLocation());
-                if (mob instanceof org.bukkit.entity.Cat cat) {
-                    crouchedCats.putIfAbsent(pet.id(), cat.isSneaking()); cat.setSneaking(true);
+                    && (mob.getLocation().distanceSquared(item.getLocation()) <= 4 || job.stalking(pet.id()) || job.pouncing(pet.id()))) {
+                if (competing(pet, item.getLocation())) {
+                    if (job.pouncing(pet.id())) {
+                        FetchJob.Stalk stalk = job.stalk(pet.id(), now);
+                        if (now - stalk.pounceAt < 250 || !mob.isOnGround() && now - stalk.pounceAt < 1000) {
+                            runtime.visual().cancelAction(mob);
+                            return;
+                        }
+                    }
+                    job.stopStalk(pet.id(), now); restoreCat(pet);
+                    runtime.visual().cancelAction(mob);
+                } else {
+                    FetchJob.Stalk stalk = job.stalk(pet.id(), now);
+                    if (!stalk.finished) {
+                        PetFx.look(mob, item.getLocation());
+                        if (now < stalk.until) {
+                            mob.getPathfinder().stopPathfinding();
+                            var type = runtime.config().type(pet.typeId());
+                            if (mob instanceof org.bukkit.entity.Cat cat && (!type.appearance().modeled()
+                                    || runtime.capabilities(type).animations().containsKey(net.tfminecraft.companionpets.visual.PetAnimation.CROUCH))) {
+                                crouchedCats.putIfAbsent(pet.id(), cat.isSneaking()); cat.setSneaking(true);
+                            }
+                            return;
+                        }
+                        restoreCat(pet);
+                        if (stalk.pounceAt < 0) {
+                            stalk.pounceAt = now; mob.getPathfinder().stopPathfinding();
+                            Vector direction = item.getLocation().toVector().subtract(mob.getLocation().toVector()).setY(0);
+                            if (direction.lengthSquared() > .001) direction.normalize().multiply(Math.min(.45, mob.getLocation().distance(item.getLocation()) / 6));
+                            mob.setVelocity(direction.setY(.3));
+                            var type = runtime.config().type(pet.typeId());
+                            var jump = runtime.capabilities(type).animations().get(net.tfminecraft.companionpets.visual.PetAnimation.JUMP);
+                            if (jump != null) runtime.visual().playClip(mob, type, jump.name(), .5);
+                            return;
+                        }
+                        if (now - stalk.pounceAt < 250 || !mob.isOnGround() && now - stalk.pounceAt < 1000) return;
+                        stalk.finished = true;
+                        runtime.visual().cancelAction(mob);
+                    }
                 }
-                return;
             }
             restoreCat(pet);
             if (claim(pet)) {
@@ -249,6 +282,8 @@ final class PetFetchActions {
         FetchJob job = pet.fetch();
         Entity item = job == null || job.itemId() == null ? null : Bukkit.getEntity(job.itemId());
         Entity body = runtime.entity(pet);
+        if (item != null && body != null && runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.CAT_PLAY)
+                && !job.stalkFinished(pet.id()) && !competing(pet, item.getLocation())) return false;
         if (item == null || body == null || !canChase(pet) || !body.getWorld().equals(item.getWorld())
                 || body.getLocation().distance(item.getLocation()) >= 1.7 || !job.claim(pet.id())) return false;
         item.remove();
@@ -257,6 +292,19 @@ final class PetFetchActions {
         // delivery, and finish together when the one physical toy is returned.
         for (Pet other : chasers(job)) if (other != pet && runtime.entity(other) instanceof Mob mob) step(other, mob);
         return true;
+    }
+
+    private boolean competing(Pet pet, Location toy) {
+        Entity body = runtime.entity(pet);
+        if (body == null || !body.getWorld().equals(toy.getWorld())) return false;
+        double ownDistance = body.getLocation().distanceSquared(toy);
+        for (Pet other : chasers(pet.fetch())) {
+            Entity competitor = runtime.entity(other);
+            if (other == pet || competitor == null || !canChase(other) || !competitor.getWorld().equals(toy.getWorld())) continue;
+            double distance = competitor.getLocation().distanceSquared(toy);
+            if (distance < 16 || distance < ownDistance) return true;
+        }
+        return false;
     }
 
     Location destination(Pet pet) {

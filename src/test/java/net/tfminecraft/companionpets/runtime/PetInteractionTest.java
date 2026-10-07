@@ -754,9 +754,9 @@ class PetInteractionTest {
         assertSame(goal, org.bukkit.Bukkit.getMobGoals().getGoal(body, key), "Reuse one bounded goal per body");
     }
 
-    @Test void heldToySwitchingPrefersFavoriteInOffhandAndConfigurationCanDisableGestures() {
+    @Test void catProfilePrefersFavoriteInOffhandAndWaitsWithoutJoyHops() {
         testConfig.set("items.toys", java.util.List.of("STICK", "BONE"));
-        testConfig.set("pets.wolf.behaviors", java.util.List.of("toy-anticipation"));
+        testConfig.set("pets.wolf.behavior", "cat");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
         pet.favoriteToy("BONE"); greetingGround = true; body.setOnGround(true); long now = System.currentTimeMillis();
         player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
@@ -764,7 +764,7 @@ class PetInteractionTest {
         body.teleport(navigationTarget);
         player.getInventory().setItemInOffHand(new ItemStack(Material.BONE));
         actions.anticipation().tick(now + 200);
-        assertTrue(pet.toyExcitedUntilMillis() > now); assertEquals(0, greetingSounds.size());
+        assertTrue(pet.toyExcitedUntilMillis() > now);
         assertEquals(0, body.getVelocity().getY(), "Attention without enabled jumps");
         player.getInventory().setItemInOffHand(new ItemStack(Material.AIR));
         actions.anticipation().tick(now + 400);
@@ -778,10 +778,12 @@ class PetInteractionTest {
         player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
         actions.anticipation().tick(now); body.teleport(navigationTarget);
         actions.anticipation().tick(now + 250);
+        int requests = navigationRequests;
         for (int i = 1; i <= 16; i++) actions.anticipation().tick(now + i * 1000);
         assertEquals(2, greetingSounds.size());
         assertTrue(greetingSounds.stream().allMatch(s -> s == org.bukkit.Sound.ENTITY_CAT_AMBIENT));
         assertEquals(0, body.getVelocity().getY());
+        assertEquals(requests, navigationRequests, "Cat waits facing its favorite toy without lateral steps");
     }
 
     @Test void toyAttentionUsesSeparateFrontPositionsRegardlessOfYawOrPitchAndSharesSoundBudget() {
@@ -851,7 +853,7 @@ class PetInteractionTest {
 
     @Test void catBodyWithToyJumpsHopsWhileWaitingForAnOrdinaryToy() {
         testConfig.set("species.hopper.entity", "CAT");
-        testConfig.set("species.hopper.behaviors.add", java.util.List.of("toy-jumps"));
+        testConfig.set("species.hopper.behavior", "basic");
         testConfig.set("pets.wolf.entity", null);
         testConfig.set("pets.wolf.species", "hopper");
         greetingSpecies = org.bukkit.entity.EntityType.CAT;
@@ -867,9 +869,9 @@ class PetInteractionTest {
         assertEquals(99.8, pet.need(Need.ENERGY), .001);
     }
 
-    @Test void dogWithToyJumpsRemovedNeverHopsForOrdinaryOrFavoriteToys() {
+    @Test void wolfBodyWithCatProfileNeverHopsForOrdinaryOrFavoriteToys() {
         testConfig.set("pets.wolf.species", "dog");
-        testConfig.set("pets.wolf.behaviors.remove", java.util.List.of("toy-jumps"));
+        testConfig.set("pets.wolf.behavior", "cat");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
         greetingGround = true; body.setOnGround(true);
         player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
@@ -886,9 +888,9 @@ class PetInteractionTest {
         }
     }
 
-    @Test void toyWiggleControlsWholeBodyShuffleOnCatBodiesAndCanBeRemovedFromDogs() {
+    @Test void profilesControlBodyShuffleIndependentlyOfTheBody() {
         greetingSpecies(org.bukkit.entity.EntityType.CAT);
-        testConfig.set("pets.wolf.behaviors.add", java.util.List.of("toy-wiggle"));
+        testConfig.set("pets.wolf.behavior", "dog");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
         greetingGround = true; body.setOnGround(true); pet.favoriteToy("BONE");
         player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
@@ -900,8 +902,8 @@ class PetInteractionTest {
         actions.anticipation().advance(pet, now + 1250);
         assertTrue(first.distance(navigationTarget) > 1, "CAT body can perform the configured eager shuffle");
         actions.anticipation().clear();
-        testConfig.set("pets.wolf.behaviors", null);
-        testConfig.set("pets.wolf.behaviors.remove", java.util.List.of("toy-wiggle"));
+        testConfig.set("pets.wolf.behavior", null);
+        testConfig.set("pets.wolf.behavior", "cat");
         greetingSpecies(org.bukkit.entity.EntityType.WOLF);
         pet.favoriteToy("STICK");
         body.teleport(PetSpacing.toyFront(runtime, pet, player));
@@ -934,13 +936,13 @@ class PetInteractionTest {
         assertEquals(0, tailHz);
     }
 
-    @Test void modeledDogWithWiggleRemovedKeepsItsTailGestureWithoutBodyShuffle() {
+    @Test void catProfileOnModeledWolfWaitsWithoutTailOrBodyShuffle() {
         testConfig.set("pets.wolf.species", "dog");
         testConfig.set("pets.wolf.model", "beagle");
-        testConfig.set("pets.wolf.behaviors.remove", java.util.List.of("toy-wiggle"));
+        testConfig.set("pets.wolf.behavior", "cat");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
         assertFalse(runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.TOY_WIGGLE));
-        assertTrue(runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.TOY_TAIL_WAG));
+        assertFalse(runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.TOY_TAIL_WAG));
         greetingGround = true; body.setOnGround(true); pet.favoriteToy("STICK");
         player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
         body.teleport(PetSpacing.toyFront(runtime, pet, player));
@@ -950,7 +952,7 @@ class PetInteractionTest {
         actions.anticipation().advance(pet, now + 1250);
         assertEquals(requests, navigationRequests, "A tail gesture must not cause body shuffling");
         new net.tfminecraft.companionpets.visual.PetVisualTicker(runtime).run();
-        assertTrue(tailHz > 0, "Removing toy-wiggle must preserve the independent tail gesture");
+        assertEquals(0, tailHz, "Cat profile has no tail gesture");
     }
 
     @Test void dogTailStaysFastForEntireToyWaitAndRespectsBehaviorSettingAndRelease() {
@@ -962,7 +964,7 @@ class PetInteractionTest {
         ticker.run(); assertEquals(4.5, tailHz, 0.001, "Ordinary toys also get fast tail motion");
         pet.toyExcitedUntilMillis(System.currentTimeMillis() + 6000); ticker.run(); assertEquals(5.3, tailHz, 0.001);
         pet.toyExcitedUntilMillis(0); ticker.run(); assertEquals(4.5, tailHz, 0.001, "Tail keeps moving after the initial excitement");
-        testConfig.set("pets.wolf.behaviors", java.util.List.of("toy-anticipation"));
+        testConfig.set("pets.wolf.behavior", "cat");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig)); ticker.run(); assertEquals(0, tailHz);
         player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
         actions.anticipation().advance(pet, System.currentTimeMillis() + 1000);
@@ -1045,10 +1047,10 @@ class PetInteractionTest {
         actions.anticipation().tick(now + 100_000); assertFalse(actions.anticipation().active(pet));
     }
 
-    @Test void behaviorAllowListDisablesOptionalActionsWhileCareAndLearnedOrdersStillWork() {
-        testConfig.set("pets.wolf.behaviors", java.util.List.of()); runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
-        assertFalse(actions.greetings().trigger(pet, player, System.currentTimeMillis()));
-        assertFalse(actions.fetchActions().canChase(pet)); assertFalse(actions.moments().triggerDig(pet, body, player));
+    @Test void basicProfileKeepsSharedActionsCareAndOrdersWithoutAutonomousGifts() {
+        testConfig.set("pets.wolf.behavior", "basic"); runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        assertTrue(actions.greetings().trigger(pet, player, System.currentTimeMillis()));
+        actions.greetings().cancel(pet); assertTrue(actions.fetchActions().canChase(pet)); assertFalse(actions.moments().triggerDig(pet, body, player));
         pet.need(Need.HUNGER, 10); var food = new ItemStack(Material.BEEF, 2);
         assertTrue(actions.useOnPet(player, body, food)); assertTrue(pet.need(Need.HUNGER) > 10);
         pet.bindWord("sit", Trick.SIT); pet.progress(Trick.SIT, 100); actions.onChat(player, "Toby sit");
@@ -1075,7 +1077,7 @@ class PetInteractionTest {
     }
 
     @Test void pettingBuildsFamiliarityEvenWhenAffectionGesturesAreDisabled() {
-        testConfig.set("pets.wolf.behaviors", java.util.List.of("recognize-carers"));
+        testConfig.set("pets.wolf.behavior", "basic");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
         var other = org.bukkit.Bukkit.getServer().getPlayer(player.getUniqueId());
         var visitor = ((org.mockbukkit.mockbukkit.ServerMock) org.bukkit.Bukkit.getServer()).addPlayer();
@@ -1127,7 +1129,7 @@ class PetInteractionTest {
     }
 
     @Test void normalFollowingLeavesNativeNavigationUntouchedAndDoesNotTeleport() {
-        testConfig.set("pets.wolf.behaviors", java.util.List.of());
+        testConfig.set("pets.wolf.behavior", "basic");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
         greetingGround = true; pet.bond(100);
         body.teleport(player.getLocation().add(40, 0, 0));
@@ -1146,7 +1148,7 @@ class PetInteractionTest {
     }
 
     @Test void restSuspendsNavigationAndFollowingResumesWithoutReplacingNativePaths() {
-        testConfig.set("pets.wolf.behaviors", java.util.List.of());
+        testConfig.set("pets.wolf.behavior", "basic");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
         var ticker = new PetTicker(runtime, actions);
         pet.order(PetOrder.LAY); ticker.run(); assertTrue(body.isSitting());
@@ -1333,9 +1335,10 @@ class PetInteractionTest {
         assertFalse(actions.social().engaged(pet)); assertEquals(Activity.TOY_FOCUS, pet.activity());
         assertEquals(0, pet.socialTailHz()); assertEquals(0, other.socialTailHz()); assertEquals(0, actions.social().friendship(pet, other));
         actions.clearInteractions(); player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
-        testConfig.set("pets.wolf.behaviors", java.util.List.of("social-sniff", "pet-friendships"));
+        testConfig.set("pets.wolf.behavior", "basic");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
-        assertFalse(actions.social().trigger(player, pet, "greeting"));
+        assertTrue(actions.social().trigger(player, pet, "greeting"));
+        actions.social().cancel(pet);
         assertTrue(actions.social().trigger(player, pet, "sniff"));
     }
 
@@ -1545,13 +1548,13 @@ class PetInteractionTest {
 
     @Test void configuredGreetingVoiceAndBehaviorsAreIndependentOfBaseEntity() {
         testConfig.set("pets.wolf.sounds.preset", "frog"); greetingGround = true; body.setOnGround(true);
-        testConfig.set("pets.wolf.behaviors", java.util.List.of("greeting", "greeting-approach"));
+        testConfig.set("pets.wolf.behavior", "cat");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig)); eagerGreeting();
         long now = System.currentTimeMillis();
         assertTrue(actions.greetings().trigger(pet, player, now));
         actions.greetings().advance(pet, now + 3400);
-        assertEquals(1, navigationSpeed);
-        assertEquals(1.8, navigationTarget.distance(player.getLocation()), 0.001);
+        assertEquals(0.8, navigationSpeed);
+        assertCircleRadius(1.4);
         assertEquals(0, body.getVelocity().getY());
         assertTrue(greetingSounds.stream().allMatch(s -> s == org.bukkit.Sound.ENTITY_FROG_AMBIENT));
     }
