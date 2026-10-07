@@ -27,6 +27,7 @@ public final class Bodies {
     private final NamespacedKey petKey;
     private final PetVisual visual;
     private final java.util.Map<UUID, Long> spawnProtection = new java.util.HashMap<>();
+    private final java.util.Set<UUID> recovering = new java.util.HashSet<>();
 
     public Bodies(JavaPlugin plugin, NamespacedKey petKey, PetVisual visual) {
         this.plugin = plugin;
@@ -80,8 +81,15 @@ public final class Bodies {
     public void recover(Entity entity) {
         if (!protectedFromSuffocation(entity) || PetPlacement.clear(entity.getLocation(), PetPlacement.bounds(entity))) return;
         Location safe = PetPlacement.nearest(entity.getLocation(), PetPlacement.bounds(entity), null);
-        if (safe != null) entity.teleport(safe);
+        if (safe == null) return;
+        // Sitting or staying pets block ordinary teleports; this destination is already verified.
+        recovering.add(entity.getUniqueId());
+        try { entity.teleport(safe); }
+        finally { recovering.remove(entity.getUniqueId()); }
     }
+
+    /** True only while recover() moves the body to a verified clear space. */
+    public boolean recovering(Entity entity) { return recovering.contains(entity.getUniqueId()); }
 
     public void reattach(Entity entity, Pet pet, PetTypeDef type) {
         if (!compatible(entity, type)) {

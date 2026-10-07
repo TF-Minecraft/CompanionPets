@@ -59,7 +59,7 @@ public final class PetListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onTeleport(EntityTeleportEvent event) {
         Pet pet = runtime.byEntity(event.getEntity());
-        if (pet == null || pet.stored() || pet.dead()) return;
+        if (pet == null || pet.stored() || pet.dead() || runtime.bodies().recovering(event.getEntity())) return;
         if (actions.fetchingOrReturning(pet) || actions.greeting(pet) || actions.socializing(pet) || pet.activity() == net.tfminecraft.companionpets.pet.Activity.TOY_FOCUS
                 || pet.staying() || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW
                 || pet.activity() == net.tfminecraft.companionpets.pet.Activity.SLEEPING

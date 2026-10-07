@@ -247,6 +247,47 @@ class PetInteractionTest {
                 net.tfminecraft.companionpets.body.PetPlacement.bounds(body)));
     }
 
+    @Test void suffocationRecoveryPassesTheTeleportGuardForASittingPet() {
+        var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
+        var guardedBody = new GuardedWolf(MockBukkit.getMock());
+        MockBukkit.getMock().registerEntity(guardedBody);
+        guardedBody.teleport(body.getLocation());
+        runtime.remember(pet, guardedBody);
+        pet.order(PetOrder.SIT);
+        guardedBody.listener = listener;
+        assertFalse(guardedBody.teleport(player.getLocation()), "Ordinary teleports of a sitting pet stay blocked");
+        guardedBody.listener = null;
+        guardedBody.teleport(guardedBody.getLocation().add(0, -1, 0));
+        guardedBody.listener = listener;
+        runtime.bodies().protect(guardedBody);
+        var event = new org.bukkit.event.entity.EntityDamageEvent(guardedBody,
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.SUFFOCATION, 1);
+        listener.onSpawnSuffocation(event);
+        assertTrue(event.isCancelled());
+        assertTrue(net.tfminecraft.companionpets.body.PetPlacement.clear(guardedBody.getLocation(),
+                net.tfminecraft.companionpets.body.PetPlacement.bounds(guardedBody)), "The verified recovery move is not cancelled");
+        assertFalse(runtime.bodies().recovering(guardedBody));
+        assertFalse(guardedBody.teleport(player.getLocation()), "The guard applies again after recovery");
+    }
+
+    /** Routes teleports through the listener and honours cancellation, as the server does. */
+    static final class GuardedWolf extends WolfMock {
+        net.tfminecraft.companionpets.listen.PetListener listener;
+        GuardedWolf(org.mockbukkit.mockbukkit.ServerMock server) { super(server, UUID.randomUUID()); }
+        @Override public boolean teleport(Location to) {
+            return teleport(to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN);
+        }
+        @Override public boolean teleport(Location to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
+            if (listener != null) {
+                var event = new org.bukkit.event.entity.EntityTeleportEvent(this, getLocation(), to);
+                listener.onTeleport(event);
+                if (event.isCancelled()) return false;
+                to = event.getTo();
+            }
+            return super.teleport(to, cause);
+        }
+    }
+
     @Test void trainingStartsWithAvailableHeadTiltWithoutCancellingItOnRepeatedTreatClicks() {
         headTiltAvailable = true;
         var treat = new ItemStack(Material.COD);

@@ -903,6 +903,10 @@ public final class PetActions {
             return;
         }
         PetTypeDef type = runtime.config().type(pet.typeId());
+        if (type == null) {
+            PetFx.bar(player, pet.name() + " can't come out: this kind of pet is not configured on this server");
+            return;
+        }
         Entity entity = runtime.bodies().spawn(pet, type, net.tfminecraft.companionpets.body.PetPlacement.beside(player,
                 net.tfminecraft.companionpets.body.PetPlacement.normal(type.appearance().scale()), house), player);
         if (entity == null) {
@@ -1076,14 +1080,15 @@ public final class PetActions {
                     + PetTexts.him(pet.sex()) + " back");
             return;
         }
+        // Find room first, so a failed call leaves the pet's order and activity untouched.
+        Location safe = net.tfminecraft.companionpets.body.PetPlacement.beside(player,
+                net.tfminecraft.companionpets.body.PetPlacement.bounds(entity), null);
+        if (safe == null) { PetFx.bar(player, "There is no safe place here for " + pet.name()); return; }
         clearInteractions(pet);
         pet.order(PetOrder.FOLLOW);
         pet.staying(false);
         wakeToFollow(pet, System.currentTimeMillis());
         runtime.resumeFollowing(pet);
-        Location safe = net.tfminecraft.companionpets.body.PetPlacement.beside(player,
-                net.tfminecraft.companionpets.body.PetPlacement.bounds(entity), null);
-        if (safe == null) { PetFx.bar(player, "There is no safe place here for " + pet.name()); return; }
         entity.teleport(safe);
         runtime.bodies().protect(entity);
         runtime.remember(pet, entity);
