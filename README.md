@@ -40,11 +40,14 @@ Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/
 With Java 21 and Maven installed, run:
 
 ```sh
-mvn -Pcoverage clean install -DskipTests=false -Dmaven.test.skip=false
+mvn clean install -DskipTests=false -Dmaven.test.skip=false
 ```
 
-Unit and MockBukkit workflow tests run with JUnit. The `coverage` profile writes
-a JaCoCo report to `target/site/jacoco/`. The dev-only Paper server check is
+Unit and MockBukkit workflow tests run with JUnit. Every normal verification writes
+a JaCoCo report to `target/site/jacoco/` and requires 100% production line coverage,
+without class or package exclusions. Verification also requires the execution data
+and XML report to exist. CI uploads both test and coverage reports. The `coverage`
+profile remains available for older commands. The dev-only Paper server check is
 described in [integration-tests/README.md](integration-tests/README.md).
 
 ## License

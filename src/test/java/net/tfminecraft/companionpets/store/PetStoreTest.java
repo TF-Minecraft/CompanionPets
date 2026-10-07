@@ -9,15 +9,36 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.File;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.CopyOption;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.mockito.invocation.InvocationOnMock;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.Mockito.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.EnumSet;
 import java.util.UUID;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
@@ -455,4 +476,376 @@ class PetStoreTest {
         store.save();
         assertEquals(malformed, Files.readString(primary));
     }
+
+    @Test void kennelWorldNamesContainingCommasRoundTripWithoutBlockingPetSaves() {
+        var current = store();
+        assertTrue(current.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
+        current.add(pet);
+        String key = PetStore.kennelKey("world,chapter,two", -3, 65, 7);
+        current.kennel(key, pet.ownerId());
+        try {
+            assertTrue(current.save(), "valid world names must not break every pet save");
+            var restored = store();
+            assertTrue(restored.load());
+            assertEquals(pet.ownerId(), restored.kennelOwner(key));
+            assertEquals("Luna", restored.get(pet.id()).name());
+            assertTrue(restored.close());
+        } finally {
+            current.removeKennel(key);
+            current.close();
+        }
+    }
+
+
+    @Test void backgroundProviderFailureKeepsChangesPendingForRetry() throws Exception {
+        var current = store();
+        assertTrue(current.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Pending", PetSex.FEMALE);
+        current.add(pet);
+        AtomicBoolean unavailable = new AtomicBoolean(true);
+        writerWithMoves(current, call -> {
+            if (unavailable.get()) throw new SecurityException("filesystem provider denied replacement");
+            return call.callRealMethod();
+        });
+        try {
+            current.requestSave();
+            current.flush();
+            current.awaitWrites();
+            assertTrue(current.pending(), "a failed asynchronous write must remain queued for retry");
+            assertFalse(Files.exists(directory.resolve("pets.yml")));
+            unavailable.set(false);
+            current.flush();
+            current.awaitWrites();
+            assertFalse(current.pending());
+            assertEquals("Pending", storePet(pet.id()).name());
+        } finally {
+            unavailable.set(false);
+            current.close();
+        }
+    }
+
+    @Test void atomicMoveFallbackCommitsSnapshotsAndKeepsThePreviousBackup() throws Exception {
+        var current = store();
+        assertTrue(current.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "First", PetSex.FEMALE);
+        current.add(pet);
+        AtomicInteger fallbacks = new AtomicInteger();
+        writerWithMoves(current, call -> {
+            CopyOption[] options = (CopyOption[]) call.getRawArguments()[2];
+            if (java.util.Arrays.asList(options).contains(StandardCopyOption.ATOMIC_MOVE)) {
+                fallbacks.incrementAndGet();
+                throw new AtomicMoveNotSupportedException(call.getArgument(0).toString(), call.getArgument(1).toString(), "provider has no atomic replace");
+            }
+            return call.callRealMethod();
+        });
+        try {
+            assertTrue(current.save());
+            String first = Files.readString(directory.resolve("pets.yml"));
+            assertEquals(first, Files.readString(directory.resolve("pets.yml.bak")));
+            pet.name("Second");
+            assertTrue(current.save());
+            assertEquals(4, fallbacks.get());
+            assertEquals(first, Files.readString(directory.resolve("pets.yml.bak")));
+            assertEquals("Second", storePet(pet.id()).name());
+        } finally { current.close(); }
+    }
+
+    @Test void interruptedShutdownPreservesTheRecoveryGuardUntilAConfirmedSave() throws Exception {
+        var current = store();
+        assertTrue(current.load());
+        assertTrue(current.beginSession());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Interrupted", PetSex.MALE);
+        current.add(pet);
+        CountDownLatch writing = new CountDownLatch(1);
+        CountDownLatch allowWrite = new CountDownLatch(1);
+        ExecutorService worker = writerWithMoves(current, call -> {
+            writing.countDown();
+            if (!allowWrite.await(10, TimeUnit.SECONDS)) throw new AssertionError("write was never released");
+            return call.callRealMethod();
+        });
+        AtomicBoolean closed = new AtomicBoolean(true);
+        AtomicBoolean interrupted = new AtomicBoolean();
+        Thread caller = new Thread(() -> {
+            closed.set(current.close());
+            interrupted.set(Thread.currentThread().isInterrupted());
+        }, "interrupted pet shutdown caller");
+        try {
+            caller.start();
+            assertTrue(writing.await(10, TimeUnit.SECONDS));
+            caller.interrupt();
+            caller.join(5_000);
+            assertFalse(caller.isAlive());
+            assertFalse(closed.get());
+            assertTrue(interrupted.get(), "shutdown must preserve the interruption for its caller");
+            assertTrue(current.pending());
+            assertTrue(Files.isRegularFile(directory.resolve("pets-recovery-required")));
+            assertFalse(store().load());
+        } finally {
+            allowWrite.countDown();
+            caller.join(5_000);
+            assertTrue(worker.awaitTermination(10, TimeUnit.SECONDS));
+            assertTrue(current.close());
+        }
+        assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+        assertEquals("Interrupted", storePet(pet.id()).name());
+    }
+
+    @Test void recoveryMarkerDeletionFailureKeepsRestartBlockedDespiteSavedPets() throws Exception {
+        var current = store();
+        assertTrue(current.load());
+        assertTrue(current.beginSession());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Saved", PetSex.MALE);
+        current.add(pet);
+        Path marker = directory.resolve("pets-recovery-required");
+        Files.delete(marker);
+        Files.createDirectory(marker);
+        Files.writeString(marker.resolve("blocked"), "prevent directory deletion");
+        assertFalse(current.close());
+        assertTrue(Files.readString(directory.resolve("pets.yml")).contains("Saved"));
+        assertTrue(Files.isDirectory(marker));
+        assertFalse(store().load());
+        Files.delete(marker.resolve("blocked"));
+        Files.delete(marker);
+        Files.writeString(marker, "restored guard after filesystem repair");
+        assertTrue(current.close());
+        assertFalse(Files.exists(marker));
+        assertEquals("Saved", storePet(pet.id()).name());
+    }
+
+    @Test void rejectedExecutorSubmissionKeepsBothSavePathsRetryable() throws Exception {
+        for (boolean background : new boolean[]{false, true}) {
+            Path folder = directory.resolve(background ? "background" : "immediate");
+            var current = new PetStore(folder.resolve("pets.yml").toFile(), quietLogger());
+            assertTrue(current.load());
+            var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Retry", PetSex.FEMALE);
+            current.add(pet);
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            ExecutorService boundary = mock(ExecutorService.class, delegatesTo(executor));
+            AtomicBoolean stopAfterCheck = new AtomicBoolean(true);
+            // A valid executor race: shutdown occurs after isShutdown reports false,
+            // before the caller submits. Both resource operations still use a real executor.
+            doAnswer(call -> {
+                boolean stopped = executor.isShutdown();
+                if (stopAfterCheck.getAndSet(false)) executor.shutdown();
+                return stopped;
+            }).when(boundary).isShutdown();
+            setWriter(current, boundary);
+            try {
+                if (background) {
+                    current.requestSave();
+                    current.flush();
+                } else assertFalse(current.save());
+                assertTrue(current.pending());
+                assertFalse(Files.exists(folder.resolve("pets.yml")));
+                current.flush();
+                current.awaitWrites();
+                assertFalse(current.pending());
+                assertTrue(Files.readString(folder.resolve("pets.yml")).contains("Retry"));
+            } finally { current.close(); executor.shutdownNow(); }
+        }
+    }
+
+    @Test void unexpectedWriterFailureIsReportedAndLeavesTheSnapshotRetryable() throws Exception {
+        List<String> warnings = new ArrayList<>();
+        Logger logger = quietLogger();
+        AtomicBoolean appenderFails = new AtomicBoolean(true);
+        logger.addHandler(new Handler() {
+            @Override public void publish(LogRecord record) {
+                if (appenderFails.getAndSet(false)) throw new IllegalStateException("logging appender failed");
+                warnings.add(record.getMessage());
+            }
+            @Override public void flush() { }
+            @Override public void close() { }
+        });
+        var current = new PetStore(directory.resolve("pets.yml").toFile(), logger);
+        assertTrue(current.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Retained", PetSex.FEMALE);
+        current.add(pet);
+        Path temp = directory.resolve("pets.yml.tmp");
+        Files.createDirectory(temp);
+        Files.writeString(temp.resolve("blocked"), "force the real write to fail");
+        try {
+            assertFalse(current.save());
+            assertTrue(current.pending());
+            assertEquals(List.of("Could not save pets.yml"), warnings);
+            assertFalse(Files.exists(directory.resolve("pets.yml")));
+            Files.delete(temp.resolve("blocked"));
+            Files.delete(temp);
+            assertTrue(current.save());
+            assertEquals("Retained", storePet(pet.id()).name());
+        } finally { current.close(); }
+    }
+
+    @Test void unreadableRecordRootsAndMissingRequiredFieldsNeverOverwriteFiles() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID owner = UUID.randomUUID();
+        for (String malformed : List.of("version: 1\n", "pets: {}\nkennels: wrong\n",
+                "pets:\n  " + id + ": missing-section\n",
+                "pets:\n  " + id + ": {type: wolf}\n",
+                "pets:\n  " + id + ": {owner: '" + owner + "'}\n")) {
+            Path primary = directory.resolve("pets.yml");
+            Files.writeString(primary, malformed);
+            var current = store();
+            assertFalse(current.load());
+            assertFalse(current.canRestoreBodies());
+            assertFalse(current.save());
+            assertFalse(current.beginSession());
+            assertEquals(malformed, Files.readString(primary));
+            assertFalse(Files.exists(directory.resolve("pets.yml.bak")));
+            assertFalse(current.close());
+        }
+    }
+
+    @Test void invalidOptionalFieldsRecoverDefaultsWithoutDiscardingKnownLearning() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID owner = UUID.randomUUID();
+        YamlConfiguration yaml = new YamlConfiguration();
+        String at = "pets." + id;
+        yaml.set(at + ".owner", owner.toString());
+        yaml.set(at + ".type", "wolf");
+        yaml.set(at + ".entity", "invalid-entity-id");
+        yaml.set(at + ".sex", "invalid-sex");
+        yaml.set(at + ".personality", "invalid-personality");
+        yaml.set(at + ".order", "invalid-order");
+        yaml.set(at + ".illness", "invalid-illness");
+        yaml.set(at + ".announced", List.of("HUNGER", "unknown-need"));
+        yaml.set(at + ".words", List.of(Map.of("word", "missing-trick"), Map.of("trick", "SIT"),
+                Map.of("word", "bad", "trick", "invalid trick"), Map.of("word", "wave", "trick", "WAVE"),
+                Map.of("word", "sit down", "trick", "SIT")));
+        yaml.set(at + ".progress.invalid trick", 100);
+        yaml.set(at + ".progress.WAVE", 25);
+        yaml.set(at + ".progress.SIT", 40);
+        yaml.save(directory.resolve("pets.yml").toFile());
+        var current = store();
+        assertTrue(current.load());
+        var pet = current.get(id);
+        assertEquals(owner, pet.ownerId());
+        assertNull(pet.entityId());
+        assertEquals(PetSex.FEMALE, pet.sex());
+        assertEquals(PetPersonality.forId(id), pet.personality());
+        assertEquals(PetOrder.FOLLOW, pet.order());
+        assertEquals(Illness.NONE, pet.illness());
+        assertTrue(pet.announcedLow(Need.HUNGER));
+        assertEquals(Trick.SIT, pet.trickFor("sit down"));
+        assertNull(pet.trickFor("bad"));
+        assertEquals(Trick.valueOf("WAVE"), pet.trickFor("wave"));
+        assertEquals(25, pet.progress(Trick.valueOf("WAVE")));
+        assertEquals(40, pet.progress(Trick.SIT));
+        assertTrue(current.close());
+        assertEquals(40, storePet(id).progress(Trick.SIT));
+    }
+
+    private static Logger quietLogger() {
+        Logger logger = Logger.getAnonymousLogger();
+        logger.setUseParentHandlers(false);
+        return logger;
+    }
+
+    @FunctionalInterface private interface MoveOperation { Object move(InvocationOnMock call) throws Throwable; }
+
+    private static ExecutorService writerWithMoves(PetStore store, MoveOperation move) throws Exception {
+        // Mockito static mocks are thread-local. Keep production save/flush ordering intact by
+        // running the scoped filesystem fault on an actual single-thread writer executor.
+        ExecutorService executor = Executors.newSingleThreadExecutor(work -> {
+            Thread thread = new Thread(() -> {
+                try (var ignored = mockStatic(Files.class, call -> call.getMethod().getName().equals("move")
+                        ? move.move(call) : call.callRealMethod())) {
+                    work.run();
+                }
+            }, "PetStore file-provider fixture");
+            thread.setDaemon(true);
+            return thread;
+        });
+        setWriter(store, executor);
+        return executor;
+    }
+
+    private static void setWriter(PetStore store, ExecutorService executor) throws Exception {
+        var field = PetStore.class.getDeclaredField("writer");
+        field.setAccessible(true);
+        assertNull(field.get(store), "install the external executor boundary before any save");
+        field.set(store, executor);
+    }
+
+
+    @ParameterizedTest(name = "malformed kennel {0}, background={1}")
+    @MethodSource("malformedCoordinates")
+    void malformedCoordinatesDoNotBlockSaveOrBackgroundFlush(String malformed, boolean background) throws Exception {
+        List<LogRecord> warnings = new ArrayList<>();
+        Logger logger = quietLogger();
+        logger.addHandler(new Handler() {
+            @Override public void publish(LogRecord record) { warnings.add(record); }
+            @Override public void flush() { }
+            @Override public void close() { }
+        });
+        var current = new PetStore(directory.resolve("pets.yml").toFile(), logger);
+        assertTrue(current.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Before", PetSex.FEMALE);
+        current.add(pet);
+        String valid = PetStore.kennelKey("world,chapter,two", Integer.MIN_VALUE, 65, Integer.MAX_VALUE);
+        current.kennel(valid, pet.ownerId());
+        assertTrue(current.save());
+        current.kennel(malformed, UUID.randomUUID());
+        String laterValid = PetStore.kennelKey("later,world", 7, 70, -3);
+        current.kennel(laterValid, pet.ownerId());
+        pet.name("Preserved");
+        current.requestSave();
+        try {
+            if (background) {
+                current.flush();
+                current.awaitWrites();
+            } else {
+                assertTrue(current.save());
+            }
+            assertFalse(current.pending(), "valid changes must reach disk despite the malformed row");
+            assertEquals(1, warnings.size(), "report the skipped row once for this snapshot");
+            assertEquals(java.util.logging.Level.WARNING, warnings.getFirst().getLevel());
+            assertTrue(warnings.getFirst().getMessage().contains(malformed));
+            assertEquals(2, YamlConfiguration.loadConfiguration(directory.resolve("pets.yml").toFile())
+                    .getMapList("kennels").size());
+            var restored = store();
+            assertTrue(restored.load());
+            assertEquals("Preserved", restored.get(pet.id()).name());
+            assertEquals(pet.ownerId(), restored.kennelOwner(valid));
+            assertEquals(pet.ownerId(), restored.kennelOwner(laterValid));
+            assertNull(restored.kennelOwner(malformed));
+            assertTrue(restored.close());
+        } finally {
+            current.removeKennel(malformed);
+            current.close();
+        }
+    }
+
+    private static Stream<Arguments> malformedCoordinates() {
+        List<String> keys = new ArrayList<>(List.of("a,b,c,d"));
+        for (int coordinate = 0; coordinate < 3; coordinate++) {
+            for (String invalid : List.of("not-a-number", "2147483648", "-2147483649", "")) {
+                String[] coordinates = {"1", "64", "-3"};
+                coordinates[coordinate] = invalid;
+                keys.add("houses," + String.join(",", coordinates));
+            }
+        }
+        return keys.stream().flatMap(key -> Stream.of(Arguments.of(key, false), Arguments.of(key, true)));
+    }
+
+    @Test void malformedPublicKennelKeyDoesNotPreventValidDataFromPersisting() {
+        var current = store();
+        assertTrue(current.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Preserved", PetSex.FEMALE);
+        current.add(pet);
+        String valid = PetStore.kennelKey("houses", -3, 65, 7);
+        current.kennel(valid, pet.ownerId());
+        current.kennel("missing-coordinates", UUID.randomUUID());
+        try {
+            assertTrue(current.save());
+            var restored = store();
+            assertTrue(restored.load());
+            assertEquals(pet.ownerId(), restored.kennelOwner(valid));
+            assertEquals("Preserved", restored.get(pet.id()).name());
+            assertNull(restored.kennelOwner("missing-coordinates"));
+            assertTrue(restored.close());
+        } finally { current.close(); }
+    }
+
 }

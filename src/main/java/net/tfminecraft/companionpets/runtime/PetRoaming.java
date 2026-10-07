@@ -163,14 +163,17 @@ final class PetRoaming {
     private void restorePosture(Pet pet, Mob body, PetOrder order) {
         pet.order(order); pet.staying(order == PetOrder.STAY);
         pet.activity(Activity.NONE);
-        PetFx.lie(body, order == PetOrder.LAY);
-        if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT);
-        sleep.accept(body, false);
-        if (order == PetOrder.FOLLOW) { PetMotion.stop(body); body.setAware(true); }
-        else PostureNavigationGoal.hold(runtime, pet, body);
-        var type = runtime.config().type(pet.typeId());
-        if (type != null) runtime.visual().update(body, type,
-                order == PetOrder.LAY ? PetAnimation.LIE : order == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE);
+        // The saved order must survive cleanup while its body is in an unloaded chunk.
+        if (body != null) {
+            PetFx.lie(body, order == PetOrder.LAY);
+            if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT);
+            sleep.accept(body, false);
+            if (order == PetOrder.FOLLOW) { PetMotion.stop(body); body.setAware(true); }
+            else PostureNavigationGoal.hold(runtime, pet, body);
+            var type = runtime.config().type(pet.typeId());
+            if (type != null) runtime.visual().update(body, type,
+                    order == PetOrder.LAY ? PetAnimation.LIE : order == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE);
+        }
         runtime.store().requestSave();
     }
 
@@ -178,8 +181,8 @@ final class PetRoaming {
     void cancelWithPosture(Pet pet) {
         Attention job = attention.get(pet.id());
         cancel(pet);
-        if (job != null && job.returnOrder != null && runtime.entity(pet) instanceof Mob body)
-            restorePosture(pet, body, job.returnOrder);
+        if (job != null && job.returnOrder != null)
+            restorePosture(pet, runtime.entity(pet) instanceof Mob body ? body : null, job.returnOrder);
     }
 
     private void cancelAttention(Pet pet) {
@@ -190,8 +193,8 @@ final class PetRoaming {
     void clear() {
         for (var entry : java.util.List.copyOf(attention.entrySet())) {
             var pet = runtime.store().get(entry.getKey());
-            if (pet != null && entry.getValue().returnOrder != null && runtime.entity(pet) instanceof Mob body)
-                restorePosture(pet, body, entry.getValue().returnOrder);
+            if (pet != null && entry.getValue().returnOrder != null)
+                restorePosture(pet, runtime.entity(pet) instanceof Mob body ? body : null, entry.getValue().returnOrder);
             else if (pet != null && pet.activity() == Activity.ATTENDING) pet.activity(Activity.NONE);
         }
         for (UUID id : listeners.keySet()) {

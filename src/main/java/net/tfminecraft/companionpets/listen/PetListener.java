@@ -9,6 +9,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -109,7 +110,7 @@ public final class PetListener implements Listener {
         return handled;
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onUse(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) {
             return;
@@ -119,6 +120,9 @@ public final class PetListener implements Listener {
             return;
         }
         boolean air = action == Action.RIGHT_CLICK_AIR;
+        // Paper denies block use for air clicks, but explicit item denial still applies.
+        if (event.useItemInHand() == Event.Result.DENY) return;
+        if (!air && event.useInteractedBlock() == Event.Result.DENY) return;
         if (!actions.handledWorld(event.getPlayer(), event.getItem(), event.getClickedBlock(), event.getBlockFace(), event.getPlayer().isSneaking(), air)) {
             return;
         }
@@ -195,7 +199,7 @@ public final class PetListener implements Listener {
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDeath(EntityDeathEvent event) {
         Pet pet = runtime.byEntity(event.getEntity());
         if (pet == null) {
@@ -229,6 +233,7 @@ public final class PetListener implements Listener {
             runtime.visual().play(event.getEntity(), runtime.config().type(victim.typeId()), "HURT");
         }
         if (event instanceof EntityDamageByEntityEvent attack) {
+            if (victim != null) actions.struck(victim, event.getEntity());
             Pet attacker = runtime.byEntity(attack.getDamager());
             if (attacker != null) {
                 runtime.visual().cancelAction(attack.getDamager());
@@ -279,13 +284,7 @@ public final class PetListener implements Listener {
         if (event.getDamager() instanceof Projectile projectile
                 && projectile.getPersistentDataContainer().has(runtime.toyKey(), PersistentDataType.STRING)) {
             event.setCancelled(true);
-            return;
         }
-        Pet pet = runtime.byEntity(event.getEntity());
-        if (pet == null) {
-            return;
-        }
-        actions.struck(pet, event.getEntity());
     }
 
     @EventHandler

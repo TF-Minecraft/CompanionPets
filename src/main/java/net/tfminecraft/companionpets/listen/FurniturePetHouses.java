@@ -6,6 +6,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerEvent;
@@ -51,6 +52,7 @@ public final class FurniturePetHouses implements Listener {
             register(loader, "FurnitureBreakEvent", EventPriority.MONITOR, (listener, event) -> broken(event));
             runtime.plugin().getLogger().info("ItemsAdder Pet House furniture hooks registered");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
+            HandlerList.unregisterAll(this);
             runtime.plugin().getLogger().log(Level.SEVERE, "Could not register ItemsAdder Pet House furniture hooks", ex);
         }
     }

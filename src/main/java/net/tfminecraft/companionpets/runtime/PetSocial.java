@@ -374,6 +374,7 @@ final class PetSocial {
         e.a.friends().reinforce(e.b.id(), gain, now, 0);
         e.b.friends().reinforce(e.a.id(), gain, now, 0);
         queue.addLast(new Gain(now, gain));
+        runtime.store().requestSave();
     }
     private Mob body(Pet pet) {
         Entity entity = pet == null ? null : runtime.entity(pet);

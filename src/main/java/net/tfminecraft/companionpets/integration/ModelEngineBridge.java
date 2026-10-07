@@ -136,8 +136,9 @@ final class ModelEngineBridge {
         boolean created = model == null;
         if (created) model = call(method(api, "createActiveModel", String.class), null, appearance.model());
         if (model == null) throw new IllegalStateException("ModelEngine could not create " + appearance.model());
-        Attachment attachment = new Attachment(entity, owner, model, appearance.model(), clips, available);
+        Attachment attachment = null;
         try {
+            attachment = new Attachment(entity, owner, model, appearance.model(), clips, available);
             // F5 can show pets behind the character's facing direction. The server
             // cannot see that camera change, so keep their animation packets active.
             Object data = call(method(baseEntity, "getData"), call(method(modeled, "getBase"), owner));
@@ -167,7 +168,11 @@ final class ModelEngineBridge {
             entity.getPersistentDataContainer().set(MODEL_KEY, PersistentDataType.STRING, appearance.model());
             return attachment;
         } catch (RuntimeException ex) {
-            attachment.remove();
+            if (attachment != null) attachment.remove();
+            else {
+                if (created) call(method(active, "destroy"), model);
+                detach(entity, appearance.model());
+            }
             throw ex;
         }
     }

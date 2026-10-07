@@ -9,6 +9,7 @@ import net.tfminecraft.companionpets.training.TrickAvailability;
 
 /** Validate the entire replacement before adding a saved pet or creating a body. */
 final class PetCreation {
+    private PetCreation() { }
     static final List<String> OPTIONS = List.of("type=", "name=", "tricks=", "hunger=", "mood=", "energy=", "cleanliness=", "health=", "bond=", "sex=", "personality=", "agehours=");
 
     static Pet parse(PetRuntime runtime, UUID owner, String[] args) {

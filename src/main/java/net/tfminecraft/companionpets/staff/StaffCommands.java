@@ -34,7 +34,6 @@ public final class StaffCommands {
             case "reload" -> "companionpets.reload";
             case "find" -> "companionpets.admin.locate";
             case "egg" -> "companionpets.admin.giveegg";
-            case "info" -> "companionpets.admin.list";
             default -> "companionpets.admin." + action;
         };
     }
@@ -177,7 +176,15 @@ public final class StaffCommands {
         if (!audit.append(sender, "giveegg-requested", null, "none", target.getUniqueId() + ":" + args[1] + ":" + amount)) return;
         int delivered = 0;
         for (var entry : prepared.entrySet()) {
-            if (!EggDelivery.deliver(entry.getKey().egg(), entry.getValue(), target, amount)) {
+            boolean success;
+            try {
+                success = EggDelivery.deliver(entry.getKey().egg(), entry.getValue(), target, amount);
+            } catch (org.bukkit.command.CommandException ex) {
+                runtime.plugin().getLogger().log(java.util.logging.Level.SEVERE,
+                        "Could not deliver eggs for " + entry.getKey().id(), ex);
+                success = false;
+            }
+            if (!success) {
                 audit.append(sender, "giveegg-failed", null, "requested", "delivered=" + delivered + ";failed=" + entry.getKey().id());
                 sender.sendMessage("Egg delivery failed for " + entry.getKey().id() + ". Already delivered " + delivered + " types; check the server log.");
                 return;

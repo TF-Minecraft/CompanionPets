@@ -10,6 +10,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -231,15 +232,21 @@ public final class PetStore {
         }
         List<Map<String, Object>> kennelRows = new ArrayList<>();
         for (Map.Entry<String, UUID> entry : kennels.entrySet()) {
-            String[] parts = entry.getKey().split(",", 4);
-            if (parts.length != 4) {
+            String[] parts = entry.getKey().split(",", -1);
+            int coordinates = parts.length - 3;
+            if (coordinates < 1) {
                 continue;
             }
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("world", parts[0]);
-            row.put("x", Integer.parseInt(parts[1]));
-            row.put("y", Integer.parseInt(parts[2]));
-            row.put("z", Integer.parseInt(parts[3]));
+            row.put("world", String.join(",", Arrays.copyOf(parts, coordinates)));
+            try {
+                row.put("x", Integer.parseInt(parts[coordinates]));
+                row.put("y", Integer.parseInt(parts[coordinates + 1]));
+                row.put("z", Integer.parseInt(parts[coordinates + 2]));
+            } catch (NumberFormatException ex) {
+                logger.warning("Skipping kennel with invalid coordinates: " + entry.getKey());
+                continue;
+            }
             row.put("owner", entry.getValue().toString());
             kennelRows.add(row);
         }
@@ -325,7 +332,7 @@ public final class PetStore {
                 Files.copy(file.toPath(), backupTemp.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 replace(backupTemp, backup);
             }
-        } catch (IOException ex) {
+        } catch (IOException | SecurityException ex) {
             logger.log(Level.SEVERE, "Could not save pets.yml", ex);
             return false;
         }

@@ -4,6 +4,7 @@ import java.util.Locale;
 
 /** Tail-only motion in radians, relative to the model's existing resting transform. */
 final class TailWag {
+    private TailWag() { }
     static boolean tail(String bone) {
         String id = bone.toLowerCase(Locale.ROOT);
         return id.equals("tail") || id.matches("tail[0-9_].*");

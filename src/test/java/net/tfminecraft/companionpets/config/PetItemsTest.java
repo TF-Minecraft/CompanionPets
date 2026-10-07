@@ -105,4 +105,9 @@ class PetItemsTest {
         assertEquals(List.of(ItemRef.parse("mmoitems:PETS:MEAT_TREAT"), ItemRef.parse("mmoitems:PETS:FISH_TREAT")),
                 PetItems.read(section, global(), logger).treats());
     }
+    @Test void malformedListElementsAreDiscardedWithoutLosingValidItems() throws Exception {
+        var items = PetItems.read(yaml("treats: [null, 42, '', COD, COD]"), PetItems.defaults(), logger);
+        assertEquals(List.of(ItemRef.parse("COD")), items.treats());
+        assertTrue(items.isTreat(new ItemStack(Material.COD)));
+    }
 }

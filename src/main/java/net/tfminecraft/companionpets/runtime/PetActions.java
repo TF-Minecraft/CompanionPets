@@ -14,10 +14,13 @@ import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.BlockState;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Wolf;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.RayTraceResult;
@@ -318,7 +321,6 @@ public final class PetActions {
             return true;
         }
         if (type.acceptsToy(hand)) {
-            if (!type.behaves(net.tfminecraft.companionpets.config.PetBehavior.FETCH)) return false;
             PetFx.bar(player, "Throw it into the air for nearby pets to chase");
             return true;
         }
@@ -716,9 +718,6 @@ public final class PetActions {
             PetFx.tell(player, "Rename " + pet.name() + " to " + name + "? Type \"yes\" to confirm or \"no\" to cancel.");
             return true;
         }
-        if (!prompt.confirming()) {
-            return true;
-        }
         if (!Names.confirms(text)) {
             PetFx.tell(player, "Type \"yes\" to confirm or \"no\" to cancel.");
             return true;
@@ -866,6 +865,7 @@ public final class PetActions {
         // record and retain the session guard so a stale save cannot revive it.
         if (!runtime.store().remove(pet.id())) pet.dead(true);
         clearInteractions(pet);
+        runtime.sessions().clearPet(pet.id());
         Entity body = pet.entityId() == null ? null : Bukkit.getEntity(pet.entityId());
         if (body != null) {
             markSleep(body, false);
@@ -892,12 +892,7 @@ public final class PetActions {
         holograms.sleep(body, asleep);
     }
 
-    private void takeOut(Player player, Pet pet) { takeOut(player, pet, null); }
-
     private void takeOut(Player player, Pet pet, Location house) {
-        if (!pet.stored()) {
-            return;
-        }
         if (!Quota.canBringOut(runtime.store().countOut(player.getUniqueId()), runtime.config().limits().maxOut())) {
             PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "full-out"));
             return;
@@ -1038,9 +1033,6 @@ public final class PetActions {
     }
 
     private void storePet(Player player, Pet pet) {
-        if (!pet.ownerId().equals(player.getUniqueId()) || pet.stored()) {
-            return;
-        }
         if (!Quota.canStore(runtime.store().countStored(player.getUniqueId()), runtime.config().limits().maxStored())) {
             PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "full-stored"));
             return;
@@ -1062,10 +1054,6 @@ public final class PetActions {
     }
 
     private void call(Player player, Pet pet) {
-        if (pet.stored()) {
-            takeOut(player, pet);
-            return;
-        }
         World world = Bukkit.getWorld(pet.worldName());
         if (world != null) {
             int chunkX = ((int) Math.floor(pet.x())) >> 4;
@@ -1102,10 +1090,20 @@ public final class PetActions {
             PetFx.bar(player, "There isn't enough room for a Pet House there");
             return;
         }
-        if (!consumeHand(player, hand)) {
-            return;
+        // Protection listeners expect the proposed block and the original snapshot,
+        // as with a vanilla placement. Do not consume or register it until accepted.
+        BlockState replaced = place.getState();
+        place.setType(runtime.config().kennelBlock(), false);
+        boolean accepted = false;
+        try {
+            BlockPlaceEvent event = new BlockPlaceEvent(place, replaced, clicked, hand.clone(), player, true, EquipmentSlot.HAND);
+            Bukkit.getPluginManager().callEvent(event);
+            if (event.isCancelled() || !event.canBuild() || !consumeHand(player, hand)) return;
+            accepted = true;
+        } finally {
+            if (!accepted) replaced.update(true, false);
         }
-        place.setType(runtime.config().kennelBlock());
+        place.getState().update(true, true);
         runtime.store().kennel(PetStore.kennelKey(place.getWorld().getName(), place.getX(), place.getY(), place.getZ()), player.getUniqueId());
         runtime.store().requestSave();
         PetFx.bar(player, "Pet House placed. Right-click it to look after your pets");
@@ -1154,16 +1152,6 @@ public final class PetActions {
         }
         hand.setAmount(hand.getAmount() - 1);
         return true;
-    }
-
-    private void remove(UUID entityId) {
-        if (entityId == null) {
-            return;
-        }
-        Entity entity = Bukkit.getEntity(entityId);
-        if (entity != null) {
-            runtime.visual().removeBody(entity);
-        }
     }
 
     public static Entity lookingAt(Player player, double range) {

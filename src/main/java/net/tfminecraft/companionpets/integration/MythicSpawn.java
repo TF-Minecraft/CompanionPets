@@ -58,7 +58,9 @@ public final class MythicSpawn {
                 if (!method.getParameterTypes()[0].isInstance(abstractLocation)) {
                     continue;
                 }
-                Object level = second == float.class ? 1.0f : 1.0d;
+                Object level;
+                if (second == float.class) level = 1.0f;
+                else level = 1.0d;
                 active = method.invoke(mob, abstractLocation, level);
                 break;
             }

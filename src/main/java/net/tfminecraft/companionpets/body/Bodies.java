@@ -48,10 +48,9 @@ public final class Bodies {
         Entity entity;
         if (type.mythicMob() != null) {
             entity = MythicSpawn.spawn(type.mythicMob(), location, plugin.getLogger());
-        } else if (type.entity() != null && type.entity().isAlive() && type.entity().getEntityClass() != null) {
-            entity = location.getWorld().spawn(location, type.entity().getEntityClass());
         } else {
-            return null;
+            // The supported-body check above admits only WOLF and CAT.
+            entity = location.getWorld().spawn(location, type.entity().getEntityClass());
         }
         if (entity == null) {
             return null;
@@ -71,7 +70,7 @@ public final class Bodies {
         prepare(entity, pet, type, owner);
         Location safe = PetPlacement.nearest(location, PetPlacement.bounds(entity), null);
         if (safe == null) { visual.removeBody(entity); return null; }
-        if (!entity.teleport(safe) || !PetPlacement.safe(entity.getLocation(), PetPlacement.bounds(entity))) {
+        if (!teleportToVerifiedSpace(entity, safe)) {
             spawnProtection.remove(entity.getUniqueId());
             visual.removeBody(entity);
             return null;
@@ -93,13 +92,17 @@ public final class Bodies {
         if (!protectedFromSuffocation(entity) || PetPlacement.clear(entity.getLocation(), PetPlacement.bounds(entity))) return false;
         Location safe = PetPlacement.nearest(entity.getLocation(), PetPlacement.bounds(entity), null);
         if (safe == null) return false;
-        // Sitting or staying pets block ordinary teleports; this destination is already verified.
+        return teleportToVerifiedSpace(entity, safe);
+    }
+
+    private boolean teleportToVerifiedSpace(Entity entity, Location safe) {
+        // New pets have no remembered location yet; resting pets also reject ordinary teleports.
         recovering.put(entity.getUniqueId(), new Recovery(safe));
         try { return entity.teleport(safe) && PetPlacement.safe(entity.getLocation(), PetPlacement.bounds(entity)); }
         finally { recovering.remove(entity.getUniqueId()); }
     }
 
-    /** True only while recover() moves the body to a verified clear space. */
+    /** True while initial placement or recovery moves the body to a verified clear space. */
     public boolean recovering(Entity entity) { return recovering.containsKey(entity.getUniqueId()); }
 
     /** Only one event targeting the verified destination may bypass posture restrictions. */

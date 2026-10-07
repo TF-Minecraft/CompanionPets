@@ -103,9 +103,7 @@ final class PetHatching {
             PetFx.tell(player, PetTexts.refusal(name, sex, "full-out"));
             return;
         }
-        if (!net.tfminecraft.companionpets.item.HandItems.consume(player, hand)) {
-            return;
-        }
+        net.tfminecraft.companionpets.item.HandItems.consume(player, hand);
         Pet pet = new Pet(UUID.randomUUID(), player.getUniqueId(), type.id(), name, sex);
         net.tfminecraft.companionpets.training.DefaultTricks.apply(runtime.config(), pet);
         pet.bornAt(System.currentTimeMillis());

@@ -5,6 +5,7 @@ import java.lang.reflect.Method;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 
 /**
  * Holds MythicLib's shared action bar while a pet notice is on screen, so plugins
@@ -16,7 +17,7 @@ public final class ActionBarReservation {
     private static final int PRIORITY = 30;
     private record Access(Method data, Method actionBar, Method hide) { }
     private static Access access;
-    private static boolean resolved;
+    private static Plugin provider;
 
     private ActionBarReservation() { }
 
@@ -31,10 +32,15 @@ public final class ActionBarReservation {
     }
 
     private static Access access() {
-        if (resolved) return access;
-        resolved = true;
         var plugin = Bukkit.getPluginManager().getPlugin("MythicLib");
-        if (plugin == null || !plugin.isEnabled()) return null;
+        if (plugin == null || !plugin.isEnabled()) {
+            provider = null;
+            access = null;
+            return null;
+        }
+        if (provider == plugin) return access;
+        provider = plugin;
+        access = null;
         try {
             Class<?> data = Class.forName("io.lumine.mythic.lib.api.player.MMOPlayerData", true,
                     plugin.getClass().getClassLoader());

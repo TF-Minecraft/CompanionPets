@@ -31,14 +31,7 @@ public final class DominantNeed {
     }
 
     private static boolean worse(NeedBand candidate, NeedBand current) {
-        return rank(candidate) > rank(current);
-    }
-
-    private static int rank(NeedBand band) {
-        return switch (band) {
-            case STABLE -> 0;
-            case LOW -> 1;
-            case CRITICAL -> 2;
-        };
+        // Both candidates have already passed the STABLE filter in select().
+        return candidate == NeedBand.CRITICAL && current == NeedBand.LOW;
     }
 }
