@@ -355,6 +355,25 @@ class PetInteractionTest {
         assertFalse(runtime.bodies().recovering(guardedBody));
     }
 
+    @Test void lateUnsafeRecoveryDestinationIsDetectedAndRetriedWithinProtection() {
+        var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
+        var guardedBody = new GuardedWolf(MockBukkit.getMock());
+        MockBukkit.getMock().registerEntity(guardedBody);
+        guardedBody.teleport(body.getLocation().add(0, -1, 0));
+        runtime.remember(pet, guardedBody);
+        pet.order(PetOrder.SIT);
+        guardedBody.listener = listener;
+        guardedBody.afterGuard = event -> event.setTo(event.getTo().clone().subtract(0, 1, 0));
+        runtime.bodies().protect(guardedBody);
+        assertFalse(runtime.bodies().recover(guardedBody), "A late retarget into a solid block is not a successful recovery");
+        assertTrue(runtime.bodies().protectedFromSuffocation(guardedBody), "The original grace period still allows a retry");
+        assertFalse(runtime.bodies().recovering(guardedBody), "The bypass must not survive a failed recovery");
+        guardedBody.afterGuard = null;
+        assertTrue(runtime.bodies().recover(guardedBody), "The next tick can recover once the listener stops retargeting");
+        assertTrue(net.tfminecraft.companionpets.body.PetPlacement.safe(guardedBody.getLocation(),
+                net.tfminecraft.companionpets.body.PetPlacement.bounds(guardedBody)));
+    }
+
     @Test void trainingStartsWithAvailableHeadTiltWithoutCancellingItOnRepeatedTreatClicks() {
         headTiltAvailable = true;
         var treat = new ItemStack(Material.COD);

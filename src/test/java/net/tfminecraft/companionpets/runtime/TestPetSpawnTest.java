@@ -29,6 +29,8 @@ class TestPetSpawnTest {
     private PetRuntime runtime;
     private PetActions actions;
     private PlayerMock player;
+    private boolean retargetSpawn;
+    private Entity lastSpawned;
 
     @BeforeEach void setup() throws Exception {
         var server = MockBukkit.mock(new net.tfminecraft.companionpets.testutil.GoalServerMock());
@@ -39,6 +41,9 @@ class TestPetSpawnTest {
                 if (type == org.bukkit.entity.Wolf.class) {
                     body = new WolfMock(server, java.util.UUID.randomUUID()) {
                         @Override public void setRemoveWhenFarAway(boolean remove) { }
+                        @Override public boolean teleport(Location to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
+                            return super.teleport(retargetSpawn ? to.clone().subtract(0, 1, 0) : to, cause);
+                        }
                     };
                 } else if (type == org.bukkit.entity.Cat.class) {
                     body = new CatMock(server, java.util.UUID.randomUUID()) {
@@ -46,6 +51,7 @@ class TestPetSpawnTest {
                     };
                 } else return super.spawn(at, type);
                 server.registerEntity((org.mockbukkit.mockbukkit.entity.EntityMock) body);
+                lastSpawned = body;
                 body.teleport(at);
                 return type.cast(body);
             }
@@ -118,6 +124,15 @@ class TestPetSpawnTest {
         assertFalse(actions.spawnTestPet(player, "unknown", "Test"));
         assertTrue(runtime.store().all().isEmpty());
         assertEquals(before, player.getWorld().getEntities().size());
+    }
+
+    @Test void lateRetargetIntoSolidBlocksRejectsTheSpawnWithoutSavingOrProtectingTheBody() {
+        retargetSpawn = true;
+        assertFalse(actions.spawnTestPet(player, "wolf", "Blocked"));
+        assertTrue(runtime.store().all().isEmpty());
+        assertNotNull(lastSpawned);
+        assertFalse(lastSpawned.isValid(), "The unsafe new body is removed");
+        assertFalse(runtime.bodies().protectedFromSuffocation(lastSpawned));
     }
 
     @Test void changingConfiguredBaseReplacesBodyAndPreservesPetIdentityAndCare() {

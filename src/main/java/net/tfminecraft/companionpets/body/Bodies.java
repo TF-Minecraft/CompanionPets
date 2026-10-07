@@ -71,7 +71,11 @@ public final class Bodies {
         prepare(entity, pet, type, owner);
         Location safe = PetPlacement.nearest(location, PetPlacement.bounds(entity), null);
         if (safe == null) { visual.removeBody(entity); return null; }
-        if (!entity.teleport(safe)) { visual.removeBody(entity); return null; }
+        if (!entity.teleport(safe) || !PetPlacement.safe(entity.getLocation(), PetPlacement.bounds(entity))) {
+            spawnProtection.remove(entity.getUniqueId());
+            visual.removeBody(entity);
+            return null;
+        }
         protect(entity);
         visual.play(entity, type, "SPAWN");
         return entity;
@@ -84,13 +88,14 @@ public final class Bodies {
         if (System.currentTimeMillis() < until) return true;
         spawnProtection.remove(entity.getUniqueId()); return false;
     }
-    public void recover(Entity entity) {
-        if (!protectedFromSuffocation(entity) || PetPlacement.clear(entity.getLocation(), PetPlacement.bounds(entity))) return;
+    /** A failed or retargeted move remains eligible for the next recovery tick during protection. */
+    public boolean recover(Entity entity) {
+        if (!protectedFromSuffocation(entity) || PetPlacement.clear(entity.getLocation(), PetPlacement.bounds(entity))) return false;
         Location safe = PetPlacement.nearest(entity.getLocation(), PetPlacement.bounds(entity), null);
-        if (safe == null) return;
+        if (safe == null) return false;
         // Sitting or staying pets block ordinary teleports; this destination is already verified.
         recovering.put(entity.getUniqueId(), new Recovery(safe));
-        try { entity.teleport(safe); }
+        try { return entity.teleport(safe) && PetPlacement.safe(entity.getLocation(), PetPlacement.bounds(entity)); }
         finally { recovering.remove(entity.getUniqueId()); }
     }
 
