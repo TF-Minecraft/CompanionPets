@@ -25,7 +25,8 @@ public record PetTypeDef(
         List<Trick> defaultTricks,
         Set<PetBehavior> behaviors,
         PetSounds sounds,
-        boolean nativeCombat) {
+        boolean nativeCombat,
+        String species) {
 
     public PetTypeDef {
         tricks = Set.copyOf(tricks);

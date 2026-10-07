@@ -171,6 +171,7 @@ public class PetsPlugin extends JavaPlugin {
                 case "find" -> "find <player> [pet name] - show pet locations";
                 case "create" -> "create <player> type=<type> name=<name> [tricks=all] [hunger=100 ...] - create in Pet House";
                 case "egg" -> "egg <type|all> [player] [amount] - give configured eggs";
+                case "inspect" -> "inspect <type> - show inherited config and model capabilities";
                 default -> available;
             };
             sender.sendMessage("/companionpets " + example);

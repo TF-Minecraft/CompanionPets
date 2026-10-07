@@ -18,7 +18,7 @@ public enum PetBehavior {
     public String id() { return name().toLowerCase(Locale.ROOT).replace('_', '-'); }
 
     public static Set<PetBehavior> defaults(EntityType entity) {
-        var result = EnumSet.of(GREETING, GREETING_APPROACH, ROAM, SOCIAL_GREETING, SOCIAL_SNIFF,
+        var result = EnumSet.of(GREETING, GREETING_APPROACH, SOCIAL_GREETING, SOCIAL_SNIFF,
                 AFFECTION, RECOGNIZE_CARERS, PET_FRIENDSHIPS);
         if (entity == null) return Set.copyOf(result);
         switch (entity) {
@@ -37,20 +37,11 @@ public enum PetBehavior {
     }
 
     public static Set<PetBehavior> read(ConfigurationSection section, EntityType entity, Logger logger) {
-        if (!section.contains("behaviors")) return defaults(entity);
-        var result = EnumSet.noneOf(PetBehavior.class);
-        if (!section.isList("behaviors")) {
-            logger.warning("Pet " + section.getName() + ": behaviors must be a list; disabling optional behaviors");
-            return Set.of();
-        }
-        for (Object raw : section.getList("behaviors")) {
-            try {
-                if (!(raw instanceof String s)) throw new IllegalArgumentException();
-                result.add(valueOf(s.trim().replace('-', '_').toUpperCase(Locale.ROOT)));
-            } catch (IllegalArgumentException ex) {
-                logger.warning("Pet " + section.getName() + ": skipping unknown behavior " + raw);
-            }
-        }
-        return Set.copyOf(result);
+        return read(section, defaults(entity), logger);
+    }
+
+    public static Set<PetBehavior> read(ConfigurationSection section, Set<PetBehavior> inherited, Logger logger) {
+        return PetLists.read(section, "behaviors", inherited,
+                id -> valueOf(id.replace('-', '_').toUpperCase(Locale.ROOT)), logger);
     }
 }

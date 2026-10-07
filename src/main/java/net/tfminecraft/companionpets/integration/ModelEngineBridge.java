@@ -117,6 +117,14 @@ final class ModelEngineBridge {
         return available.keySet().stream().map(Object::toString).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
+    java.util.Set<String> bones(PetAppearance appearance) {
+        if (!appearance.modeled()) return java.util.Set.of();
+        Object definition = call(method(api, "getBlueprint", String.class), null, appearance.model());
+        if (definition == null) return java.util.Set.of();
+        Map<?, ?> bones = (Map<?, ?>) call(method(blueprint, "getFlatMap"), definition);
+        return bones.keySet().stream().map(Object::toString).collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
     Attachment attach(Entity entity, PetAppearance appearance) {
         Object definition = call(method(api, "getBlueprint", String.class), null, appearance.model());
         if (definition == null) throw new IllegalStateException("ModelEngine model '" + appearance.model() + "' is not registered");

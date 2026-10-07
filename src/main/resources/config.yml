@@ -1,8 +1,7 @@
-# Numbers are a comfortable starting point. The rules stay the same if a server changes them.
 care:
-  hunger-minutes-to-critical: 30
-  mood-minutes-to-critical: 30
-  energy-minutes-to-critical: 40
+  hunger-minutes-to-critical: 30  # Minutes for full hunger to reach the critical threshold.
+  mood-minutes-to-critical: 30    # Minutes for full mood to reach critical without play.
+  energy-minutes-to-critical: 40  # Minutes for full energy to reach critical while walking.
   dirty-every-minutes: 20
   dirty-loss: 30
   minutes-until-unwell: 3
@@ -13,16 +12,11 @@ care:
   play-mood-gain: 22
   play-energy-cost: 3
   favorite-mood-multiplier: 1.5
-  favorite-food-mood: 8             # Mood bonus when a hungry pet eats any accepted treat
-  # Energy recovery for sitting, lying and sleeping (100 points in this many minutes).
+  favorite-food-mood: 8           # Mood points gained when a hungry pet eats an accepted treat.
   sleep-minutes-to-full: 8
-  # Only sleep slows hunger; sitting uses the normal hunger rate.
-  sleeping-hunger-multiplier: 0.5
-  health-loss-per-minute: 12
-  # Natural recovery, including healthy pets with missing health. Requires food,
-  # cleanliness and energy >= 25 (or resting); mood and medicine do not gate it.
-  # Feeding/brushing also heal 25% of the hunger/cleanliness points restored.
-  health-regen-per-minute: 20
+  sleeping-hunger-multiplier: 0.5 # Hunger decay while sleeping relative to normal (0.5 = half).
+  health-loss-per-minute: 12      # Health points lost per minute with critical physical needs and illness.
+  health-regen-per-minute: 20     # Health points recovered per minute when physical needs allow recovery.
   medicine-health-bump: 20
   bond-gain-per-minute: 0.4
   bond-loss-per-minute: 0.8
@@ -34,22 +28,13 @@ care:
   rest-again-seconds: 45
 
 play:
-  # Multiplier of normal pet pace for chasing, following its carrier and returning.
-  # Favorites never add a speed bonus.
-  fetch-speed-multiplier: 1.2
-  # Lose interest in a held toy if the owner stays still without throwing it.
-  # Moving at least half a block, changing toys or putting it away renews interest.
-  toy-attention-seconds: 20
+  fetch-speed-multiplier: 1.2     # Fetch pace relative to normal movement (1.2 = 20% faster).
+  toy-attention-seconds: 20       # Seconds before a held toy becomes boring without renewed play/movement.
   favorite-toy-attention-seconds: 35
   throw-speed-low: 0.6
   throw-speed-high: 1.1
 
 training:
-  # Trained to 100% and bound to their lowercase ID, visible in the Tricks menu.
-  # Applies to new pets and grants missing defaults to saved pets on startup/reload.
-  # Removing an entry never erases previously learned tricks or words.
-  # Default tricks are enabled even if omitted from pets.<type>.tricks.
-  # IDs: follow, sit, stay, speak, jump, lay, paw, or a custom-tricks ID.
   default-tricks: [follow]
   attempts-before-bored: 6
   reward-gain: 20
@@ -64,24 +49,7 @@ training:
   treat-hunger-gain: 3
   rest-seconds: 90
 
-# Custom tricks share the normal word binding, learning and rewards.
-# The pet's tricks list can include these IDs alongside the built-in ones.
-# A valid definition needs animation, fallback-text, or both.
-# Without a usable animation OR fallback text, the trick is hidden for that pet.
-# Invalid definitions are logged and skipped; other tricks/pets still load.
 custom-tricks: {}
-# Example: replace the empty map above with this block.
-# custom-tricks:
-#   salute:
-#     display-name: "Saludar"
-#     animation: salute              # Exact clip name inside the model
-#     fallback-text: "{pet} te saluda." # Shown above vanilla pets/missing clips
-#     duration: 2                    # Seconds for text and zero-length poses
-#   roll:
-#     display-name: "Rodar"
-#     animation: roll                # No fallback: only pets with this clip
-# {pet} and {owner} are supported in fallback-text. Text is plain, not commands.
-# Animated clips play once using their own length. duration defaults to 2.
 
 limits:
   max-stored: 20
@@ -93,8 +61,6 @@ presence:
   cry-interval-seconds: 45
 
 moments:
-  # One happy reunion after a sustained offline or physical absence.
-  # /companionpets moment greeting skips absence/cooldown, including sit/lay/stay.
   greeting:
     enabled: true
     absence-seconds: 300
@@ -105,25 +71,17 @@ moments:
     speed: 1.35
     sound-interval-seconds: 1.2
     jump-enabled: true
-    tail-wag-hz: 3                    # Independent model tail gesture for WOLF bodies
+    tail-wag-hz: 3
     cat-circle-radius: 1.4
-    cat-speed: 0.8                    # Walking circles; cats do not hop at the owner
-    cat-sound-interval-seconds: 0.65  # Meows, with small timing/pitch variations and pauses
+    cat-speed: 0.8
+    cat-sound-interval-seconds: 0.65
   enabled: true
-  # Empty-hand petting by the owner can start this optional modeled moment.
-  # Requires ALL THREE clips: lie_back, belly_up, get_up (or their mappings).
-  # No illness/low needs, hunger >= 60, energy >= 40, health >= 70 and min-mood.
-  # Owner within 6 blocks; on land; no training, combat, fetch or active play.
   belly-up:
     enabled: true
-    chance: 25                       # Percent per eligible attempt
-    idle-seconds: 5                   # Stand up after this long without a rub
-    cooldown-seconds: 60              # Also limits unsuccessful attempts
+    chance: 25                   # Percent chance per eligible petting attempt.
+    idle-seconds: 5               # Seconds without a belly rub before standing up.
+    cooldown-seconds: 60
     min-mood: 70
-  # Right-click again to rub the belly and reset the idle timer. Rewards keep
-  # their normal cooldown. Damage, water, orders or leaving interrupt the moment.
-  # Operators can use /companionpets moment belly to trigger it immediately
-  # for testing; the pet still needs to be healthy and have all three clips.
   juvenile-hours: 24
   initial-delay-min-seconds: 180
   initial-delay-max-seconds: 420
@@ -146,10 +104,7 @@ moments:
   juvenile-dig-chance: 15
   adult-dig-chance: 10
   dig-min-energy: 40
-  # Items use the same vanilla/MMOItems/ItemsAdder IDs explained under items below.
-  # weight is a positive integer chance, not an item quantity. [] disables loot.
-  # The old MATERIAL: weight map is also accepted.
-  dig-loot:
+  dig-loot:                       # Weight is a relative chance, not the number of items.
     - {item: STICK, weight: 45}
     - {item: BONE, weight: 30}
     - {item: RABBIT, weight: 15}
@@ -174,7 +129,6 @@ social:
   encounter-radius: 8
   greeting-radius: 5
   greeting-seconds: 3
-  # A new initial greeting needs this long apart, beyond greeting-radius + 2.
   separation-seconds: 10
   greeting-friendship-gain: 2
   sniff-friendship-gain: 6
@@ -182,14 +136,9 @@ social:
   max-friendship-gain-per-minute: 12
   bark-radius: 6
   owner-radius: 16
-  # Pets look for a new meeting this often. Meetings already started stay smooth.
-  search-interval-seconds: 3
-  # After a meeting, the same pair waits this long before another sniff or chase.
+  search-interval-seconds: 3      # Seconds between searches for new pet encounters.
   encounter-cooldown-seconds: 60
-  # Once that wait is over, each search has this % chance to start a sniff, chase
-  # or bark, while both owners stand still. The first greeting is not left to chance.
-  # Average extra wait: search-interval-seconds * 100 / encounter-chance (15 s here).
-  encounter-chance: 20
+  encounter-chance: 20           # Percent chance per eligible search after cooldown; first greetings always happen.
   bark-seconds: 8
   calm-cooldown-seconds: 30
   territorial-bark-chance: 80
@@ -198,234 +147,34 @@ social:
   calm-clicks: 3
 
 roaming:
-  # Only interaction timing remains here. Idle roaming uses the base entity's AI.
   stationary-seconds: 2
-  # Quiet time after arriving, so you can type the next order.
   name-attention-seconds: 10
 
-# Only your own pets in the same world hear their name or name + command.
-# Example: "Toby sit", "sit Toby", or "Toby follow"; no aiming required.
 orders:
   hearing-radius: 12
 
-# ITEM IDS: the same syntax as Archaeo, for every interaction list and pet egg.
-#   Vanilla:    STICK or "minecraft:stick"
-#   MMOItems:   "mmoitems:PETS:MEAT_TREAT" (type PETS, item ID MEAT_TREAT)
-#   ItemsAdder: "itemsadder:namespace:item_id" (also accepts "namespace:item_id")
-# Short aliases mi:TYPE:id and ia:namespace:id also work. Quote custom IDs.
-# Older v.stick / m.pets.meat_treat / ia.namespace:item_id remain supported.
-# Provider identity is checked: a custom item never matches a vanilla material
-# just because both have the same base material. No dependency on MCPets/Cooking.
-# Referenced custom items must already exist in MMOItems/ItemsAdder.
-# Unknown IDs/providers never substitute unrelated vanilla items.
-#
-# GLOBAL INTERACTION LISTS: all pets inherit these five categories.
-# A pet's items.<category> REPLACES that whole category, never appends to it.
-# Omitted category = inherit. Explicit [] = disable it for that pet.
-# Other categories continue inheriting. See the commented example under pets.
+# Configuration guide and examples: README.md. Built-in species: dog, cat.
 items:
-  # Pet House placement is global; eggs belong to each pet type, not these lists.
   kennel: BARREL
   kennel-block: BARREL
-  # Optional simple ItemsAdder furniture (complex furniture is unsupported):
-  # set kennel to "itemsadder:tfmc:pet_house"
-  # and uncomment the matching ID. ItemsAdder handles placement and drops.
-  # kennel-furniture: "tfmc:pet_house"
-  # All treats work for ALL species. Hold any accepted treat to train; rewards consume one.
-  # Switching between accepted treats keeps the training session active.
-  # As before, a hungry pet can eat a treat for 30 hunger points and a mood bonus.
-  treats:
-    - "mmoitems:PETS:FISH_SNACK"
-    - "mmoitems:PETS:BISCUIT_TREAT"
-  # Food consumes one item. hunger = restored points (finite, nonnegative).
-  # MEAT_TREAT and FISH_TREAT are the Meat Meal and Fish Meal; IDs kept for saved items.
+  treats: [mmoitems:PETS:FISH_SNACK, mmoitems:PETS:BISCUIT_TREAT]
   foods:
-    - {item: "mmoitems:PETS:MEAT_TREAT", hunger: 35}
-    - {item: "mmoitems:PETS:FISH_TREAT", hunger: 35}
-  # Pet Medicine treats sickness; consumes one and uses care.medicine-health-bump.
-  # Crafted at Medicine Station by a Physician.
-  medicines:
-    - "mmoitems:PETS:PET_MEDICINE"
-  # Cleans the pet without consuming the item.
-  brushes:
-    - "mmoitems:PETS:PET_BRUSH"
-  # A vanilla stick and five custom toys. Returned toys keep their full item data.
-  toys:
-    - STICK
-    - "mmoitems:PETS:PET_BALL"
-    - "mmoitems:PETS:PET_CHEW_BONE"
-    - "mmoitems:PETS:PET_TUG_ROPE"
-    - "mmoitems:PETS:PET_MOUSE_PLUSH"
-    - "mmoitems:PETS:PET_TEDDY_PLUSH"
+    - {item: mmoitems:PETS:MEAT_TREAT, hunger: 35}
+    - {item: mmoitems:PETS:FISH_TREAT, hunger: 35}
+  medicines: [mmoitems:PETS:PET_MEDICINE]
+  brushes: [mmoitems:PETS:PET_BRUSH]
+  toys: [STICK, mmoitems:PETS:PET_BALL, mmoitems:PETS:PET_CHEW_BONE, mmoitems:PETS:PET_TUG_ROPE, mmoitems:PETS:PET_MOUSE_PLUSH, mmoitems:PETS:PET_TEDDY_PLUSH]
 
+# Built-in species: dog, cat. Define shared overrides or custom species here.
+# Guide: https://github.com/TF-Minecraft/CompanionPets#pet-configuration
+species: {}
+
+# Example pet: {species: dog, model: beagle, egg: 'mmoitems:PETS:PET_BEAGLE_EGG'}
+# Optional pet adjustment: behaviors: {add: [cat-play], remove: [dig-gifts]}
 pets:
-  # HOW TO ADD A PET
-  # 1. Copy a complete example below and give it a unique lowercase key.
-  # 2. Choose entity: WOLF or CAT, then appearance, egg, food and toys.
-  #    entity chooses native movement/instincts; appearance chooses the visible model.
-  #    behaviors chooses optional plugin actions; sounds chooses the voice.
-  #    These are separate settings: changing the model does not change AI or sounds.
-  # 3. Optionally restrict its tricks. Omit tricks to allow all existing tricks.
-  # 4. Omit default-tricks to inherit training.default-tricks. A pet-specific
-  #    list REPLACES the global list. [] gives no initial learning for that type.
-  #    Example inside a pet: default-tricks: [follow, sit, lay]
-  # 5. Optionally choose behaviors: a list REPLACES the species defaults.
-  #    Omitted = defaults for entity; [] = no optional spontaneous behaviors.
-  #    Essential care/rest and taught tricks still work independently.
-  #    Available IDs: greeting, greeting-circles, greeting-approach, greeting-jumps,
-  #    greeting-tail-wag, greeting-meows, toy-anticipation, toy-vocalizing,
-  #    toy-jumps, toy-tail-wag, fetch, cat-play,
-  #    social-greeting, social-tail-wag, social-jumps, social-vocalizing,
-  #    social-sniff, social-chase, social-protest, affection, affection-jumps,
-  #    belly-rub, mischief, dig-gifts, recognize-carers, pet-friendships.
-  #    Add greeting to enable a welcome; the other greeting-* IDs select its gestures.
-  #    cat-play adds a brief stalk/inspection before collecting a thrown toy (with fetch).
-  #    toy-anticipation prioritizes any held toy over spontaneous activities until put away/thrown.
-  #    toy-vocalizing, toy-jumps and toy-tail-wag repeat while the held toy is a favorite.
-  #    Dogs have all three; cats normally only vocalize.
-  #    belly-rub still requires its three model clips. Tail wag needs a model tail bone.
-  #    Example inside a cat: behaviors: [greeting, greeting-circles, greeting-meows,
-  #      affection, belly-rub, toy-anticipation, fetch, cat-play,
-  #      social-sniff, social-chase, social-protest, recognize-carers, pet-friendships]
-  #    Dogs normally also jump/wag on greeting, dig gifts and do mischief.
-  #    The old roam behavior is accepted for compatibility and has no effect.
-  #    Normal following, idle roaming and catch-up teleportation are vanilla.
-  # Use spaces, not tabs. Keep each pet key at the same indentation as wolf.
-  #
-  # COMMON FIELDS (apply to vanilla AND ModelEngine pets)
-  # wolf / beagle: saved pet type ID and label in menus. Both may use WOLF.
-  #   Keep this key stable once pets exist; changing it does not migrate them.
-  # entity: Minecraft entity type in uppercase, WOLF or CAT. Other entity types are not supported.
-  #   This supplies the body and AI; it does not select a custom model/skin.
-  #   WOLF retains wolf follow/wandering; CAT also retains cat resting/block-seeking AI.
-  #   Keep CAT for cats and WOLF for dogs to preserve their native differences.
-  #   Unsupported types (including FOX, FROG and PARROT) are skipped, not converted.
-  #   Their saved pets are retained. A model does not enable an unsupported entity.
-  #   A different species modeled on WOLF/CAT would inherit that base's instincts;
-  #   this requires a deliberate configuration choice, not automatic substitution.
-  # native-combat: false (default) prevents native targeting/attacks while keeping
-  #   native movement. Set true to allow the base entity's combat AI.
-  # sounds: omit to retain native audio and normal plugin interaction sounds.
-  #   Without a profile, voice follows entity, NOT the model ID or pet type name.
-  #   A model using a different base needs an explicit voice profile to avoid
-  #   unwanted base sounds. A sound preset does not enable a new entity type.
-  #   A mapping replaces native audio with a configurable profile. sounds: false
-  #   silences the pet's voice. Each event accepts a sound name, list, false/[], or
-  #   {sounds: [...], volume: 0.8, pitch: 1.0, min-interval-seconds: 0}.
-  #   Use Bukkit names (ENTITY_CAT_AMBIENT) or namespaced resource-pack sound keys.
-  #   Events: ambient, happy, happy-quiet, sad, hurt, death, greeting, toy, social,
-  #   protest, eat. Omitted events inherit the preset; false/[] disables one event.
-  #   Example inside a pet:
-  #     sounds:
-  #       preset: cat              # Defaults to entity; none starts with no sounds
-  #       ambient-interval-seconds: 25 # Randomized +/-20%; 0 disables idle sounds
-  #       greeting: {sounds: [ENTITY_CAT_AMBIENT], volume: 0.6, pitch: 1.1}
-  #       toy: "tfmc:pet.excited"
-  #       protest: false
-  # appearance.type: vanilla (default) or modelengine. See the beagle example.
-  # egg: item selector used to create this pet, e.g. WOLF_SPAWN_EGG,
-  #   "mmoitems:PETS:PET_BEAGLE_EGG" or "itemsadder:tfmc:beagle_egg". Each must be unique.
-  # egg-custom-model-data: legacy option ONLY for vanilla material selectors.
-  #   Material + number must be unique; when omitted a vanilla egg must have
-  #   NO CustomModelData. For MMOItems/ItemsAdder eggs use ONLY their ID.
-  #   A custom provider ID takes priority over legacy material + model matches.
-  # sex: random = assigned automatically; choose = player chooses when naming.
-  # items: optional per-pet replacement of one or more global interaction lists.
-  # No active overrides below: all species share treats, food, medicine, brushes
-  # and toys. Remove a category to inherit it again; [] disables that category.
-  # Example inside a pet definition (same indentation as entity/egg):
-  #   items:
-  #     treats: ["mmoitems:PETS:FISH_SNACK"]  # ONLY fish snack; biscuit is not accepted
-  #     foods:
-  #       - {item: SALMON, hunger: 55}        # ONLY salmon; no Meat/Fish Meal
-  #     medicines: []                       # No medicine for this type
-  #     brushes: [BRUSH]                     # Vanilla brush instead of Pet Brush
-  #     toys: [STICK, "itemsadder:tfmc:ball"] # Example custom ID to register first
-  # Any omitted categories still use the global lists. items: {} inherits all.
-  # Legacy care.foods / care.favorite / care.medicine and root toys still load
-  # as category replacements, but prefer the identical global/per-pet items form.
-  #
-  # TRICKS: what this type may learn AND perform, independently of animations.
-  # Omitted = all compatible base/custom tricks. [] = none. A list restricts them.
-  # sit = sit down; follow = resume following; stay = stay in place; speak = make its sound;
-  # come = get up, walk to the owner, then resume the previous sit/lay/stay posture.
-  # jump = jump; lay = lie down awake until given another order; paw = give a paw;
-  # Legacy sleep trick IDs are accepted as lay, keeping saved words/progress.
-  # Add custom-tricks IDs to the same list, e.g. [sit, follow, paw, salute].
-  # IDs are case-insensitive. Unknown IDs are skipped with a warning. A non-list
-  # disables tricks for that type, but the pet still loads. Saved progress/words
-  # are retained even when a custom definition or allowed trick is removed.
-  # Automatic rest/care and responding to the pet's name remain available.
-  # A trick does not need a separate animation with the same name.
   wolf:
-    entity: WOLF
-    appearance:
-      type: vanilla
+    species: dog
     egg: WOLF_SPAWN_EGG
-    sex: random
   cat:
-    entity: CAT
-    appearance:
-      type: vanilla
+    species: cat
     egg: CAT_SPAWN_EGG
-    sex: random
-  # MODELENGINE EXAMPLE: uncomment this complete beagle block to enable it.
-  # Install/register the beagle blueprint and serve its generated resource pack.
-  # The beagle's body/AI is WOLF; its visible appearance is the ModelEngine model.
-  # Register PET_BEAGLE_EGG in MMOItems type PETS before using this example.
-  # Use WOLF_SPAWN_EGG as its base material; its model number is irrelevant here.
-  # ModelEngine 4 is optional; an unavailable model uses the vanilla
-  # body and logs the reason. The default pets above need no ModelEngine plugin.
-  # beagle:
-  #   entity: WOLF
-  #   egg: "mmoitems:PETS:PET_BEAGLE_EGG"
-  #   appearance:
-  #     type: modelengine
-  #     model: beagle                 # ModelEngine model ID (not an item skin)
-  #     scale: 1.0                    # Model and hitbox scale
-  #   # tricks omitted: this beagle can learn all tricks.
-  #   sex: random
-  #   # Interaction items are inherited from the global items lists.
-
-  # OPTIONAL MODELENGINE SETTINGS
-  # Put these inside a pet's appearance block, next to type/model/scale.
-  # You can OMIT animations entirely when clips use the default names.
-  # ALL animations are optional and automatically used IF present:
-  # idle, walk, crouch, sit, lie, sleep, jump, swim, head_tilt, shake,
-  # paw, pet, fly, hover, attack, hurt, death, eat, speak, spawn,
-  # lie_back, belly_up, get_up. Missing clips do not prevent model attachment.
-  # idle/walk are recommended to avoid a static model. If lie is absent, the
-  # original lay clip is recognized automatically unless lie was disabled.
-  # If neither lie nor lay exists, an enabled sleep clip supplies the lie pose.
-  # ModelEngine itself plays idle, walk, jump, fly, hover and death from the
-  # body's movement; the plugin only adds postures (sit, lie, sleep, swim,
-  # crouch) and gestures on top. Without jump/hover use idle; without fly or
-  # swim use walk. crouch uses walk; sleep uses lie then sit; lie uses sit.
-  # run, fall and run-speed are no longer used.
-  # Shake follows the beginning of the native WOLF shake, alongside its sound.
-  # head_tilt loops while focused on training and plays briefly for confused commands.
-  # Author only head bones and use a distinct clip; missing head_tilt is optional.
-  # Without corresponding clips, eating/speaking
-  # use effects/sounds. pet is the normal petting reaction; it does not interrupt
-  # belly rubs. belly_up may be a zero-length pose; the plugin holds it itself.
-  # There are no sick, pet1, pet2 or despawn hooks.
-  #
-  # Example overrides (copy only the entries you need into appearance):
-  #     animations:
-  #       lie: sleep                # Reuse the sleeping posture for exhaustion
-  #       paw: give_paw             # Left: plugin action; right: model clip name
-  #       head_tilt: {name: head_tilt, speed: 1.0, blend: 0.15}
-  #       # speed: playback multiplier; blend: transition time in seconds.
-  #       # Poses loop; gestures play once. Optional "" disables a clip.
-  #       # Every clip can be disabled, including idle/walk/sit/death.
-  #       # Disable unfinished optional placeholders until you animate them:
-  #       shake: ""
-  #
-  # The definitive dogs/cats have sleep instead of lay and no jump/swim.
-  # They need no overrides for resting, jumping or swimming.
-  # Any other absent clips simply use their fallback or remain unanimated.
-  #
-  # Optional MythicMobs integration: mythic-mob: <internal mob ID> can provide
-  # the body. Declare entity: WOLF or CAT, and retain the native FollowOwner goal
-  # in that MythicMob definition. Other bodies or replaced follow AI are refused.
-  # Keep appearance ownership with CompanionPets when using ModelEngine here.
