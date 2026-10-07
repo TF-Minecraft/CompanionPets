@@ -152,6 +152,33 @@ class SpeciesConfigTest {
         assertEquals("frog", config.type("advanced").sounds().preset());
     }
 
+    @Test void invalidPetAndTemplateEntitiesReportClearWarningsEvenWithAnOverride() throws Exception {
+        var plugin = MockBukkit.createMockPlugin();
+        var warnings = new java.util.ArrayList<String>();
+        var handler = new java.util.logging.Handler() {
+            public void publish(java.util.logging.LogRecord record) { warnings.add(record.getMessage()); }
+            public void flush() { }
+            public void close() { }
+        };
+        plugin.getLogger().addHandler(handler);
+        try {
+            var yaml = new YamlConfiguration(); yaml.loadFromString("""
+                    species:
+                      broken: {entity: DOGG}
+                    pets:
+                      invalid_pet: {entity: DOGG, egg: EGG}
+                      inherited: {species: broken, egg: BONE}
+                      overridden: {species: broken, entity: WOLF, egg: WOLF_SPAWN_EGG}
+                      valid: {species: dog, egg: STICK}
+                    """);
+            var config = CompanionConfig.load(plugin, yaml);
+            assertEquals(Set.of("valid"), config.types().keySet());
+            for (String id : List.of("invalid_pet", "inherited", "overridden"))
+                assertTrue(warnings.contains("Skipping pet type " + id + ": entity is invalid"), id);
+            assertFalse(warnings.stream().anyMatch(message -> message.contains("No enum constant")));
+        } finally { plugin.getLogger().removeHandler(handler); }
+    }
+
     @Test void invalidSpeciesAreSkippedAndInvalidAdjustmentsKeepOtherDefaults() throws Exception {
         var config = load("""
                 species:

@@ -64,13 +64,20 @@ final class PetDefinitions {
         ConfigurationSection effective = new YamlConfiguration().createSection("pets." + pet.getName());
         merge(effective, template);
         merge(effective, normalize(pet));
-        EntityType entity = EntityType.valueOf(effective.getString("entity", "WOLF").trim().toUpperCase(Locale.ROOT));
-        EntityType speciesEntity = template == null ? entity
-                : EntityType.valueOf(template.getString("entity", entity.name()).trim().toUpperCase(Locale.ROOT));
+        EntityType entity = entity(effective, "WOLF");
+        EntityType speciesEntity = template == null ? entity : entity(template, entity.name());
         Set<PetBehavior> behaviors = template == null ? PetBehavior.defaults(entity)
                 : PetBehavior.read(template, speciesEntity, logger);
         Set<Trick> tricks = template == null ? allTricks : tricks(template, allTricks);
         return new Resolved(effective, id, PetBehavior.read(pet, behaviors, logger), tricks(pet, tricks));
+    }
+
+    private static EntityType entity(ConfigurationSection section, String fallback) {
+        try {
+            return EntityType.valueOf(section.getString("entity", fallback).trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("entity is invalid");
+        }
     }
 
     private Set<Trick> tricks(ConfigurationSection section, Set<Trick> inherited) {
