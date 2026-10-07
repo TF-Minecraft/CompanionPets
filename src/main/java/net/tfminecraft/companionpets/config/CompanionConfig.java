@@ -145,9 +145,7 @@ public final class CompanionConfig {
         ConfigurationSection training = config.getConfigurationSection("training");
         TrainingSettings trainingDefaults = TrainingSettings.defaults();
         TrainingSettings trainingSettings = new TrainingSettings(
-                training != null && training.contains("attempts-before-bored")
-                        ? training.getInt("attempts-before-bored")
-                        : trainingDefaults.attemptsBeforeBored(),
+                integer(training, "attempts-before-bored", trainingDefaults.attemptsBeforeBored()),
                 num(logger, training, "reward-gain", trainingDefaults.rewardGain()),
                 num(logger, training, "fail-gain", trainingDefaults.failGain()),
                 num(logger, training, "reward-window-seconds", trainingDefaults.rewardWindowSeconds()),
@@ -163,8 +161,8 @@ public final class CompanionConfig {
         ConfigurationSection limits = config.getConfigurationSection("limits");
         Limits limitDefaults = Limits.defaults();
         Limits limitSettings = new Limits(
-                limits != null && limits.contains("max-stored") ? limits.getInt("max-stored") : limitDefaults.maxStored(),
-                limits != null && limits.contains("max-out") ? limits.getInt("max-out") : limitDefaults.maxOut());
+                integer(limits, "max-stored", limitDefaults.maxStored()),
+                integer(limits, "max-out", limitDefaults.maxOut()));
 
         MomentSettings momentSettings = MomentSettings.load(config.getConfigurationSection("moments"), logger);
         SocialSettings socialSettings = SocialSettings.load(config.getConfigurationSection("social"), logger);
@@ -264,12 +262,8 @@ public final class CompanionConfig {
             }
             EntityType entity = null;
             if (section.contains("entity")) {
-                try {
-                    entity = EntityType.valueOf(section.getString("entity", "").trim().toUpperCase(Locale.ROOT));
-                } catch (IllegalArgumentException ex) {
-                    logger.warning("Skipping pet type " + id + " because entity is invalid");
-                    continue;
-                }
+                // PetDefinitions.resolve already validated this effective entity.
+                entity = EntityType.valueOf(section.getString("entity", "").trim().toUpperCase(Locale.ROOT));
             }
             if (entity == null && (mythicMob == null || mythicMob.isBlank())) {
                 logger.warning("Skipping pet type " + id + " because it has no entity or mythic-mob");
@@ -403,6 +397,12 @@ public final class CompanionConfig {
             return null;
         }
         return value;
+    }
+
+    private static int integer(ConfigurationSection section, String path, int fallback) {
+        if (section == null || !section.contains(path)) return fallback;
+        if (!section.isInt(path)) throw new IllegalArgumentException(section.getCurrentPath() + "." + path + " must be a 32-bit integer");
+        return section.getInt(path);
     }
 
     private static double num(Logger logger, ConfigurationSection section, String path, double fallback) {

@@ -9,6 +9,7 @@ import net.tfminecraft.companionpets.runtime.PetRuntime;
 
 /** Search loaded bodies and saved locations without loading chunks or respawning anything. */
 final class PetSearch {
+    private PetSearch() { }
     record Result(Pet pet, UUID id, String description) { }
 
     static List<Result> find(PetRuntime runtime, UUID owner, UUID selected, String name) {

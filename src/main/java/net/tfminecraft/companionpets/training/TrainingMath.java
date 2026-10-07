@@ -44,9 +44,6 @@ public final class TrainingMath {
     }
 
     public static int percentLearned(double progress, TrainingSettings settings) {
-        if (settings.learnedAt() <= 0.0) {
-            return 100;
-        }
         return (int) Math.min(100L, Math.max(0L, Math.round(progress / settings.learnedAt() * 100.0)));
     }
 

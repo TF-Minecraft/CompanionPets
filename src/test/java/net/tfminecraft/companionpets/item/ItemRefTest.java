@@ -64,4 +64,12 @@ class ItemRefTest {
             assertThrows(IllegalArgumentException.class, () -> ItemRef.parse(value), value);
         }
     }
+    @Test void providerTokensRoundTripAndRejectMalformedNamespaceSeparators() {
+        assertEquals("STICK",ItemRef.parse("minecraft:stick").configToken());
+        var item = ItemRef.parse("mi:food:pet_treat");
+        assertEquals("mmoitems:FOOD:PET_TREAT", item.configToken());
+        assertEquals(item, ItemRef.parse(item.configToken()));
+        assertThrows(IllegalArgumentException.class, () -> ItemRef.parse("mi:food:bad:extra"));
+        assertThrows(IllegalArgumentException.class, () -> ItemRef.parse("itemsadder:missing-namespace"));
+    }
 }

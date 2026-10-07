@@ -335,4 +335,20 @@ class PetMenuWorkflowTest {
                 ClickType.SHIFT_LEFT, InventoryAction.MOVE_TO_OTHER_INVENTORY);
         listener.onClick(bottom); assertTrue(bottom.isCancelled());
     }
+
+    @Test void incompleteProfilesAndMalformedSavedFavoriteToysRemainSafeToRender() {
+        Pet pet = pet("wolf", player.getUniqueId());
+        var tiny = org.bukkit.Bukkit.createInventory(null, 9);
+        var marker = new ItemStack(Material.DIAMOND); tiny.setItem(0,marker);
+        menus.fillInformation(tiny,pet); assertEquals(marker,tiny.getItem(0));
+        pet.favoriteToy("not a valid toy!"); pet.need(Need.HUNGER, 2);
+        menus.openCare(player,pet);
+        assertEquals(Material.BARRIER,holder().getInventory().getItem(32).getType());
+        String contents = java.util.Arrays.stream(holder().getInventory().getContents())
+                .filter(java.util.Objects::nonNull).map(item -> String.valueOf(item.getItemMeta().lore()))
+                .collect(java.util.stream.Collectors.joining());
+        assertTrue(contents.contains("Needs care"));
+        pet.favoriteToy("STICK"); menus.refreshCare(player,pet);
+        assertEquals(Material.STICK,holder().getInventory().getItem(32).getType());
+    }
 }

@@ -184,9 +184,7 @@ public final class PetTicker implements Runnable {
             if ((before == null && favorite.toy() != null) || (before != null && !before.equals(favorite.toy()))) {
                 pet.favoriteToy(favorite.toy());
                 if (favorite.notifyLost() && online) {
-                    PetFx.tell(owner, favorite.toy() == null
-                            ? pet.name() + " has lost interest in " + PetTexts.his(pet.sex()) + " favorite toy."
-                            : pet.name() + " has a new favorite toy: the " + PetTexts.itemName(favorite.toy()) + ".");
+                    PetFx.tell(owner, pet.name() + " has a new favorite toy: the " + PetTexts.itemName(favorite.toy()) + ".");
                 }
             }
             if (pet.carriedToy() != null && withOwner && body != null && owner != null) {
@@ -224,9 +222,6 @@ public final class PetTicker implements Runnable {
 
     private void move(long now) {
         for (Pet pet : runtime.store().active()) {
-            if (pet.stored() || pet.dead()) {
-                continue;
-            }
             Entity body = runtime.entity(pet);
             if (!(body instanceof Mob mob)) {
                 continue;
@@ -313,7 +308,6 @@ public final class PetTicker implements Runnable {
         boolean sameWorld = owner != null && owner.isOnline() && mob.getWorld().equals(owner.getWorld());
         double speed = Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), false);
         switch (mode) {
-            case FOLLOW -> { /* Native AI owns idle roaming, following and teleportation. */ }
             case SIT, STAY -> {
                 mob.getPathfinder().stopPathfinding();
                 PetFx.lie(mob, false);
@@ -344,8 +338,6 @@ public final class PetTicker implements Runnable {
                         mob.getWorld().playSound(mob.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.6f, 1.4f);
                     }
                 }
-            }
-            case FETCH -> {
             }
             default -> {
             }

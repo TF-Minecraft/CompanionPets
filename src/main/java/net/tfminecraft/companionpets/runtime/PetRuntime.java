@@ -219,9 +219,6 @@ public final class PetRuntime {
     }
 
     private static boolean open(Location spot) {
-        if (spot.getWorld() == null) {
-            return false;
-        }
         Block lower = spot.getBlock();
         Block upper = lower.getRelative(0, 1, 0);
         return lower.isPassable() && !lower.isLiquid() && upper.isPassable() && !upper.isLiquid();

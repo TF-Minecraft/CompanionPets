@@ -177,10 +177,11 @@ final class PetMoments {
                 && misbehave(pet, body, owner)) {
             return;
         }
-        if (choice < mischiefChance + barkChance && reactToStranger(pet, body, owner)) {
+        // A failed earlier choice must not enable an action configured at zero chance.
+        if (barkChance > 0 && choice < mischiefChance + barkChance && reactToStranger(pet, body, owner)) {
             return;
         }
-        if (choice < mischiefChance + barkChance + digChance && pet.need(Need.ENERGY) >= settings.digMinEnergy()
+        if (digChance > 0 && choice < mischiefChance + barkChance + digChance && pet.need(Need.ENERGY) >= settings.digMinEnergy()
                 && startGift(pet, body, owner, now)) {
             return;
         }
@@ -272,9 +273,6 @@ final class PetMoments {
 
     private void advanceGift(Pet pet, Mob body, Player owner, long now) {
         GiftJob gift = gifts.get(pet);
-        if (gift == null) {
-            return;
-        }
         if (!body.isValid() || pet.order() != PetOrder.FOLLOW || pet.staying()
                 || owner == null || !owner.isOnline() || !owner.getWorld().equals(body.getWorld())
                 || now >= gift.expiresAt) {

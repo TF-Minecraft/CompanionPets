@@ -58,11 +58,6 @@ final class PetGreetings {
 
     boolean active(Pet pet) { return active.containsKey(pet.id()); }
 
-    double enthusiasm(Pet pet) {
-        Greeting job = active.get(pet.id());
-        return job == null || !job.mobile ? 0 : mood(pet, job).intensity();
-    }
-
     private void recognizeCarers(Pet pet, long now) {
         if (pet.stored() || pet.dead() || !runtime.behaves(pet, PetBehavior.RECOGNIZE_CARERS)
                 || !(runtime.entity(pet) instanceof Mob body)) return;

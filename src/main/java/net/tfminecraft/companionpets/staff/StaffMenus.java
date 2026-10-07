@@ -94,7 +94,6 @@ public final class StaffMenus implements Listener {
             if (MenuNavigation.turn(player, holder.page(), pages, true)) previous.run();
         });
     }
-    private static ItemStack named(Material material, String title, String... lore) { return named(new ItemStack(material), title, lore); }
     private static ItemStack named(ItemStack source, String title, String... lore) {
         var item = source.clone(); item.setAmount(1);
         var meta = item.getItemMeta(); meta.displayName(Component.text(title, NamedTextColor.GOLD));

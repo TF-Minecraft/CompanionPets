@@ -4,6 +4,7 @@ import org.bukkit.Location;
 
 /** Angles stay relative to the resting body, including across the +/-180 boundary. */
 final class RestingLook {
+    private RestingLook() { }
     static final float MAX_YAW = 50;
     static final float MAX_PITCH = 30;
     static final float STEP = 4;

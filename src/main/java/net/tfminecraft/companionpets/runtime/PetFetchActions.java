@@ -131,9 +131,6 @@ final class PetFetchActions {
 
     void step(Pet pet, Mob mob, long now) {
         FetchJob job = pet.fetch();
-        if (job == null) {
-            return;
-        }
         Player owner = Bukkit.getPlayer(job.throwerId());
         if (owner == null || !owner.isOnline()) {
             actions.releaseFetch(pet, null, false);

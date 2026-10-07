@@ -49,19 +49,12 @@ public final class AnimationController {
             customAction = false;
         }
         if (trainingAttention && headPose()) play(PetAnimation.HEAD_TILT);
-        Clip wanted = nativeLocomotion(pose) ? null : resolve(pose);
+        Clip wanted = overlay(pose);
         if (wanted == null) { stopActive(); return; }
         if (!wanted.equals(active) || !player.playing(wanted.name())) {
             stopActive();
             if (player.play(wanted, true)) active = wanted;
         }
-    }
-
-    /** ModelEngine's own idle, walk, jump and fly states render these without a plugin clip. */
-    private boolean nativeLocomotion(PetAnimation state) {
-        for (PetAnimation current = state; current != null; current = current.fallback())
-            if (clips.containsKey(current)) return NATIVE.contains(current);
-        return true;
     }
 
     public boolean play(PetAnimation next) {
@@ -168,10 +161,11 @@ public final class AnimationController {
         belly = null;
     }
 
-    private Clip resolve(PetAnimation state) {
+    /** Native locomotion stays with ModelEngine; only resolved posture clips need an overlay. */
+    private Clip overlay(PetAnimation state) {
         for (PetAnimation current = state; current != null; current = current.fallback()) {
             Clip clip = clips.get(current);
-            if (clip != null) return clip;
+            if (clip != null) return NATIVE.contains(current) ? null : clip;
         }
         return null;
     }

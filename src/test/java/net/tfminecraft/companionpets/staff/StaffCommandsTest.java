@@ -3,6 +3,11 @@ package net.tfminecraft.companionpets.staff;
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.net.URLClassLoader;
+import org.junit.jupiter.api.io.TempDir;
+import javax.tools.ToolProvider;
+import org.bukkit.command.PluginCommandUtils;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -31,6 +36,79 @@ class StaffCommandsTest {
     private TestCommands tests;
     private Pet pet;
     private boolean forbidOfflineScan;
+    @TempDir static Path providerClasses;
+    private URLClassLoader providerLoader;
+
+    @BeforeAll static void compileEggProvider() throws Exception {
+        // Isolate the optional API in the provider's classloader, as it is on a real server.
+        Path type = providerClasses.resolve("Type.java");
+        Files.writeString(type, """
+                package net.Indyuce.mmoitems.api;
+                public record Type(String id) {
+                    public static Type get(String id) { return new Type(id); }
+                }
+                """);
+        Path provider = providerClasses.resolve("EggProvider.java");
+        Files.writeString(provider, """
+                package fixture;
+                import java.io.File;
+                import org.bukkit.Server;
+                import org.bukkit.Material;
+                import org.bukkit.NamespacedKey;
+                import org.bukkit.inventory.ItemStack;
+                import org.bukkit.persistence.PersistentDataType;
+                import org.bukkit.plugin.PluginDescriptionFile;
+                import org.bukkit.plugin.java.JavaPluginLoader;
+                import org.mockbukkit.mockbukkit.plugin.PluginMock;
+                import net.Indyuce.mmoitems.api.Type;
+                public class EggProvider extends PluginMock {
+                    public EggProvider(Server server, File folder) {
+                        super(new JavaPluginLoader(server),
+                            new PluginDescriptionFile("MMOItems", "1", "fixture.EggProvider"), folder, folder);
+                    }
+                    public void active() { setEnabled(true); }
+                    public static String getTypeName(ItemStack item) {
+                        return item.getItemMeta().getPersistentDataContainer().get(
+                            new NamespacedKey("fixture", "type"), PersistentDataType.STRING);
+                    }
+                    public static String getID(ItemStack item) {
+                        return item.getItemMeta().getPersistentDataContainer().get(
+                            new NamespacedKey("fixture", "id"), PersistentDataType.STRING);
+                    }
+                    public ItemStack getItem(Type type, String id) {
+                        var item = new ItemStack(Material.WOLF_SPAWN_EGG);
+                        var meta = item.getItemMeta();
+                        meta.getPersistentDataContainer().set(new NamespacedKey("fixture", "type"), PersistentDataType.STRING, type.id());
+                        meta.getPersistentDataContainer().set(new NamespacedKey("fixture", "id"), PersistentDataType.STRING, id);
+                        item.setItemMeta(meta);
+                        return item;
+                    }
+                }
+                """);
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        assertNotNull(compiler);
+        assertEquals(0, compiler.run(null, null, null, "-proc:none", "-classpath",
+                System.getProperty("java.class.path"), "-d", providerClasses.toString(), type.toString(), provider.toString()));
+    }
+
+    private JavaPlugin eggProvider() throws Exception {
+        providerLoader = new URLClassLoader(new java.net.URL[]{providerClasses.toUri().toURL()}, getClass().getClassLoader());
+        Class<?> type = providerLoader.loadClass("fixture.EggProvider");
+        var provider = (JavaPlugin) type.getConstructor(org.bukkit.Server.class, java.io.File.class)
+                .newInstance(server, providerClasses.toFile());
+        server.getPluginManager().registerLoadedPlugin(provider);
+        type.getMethod("active").invoke(provider);
+        return provider;
+    }
+
+    private void configure(String content) throws Exception {
+        var yaml = new YamlConfiguration(); yaml.loadFromString(content);
+        runtime.config(CompanionConfig.load(plugin, yaml));
+    }
+
+    private String staffAudit() throws Exception {
+        return Files.readString(plugin.getDataFolder().toPath().resolve("staff-audit.yml.log"));
+    }
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new ServerMock() {
@@ -64,7 +142,10 @@ class StaffCommandsTest {
         server.getPluginManager().registerEvents(commands.menus(), plugin);
         pet = add(owner.getUniqueId(), "wolf", "Toby", true);
     }
-    @AfterEach void teardown() { MockBukkit.unmock(); }
+    @AfterEach void teardown() throws Exception {
+        try { MockBukkit.unmock(); }
+        finally { if (providerLoader != null) providerLoader.close(); }
+    }
 
     @Test void createAcceptsWhitespaceAroundCommaSeparatedTrickIds() {
         command("create", "Owner", "type=wolf", "name=Luna", "tricks=follow,", "sit,", "lay:duerme");
@@ -386,5 +467,134 @@ class StaffCommandsTest {
         assertTrue(report.contains("minecraft:entity.rabbit.ambient"));
     }
 
+
+    @Test void consoleNamedProfileReportsSavedNeedsOrderIllnessAndLearnedWords() {
+        pet.need(Need.HUNGER, 61.7); pet.need(Need.ENERGY, 42.1);
+        pet.order(PetOrder.SIT); pet.illness(Illness.UNWELL); pet.bindWord("sientate", Trick.SIT);
+        var console = server.getConsoleSender();
+        assertTrue(commands.execute(console, "list", "Owner", "tObY"));
+        assertEquals("Toby (wolf), owner: Owner", console.nextMessage());
+        assertEquals("State: in Pet House; order: SIT; illness: UNWELL", console.nextMessage());
+        String needs = console.nextMessage();
+        assertTrue(needs.contains("hunger=62")); assertTrue(needs.contains("energy=42"));
+        for (Need need : Need.values()) assertTrue(needs.contains(need.name().toLowerCase(Locale.ROOT) + "="));
+        assertTrue(console.nextMessage().contains("sientate")); assertNull(console.nextMessage());
+        pet.stored(false);
+        assertTrue(commands.execute(console, "list", "Owner", "Toby"));
+        console.nextMessage();
+        assertEquals("State: outside; order: SIT; illness: UNWELL", console.nextMessage());
+        assertEquals(61.7, pet.need(Need.HUNGER));
+    }
+
+    @Test void failedCreationSaveRollsBackNewPetAndKeepsCommittedPetsRecoverable() throws Exception {
+        assertTrue(runtime.store().save());
+        Path original = plugin.getDataFolder().toPath().resolve("pets.yml");
+        String baseline = Files.readString(original);
+        Path blocked = Files.createDirectory(plugin.getDataFolder().toPath().resolve("pets.yml.tmp"));
+        Path obstacle = Files.writeString(blocked.resolve("occupied"), "Existing content must survive a failed save");
+        int bodies = owner.getWorld().getEntities().size();
+        command("create", "Owner", "wolf", "Luna");
+        assertEquals("Creation could not be saved; no body was spawned. Check the server log.", staff.nextMessage());
+        assertEquals(List.of(pet), runtime.store().of(owner.getUniqueId()));
+        assertEquals(bodies, owner.getWorld().getEntities().size());
+        assertEquals(baseline, Files.readString(original)); assertTrue(Files.exists(obstacle));
+        assertTrue(staffAudit().contains("action: create-save-failed"));
+        assertTrue(staffAudit().contains("rollback=true"));
+        assertFalse(staffAudit().contains("action: create\n"));
+        var restored = new PetStore(plugin); assertTrue(restored.load());
+        assertEquals(List.of(pet.id()), restored.all().stream().map(Pet::id).toList());
+        Files.delete(obstacle); Files.delete(blocked);
+        command("create", "Owner", "wolf", "Retry");
+        assertTrue(staff.nextMessage().contains("Created Retry"));
+        var afterRetry = new PetStore(plugin); assertTrue(afterRetry.load());
+        assertEquals(Set.of("Toby", "Retry"), new HashSet<>(afterRetry.of(owner.getUniqueId()).stream().map(Pet::name).toList()));
+    }
+
+    @Test void modelledEggDeliveryPreservesConfiguredIdentityAndCompletesOnlineTargetsAndAmounts() throws Exception {
+        configure("""
+                pets:
+                  wolf: {entity: WOLF, egg: PAPER, egg-custom-model-data: 12002}
+                """);
+        var offline = server.addPlayer("OldOwner"); offline.disconnect();
+        assertEquals(List.of("Owner", "Staff"), commands.complete(staff, new String[]{"egg", "wolf", ""}));
+        assertEquals(List.of("Owner"), commands.complete(staff, new String[]{"egg", "wolf", "oW"}));
+        assertEquals(List.of("1", "16", "64"), commands.complete(staff, new String[]{"egg", "wolf", "Owner", ""}));
+        assertEquals(List.of("1", "16"), commands.complete(staff, new String[]{"egg", "wolf", "Owner", "1"}));
+        command("egg", "wolf", "Owner", "16");
+        var delivered = owner.getInventory().getItem(0);
+        assertNotNull(delivered); assertEquals(16, delivered.getAmount());
+        assertEquals(12002, delivered.getItemMeta().getCustomModelData());
+        assertTrue(runtime.config().type("wolf").matchesEgg(delivered));
+        assertTrue(staffAudit().contains("action: giveegg"));
+        assertTrue(staff.nextMessage().contains("Gave 16 egg(s) for 1 configured type(s) to Owner."));
+        staff.setOp(false);
+        assertTrue(commands.complete(staff, new String[]{"egg", "wolf", ""}).isEmpty());
+        assertTrue(commands.complete(staff, new String[]{"egg", "wolf", "Owner", ""}).isEmpty());
+    }
+
+    @Test void unavailableProviderCommandRefusesAllEggsBeforeAnyInventoryOrAuditChange() throws Exception {
+        eggProvider();
+        configure("""
+                pets:
+                  wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}
+                  custom: {entity: CAT, egg: 'mmoitems:PETS:CAT_EGG'}
+                """);
+        command("egg", "all", "Owner");
+        assertEquals("The MMOItems give command is unavailable.", staff.nextMessage());
+        assertTrue(owner.getInventory().isEmpty());
+        assertFalse(Files.exists(plugin.getDataFolder().toPath().resolve("staff-audit.yml.log")));
+    }
+
+    @Test void providerExceptionReportsPartialDeliveryAndAuditsExactlyWhichTypeFailed() throws Exception {
+        var provider = eggProvider();
+        configure("""
+                pets:
+                  wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}
+                  custom: {entity: CAT, egg: 'mmoitems:PETS:CAT_EGG'}
+                  last: {entity: PIG, egg: PIG_SPAWN_EGG}
+                """);
+        var give = PluginCommandUtils.createPluginCommand("mi", provider);
+        give.setExecutor((sender, command, label, args) -> {
+            assertSame(server.getConsoleSender(), sender);
+            assertArrayEquals(new String[]{"give", "PETS", "CAT_EGG", "Owner", "2"}, args);
+            throw new IllegalStateException("Provider delivery unavailable");
+        });
+        server.getCommandMap().register("mmoitems", give);
+        assertDoesNotThrow(() -> command("egg", "all", "Owner", "2"));
+        assertEquals("Egg delivery failed for custom. Already delivered 1 types; check the server log.", staff.nextMessage());
+        assertEquals(2, owner.getInventory().getItem(0).getAmount());
+        assertEquals(Material.WOLF_SPAWN_EGG, owner.getInventory().getItem(0).getType());
+        assertNull(owner.getInventory().getItem(1));
+        assertTrue(staffAudit().contains("action: giveegg-failed"));
+        assertTrue(staffAudit().contains("delivered=1;failed=custom"));
+        assertFalse(staffAudit().contains("action: giveegg\n"));
+    }
+
+    @Test void providerGiveCommandDeliversCustomEggsExactlyOnce() throws Exception {
+        var provider = eggProvider();
+        configure("""
+                pets:
+                  custom: {entity: CAT, egg: 'mmoitems:PETS:CAT_EGG'}
+                """);
+        var give = PluginCommandUtils.createPluginCommand("mi", provider);
+        var requests = new ArrayList<String>();
+        give.setExecutor((sender, command, label, args) -> {
+            assertSame(server.getConsoleSender(), sender);
+            requests.add(String.join(" ", args));
+            var egg = runtime.config().type("custom").egg().create();
+            assertNotNull(egg); egg.setAmount(Integer.parseInt(args[4]));
+            Objects.requireNonNull(server.getPlayerExact(args[3])).getInventory().addItem(egg);
+            return true;
+        });
+        server.getCommandMap().register("mmoitems", give);
+        command("egg", "custom", "Owner", "3");
+        assertEquals(List.of("give PETS CAT_EGG Owner 3"), requests);
+        var egg = owner.getInventory().getItem(0);
+        assertNotNull(egg); assertEquals(3, egg.getAmount());
+        assertTrue(runtime.config().type("custom").matchesEgg(egg));
+        assertNull(owner.getInventory().getItem(1));
+        assertTrue(staff.nextMessage().contains("Gave 3 egg(s) for 1 configured type(s) to Owner."));
+        assertTrue(staffAudit().contains("action: giveegg\n"));
+    }
 
 }

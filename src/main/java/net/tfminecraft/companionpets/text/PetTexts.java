@@ -37,6 +37,7 @@ public final class PetTexts {
             return "Pet";
         }
         String clean = typeId.replace('_', ' ').replace('-', ' ').trim();
+        if (clean.isEmpty()) return "Pet";
         return clean.substring(0, 1).toUpperCase(Locale.ROOT) + clean.substring(1).toLowerCase(Locale.ROOT);
     }
 

@@ -22,9 +22,8 @@ final class PetCareActions {
     private void comfort(Pet pet, long now) { pet.nextCryAtMillis(now + Math.round(runtime.config().cryIntervalSeconds() * 1000)); }
     boolean groom(Player player, Pet pet, Entity entity, ItemStack hand, PetTypeDef type, long now) {
         if (type.items().isMedicine(hand) && (pet.illness() == Illness.SICK || pet.illness() == Illness.WEAKENED)) {
-            if (!net.tfminecraft.companionpets.item.HandItems.consume(player, hand)) {
-                return true;
-            }
+            // isMedicine already matched a nonempty stack on this main-thread call.
+            net.tfminecraft.companionpets.item.HandItems.consume(player, hand);
             pet.treated(true);
             runtime.recordCare(player, pet, 8, now);
             pet.need(Need.HEALTH, pet.need(Need.HEALTH) + runtime.config().care().medicineHealthBump());

@@ -7,6 +7,7 @@ import net.tfminecraft.companionpets.item.ItemRef;
 
 /** MMOItems owns item delivery; other providers use their configured item identity. */
 final class EggDelivery {
+    private EggDelivery() { }
     static boolean deliver(ItemRef ref, ItemStack prepared, Player target, int amount) {
         if (ref.kind() == ItemRef.Kind.MMOITEMS)
             return Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "mmoitems:mi give " + ref.type() + " " + ref.id() + " " + target.getName() + " " + amount);

@@ -40,10 +40,9 @@ public final class Bodies {
         Entity entity;
         if (type.mythicMob() != null) {
             entity = MythicSpawn.spawn(type.mythicMob(), location, plugin.getLogger());
-        } else if (type.entity() != null && type.entity().isAlive() && type.entity().getEntityClass() != null) {
-            entity = location.getWorld().spawn(location, type.entity().getEntityClass());
         } else {
-            return null;
+            // The supported-body check above admits only WOLF and CAT.
+            entity = location.getWorld().spawn(location, type.entity().getEntityClass());
         }
         if (entity == null) {
             return null;

@@ -10,13 +10,14 @@ import org.bukkit.plugin.Plugin;
 
 /** Optional integrations loaded from their owning plugins, without bundling their APIs. */
 final class ItemBridge {
+    private ItemBridge() { }
     record Identity(Material material, String mmoType, String mmoId, String itemsAdderId, boolean known) {}
     private static final Set<String> warned = new HashSet<>();
     private static Mmo mmo;
     private static Ia ia;
 
     private record Mmo(Method type, Method id, Method getType, Method getItem, Plugin plugin) {}
-    private record Ia(Method identify, Method id, Method create, Method stack) {}
+    private record Ia(Method identify, Method id, Method create, Method stack, Plugin plugin) {}
 
     static Identity identity(ItemStack item) {
         String mmoType = null, mmoId = null, iaId = null;
@@ -86,10 +87,10 @@ final class ItemBridge {
     private static Ia ia() throws ReflectiveOperationException {
         Plugin plugin = enabled("ItemsAdder");
         if (plugin == null) return null;
-        if (ia == null) {
+        if (ia == null || ia.plugin() != plugin) {
             Class<?> api = Class.forName("dev.lone.itemsadder.api.CustomStack", true, plugin.getClass().getClassLoader());
             ia = new Ia(api.getMethod("byItemStack", ItemStack.class), api.getMethod("getNamespacedID"),
-                    api.getMethod("getInstance", String.class), api.getMethod("getItemStack"));
+                    api.getMethod("getInstance", String.class), api.getMethod("getItemStack"), plugin);
         }
         return ia;
     }

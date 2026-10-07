@@ -50,6 +50,7 @@ public final class ModelHook implements PetVisual {
             Session current = sessions.get(entity.getUniqueId());
             if (current != null && current.attachment.valid()) return;
             sessions.remove(entity.getUniqueId());
+            if (current != null) current.attachment.remove();
             bridge.removeSaved(entity, type.appearance().model());
             if (!type.appearance().modeled()) return;
             if (System.currentTimeMillis() < retryAfter.getOrDefault(type.id(), 0L)) return;
