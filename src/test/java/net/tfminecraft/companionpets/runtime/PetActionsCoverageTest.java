@@ -367,6 +367,79 @@ class PetActionsCoverageTest {
         assertTrue(bars().contains("comes running"));
     }
 
+    @Test void cancelledCallKeepsFollowingAndSavesTheActualLocationWithoutReportingSuccess() {
+        Location before = body.getLocation();
+        pet.order(PetOrder.STAY);
+        pet.staying(true);
+        pet.activity(Activity.SLEEPING);
+        AtomicInteger attempts = new AtomicInteger();
+        atHigh(EntityTeleportEvent.class, event -> { attempts.incrementAndGet(); event.setCancelled(true); });
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertEquals(1, attempts.get());
+        assertEquals(before, body.getLocation());
+        assertEquals(PetOrder.FOLLOW, pet.order());
+        assertFalse(pet.staying());
+        assertEquals(Activity.NONE, pet.activity());
+        assertEquals(before.getX(), pet.x());
+        assertEquals(before.getY(), pet.y());
+        assertEquals(before.getZ(), pet.z());
+        assertTrue(body.isValid());
+        String feedback = bars();
+        assertTrue(feedback.contains("couldn't reach a safe place"));
+        assertFalse(feedback.contains("comes running"));
+    }
+
+    @Test void callReportsUnsafeRetargetingAndRemembersTheFinalBodyPositionWithoutRetrying() {
+        Location unsafe = new Location(world, 8.5, 64, 8.5);
+        world.getBlockAt(8, 64, 8).setType(Material.STONE);
+        AtomicInteger attempts = new AtomicInteger();
+        atHigh(EntityTeleportEvent.class, event -> { attempts.incrementAndGet(); event.setTo(unsafe); });
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertEquals(1, attempts.get());
+        assertEquals(unsafe, body.getLocation());
+        assertFalse(PetPlacement.safe(body.getLocation(), PetPlacement.bounds(body)));
+        assertEquals(PetOrder.FOLLOW, pet.order());
+        assertEquals(unsafe.getX(), pet.x());
+        assertEquals(unsafe.getY(), pet.y());
+        assertEquals(unsafe.getZ(), pet.z());
+        assertEquals(body.getUniqueId(), pet.entityId());
+        assertTrue(body.isValid());
+        String feedback = bars();
+        assertTrue(feedback.contains("couldn't reach a safe place"));
+        assertFalse(feedback.contains("comes running"));
+    }
+
+    @Test void callRechecksTheDestinationAfterListenersChangeItsCollisionState() {
+        atHigh(EntityTeleportEvent.class, event -> event.getTo().getBlock().setType(Material.STONE));
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertFalse(PetPlacement.safe(body.getLocation(), PetPlacement.bounds(body)));
+        String feedback = bars();
+        assertTrue(feedback.contains("couldn't reach a safe place"));
+        assertFalse(feedback.contains("comes running"));
+    }
+
+    @Test void callAcceptsASafeRetargetAndWakesARestingPetThroughTheOrdinaryTeleportGuard() {
+        Location safe = new Location(world, 1.5, 64, 1.5);
+        pet.order(PetOrder.STAY);
+        pet.staying(true);
+        pet.activity(Activity.SLEEPING);
+        AtomicInteger attempts = new AtomicInteger();
+        atHigh(EntityTeleportEvent.class, event -> { attempts.incrementAndGet(); event.setTo(safe); });
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertEquals(1, attempts.get());
+        assertEquals(safe, body.getLocation());
+        assertTrue(PetPlacement.safe(body.getLocation(), PetPlacement.bounds(body)));
+        assertEquals(PetOrder.FOLLOW, pet.order());
+        assertFalse(pet.staying());
+        assertEquals(Activity.NONE, pet.activity());
+        assertEquals(safe.getX(), pet.x());
+        assertEquals(safe.getZ(), pet.z());
+        assertFalse(runtime.bodies().recovering(body));
+        String feedback = bars();
+        assertTrue(feedback.contains("comes running"));
+        assertFalse(feedback.contains("couldn't reach"));
+    }
+
     @Test void storageAndActiveLimitsLeaveTheExistingStateIntact() {
         configure("limits.max-stored", 1);
         Pet stored = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
