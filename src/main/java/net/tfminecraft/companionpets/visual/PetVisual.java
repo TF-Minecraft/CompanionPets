@@ -12,6 +12,7 @@ public interface PetVisual {
     default boolean play(Entity entity, PetTypeDef type, String action) { return false; }
 
     default void update(Entity entity, PetTypeDef type, PetAnimation pose) { }
+    default boolean shake(Entity entity, PetTypeDef type, double progress) { return false; }
 
     default void trainingAttention(Entity entity, PetTypeDef type, boolean focused) { }
 

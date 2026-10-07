@@ -65,6 +65,22 @@ public final class PetListener implements Listener {
                 || pet.activity() == net.tfminecraft.companionpets.pet.Activity.SLEEPING
                 || !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId()))
                 || System.currentTimeMillis() < pet.forcedSitUntilMillis()) event.setCancelled(true);
+        if (event.isCancelled() || event.getTo() == null) return;
+        var bounds = net.tfminecraft.companionpets.body.PetPlacement.bounds(event.getEntity());
+        if (!net.tfminecraft.companionpets.body.PetPlacement.safe(event.getTo(), bounds)) {
+            var safe = net.tfminecraft.companionpets.body.PetPlacement.nearest(event.getTo(), bounds, null);
+            if (safe == null) event.setCancelled(true); else event.setTo(safe);
+        }
+        if (!event.isCancelled()) runtime.bodies().protect(event.getEntity());
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onSpawnSuffocation(EntityDamageEvent event) {
+        if (event.getCause() == EntityDamageEvent.DamageCause.SUFFOCATION
+                && runtime.byEntity(event.getEntity()) != null && runtime.bodies().protectedFromSuffocation(event.getEntity())) {
+            event.setCancelled(true);
+            runtime.bodies().recover(event.getEntity());
+        }
     }
 
     @EventHandler

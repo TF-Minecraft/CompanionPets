@@ -33,7 +33,7 @@ class TestPetSpawnTest {
     @BeforeEach void setup() throws Exception {
         var server = MockBukkit.mock(new net.tfminecraft.companionpets.testutil.GoalServerMock());
         JavaPlugin plugin = MockBukkit.createMockPlugin();
-        var world = new WorldMock() {
+        var world = new net.tfminecraft.companionpets.testutil.CollisionWorldMock() {
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
                 Entity body;
                 if (type == org.bukkit.entity.Wolf.class) {
@@ -50,8 +50,8 @@ class TestPetSpawnTest {
                 return type.cast(body);
             }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
-                return new BlockMock(new Location(this, x, y, z)) {
-                    @Override public boolean isPassable() { return true; }
+                return new BlockMock(y == 63 ? org.bukkit.Material.STONE : org.bukkit.Material.AIR, new Location(this, x, y, z)) {
+                    @Override public boolean isPassable() { return y != 63; }
                 };
             }
         };

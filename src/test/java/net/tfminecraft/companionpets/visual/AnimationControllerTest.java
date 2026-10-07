@@ -14,15 +14,38 @@ import org.junit.jupiter.api.Test;
 import net.tfminecraft.companionpets.config.PetAppearance.Clip;
 
 class AnimationControllerTest {
-    @Test void shakingNeverStopsNavigationAndWalkingInterruptsTheGesture() {
+    @Test void nativeShakeScalesTheClipAndStopsExactlyWithTheNativeClock() {
+        Player player = new Player(); player.lengths.put("shake", 1.04);
+        var now = new java.util.concurrent.atomic.AtomicLong();
+        AnimationController controller = new AnimationController(player, clips(), now::get);
+        assertTrue(controller.shake(.05));
+        assertEquals(1.95, player.length("shake") / player.lastClip.speed(), .00001);
+        now.set(1400); controller.update(PetAnimation.RUN);
+        assertTrue(controller.shake(1.45)); assertTrue(player.active.contains("shake"));
+        assertFalse(controller.shake(0)); assertFalse(player.active.contains("shake"));
+        assertFalse(controller.shake(.7), "A model attached late must skip the cycle");
+        controller.shake(0); controller.play(PetAnimation.PAW);
+        assertFalse(controller.shake(.05)); controller.cancelAction();
+        assertFalse(controller.shake(.5), "Finishing another action must not restart the shake");
+    }
+    @Test void waterAndRestStopShakeWithoutReplayingTheSameCycle() {
+        for (PetAnimation pose : List.of(PetAnimation.SWIM, PetAnimation.LIE, PetAnimation.SLEEP)) {
+            Player player = new Player(); AnimationController controller = new AnimationController(player, clips());
+            assertTrue(controller.shake(.05)); controller.update(pose);
+            assertFalse(controller.shake(.5)); assertFalse(player.active.contains("shake"));
+            controller.update(PetAnimation.IDLE); assertFalse(controller.shake(.7));
+        }
+    }
+    @Test void shakingNeverStopsNavigationAndSurvivesWalking() {
         Player player = new Player();
         AnimationController controller = new AnimationController(player, clips());
         controller.update(PetAnimation.IDLE);
         assertTrue(controller.play(PetAnimation.SHAKE));
         assertFalse(controller.holdsMovement());
         controller.update(PetAnimation.WALK);
-        assertFalse(player.active.contains("shake"));
-        assertTrue(player.active.isEmpty(), "ModelEngine plays the walk itself");
+        assertTrue(player.active.contains("shake"));
+        controller.shake(0);
+        assertTrue(player.active.isEmpty(), "Native shake end stops the overlay");
     }
     @Test
     void airAndWaterWithoutClipsAreLeftToModelEngineAndLyingDownSleeps() {
@@ -267,9 +290,11 @@ class AnimationControllerTest {
         final List<String> events = new ArrayList<>();
         final Set<String> active = new HashSet<>();
         final Map<String, Double> lengths = new java.util.HashMap<>();
+        Clip lastClip;
         public double length(String clip) { return lengths.getOrDefault(clip, 1.0); }
         public boolean hold(Clip clip) { events.add("hold:" + clip.name()); active.add(clip.name()); return true; }
         public boolean play(Clip clip, boolean loop) {
+            lastClip = clip;
             events.add("play:" + clip.name() + ":" + loop);
             active.add(clip.name());
             return true;

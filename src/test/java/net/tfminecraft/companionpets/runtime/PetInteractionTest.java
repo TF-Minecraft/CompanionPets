@@ -79,7 +79,7 @@ class PetInteractionTest {
             }
         });
         var plugin = MockBukkit.createMockPlugin();
-        var world = new WorldMock() {
+        var world = new net.tfminecraft.companionpets.testutil.CollisionWorldMock() {
             @Override public void playSound(Location at, org.bukkit.Sound sound, float volume, float pitch) {
                 greetingSounds.add(sound); greetingPitches.add(pitch);
             }
@@ -133,7 +133,7 @@ class PetInteractionTest {
                 if (blockedHop && y == 65) return new BlockMock(Material.STONE, new Location(this, x, y, z)) {
                     @Override public boolean isPassable() { return false; }
                 };
-                if (greetingGround && y == 63) return new BlockMock(Material.STONE, new Location(this, x, y, z)) {
+                if (y == 63) return new BlockMock(Material.STONE, new Location(this, x, y, z)) {
                     @Override public boolean isPassable() { return false; }
                 };
                 return new BlockMock(new Location(this, x, y, z)) {
@@ -219,6 +219,33 @@ class PetInteractionTest {
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
     }
     private void eagerGreeting() { pet.bond(100); pet.personality(PetPersonality.FRIENDLY); }
+
+    @Test void customTrickSoundsFollowTheTimelineWithFallbackAndCancelOnAnotherCommand() throws Exception {
+        testConfig.set("custom-tricks.croak.fallback-text", "{pet} croaks");
+        testConfig.set("custom-tricks.croak.sound", "ENTITY_FROG_AMBIENT");
+        testConfig.set("custom-tricks.croak.at", java.util.List.of(0, .5, 1));
+        testConfig.set("pets.wolf.tricks.add", java.util.List.of("croak"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        Trick croak = Trick.valueOf("croak"); pet.progress(croak, 100); pet.bindWord("croak", croak);
+        actions.onChat(player, "Toby croak");
+        assertEquals(1, greetingSounds.stream().filter(org.bukkit.Sound.ENTITY_FROG_AMBIENT::equals).count());
+        ((org.mockbukkit.mockbukkit.ServerMock) runtime.plugin().getServer()).getScheduler().performTicks(10);
+        assertEquals(2, greetingSounds.stream().filter(org.bukkit.Sound.ENTITY_FROG_AMBIENT::equals).count());
+        pet.bindWord("follow", Trick.FOLLOW); actions.onChat(player, "Toby follow");
+        ((org.mockbukkit.mockbukkit.ServerMock) runtime.plugin().getServer()).getScheduler().performTicks(10);
+        assertEquals(2, greetingSounds.stream().filter(org.bukkit.Sound.ENTITY_FROG_AMBIENT::equals).count());
+    }
+
+    @Test void spawnSuffocationIsCancelledAndMovesThePetToAFreeSpace() {
+        runtime.bodies().protect(body);
+        body.teleport(body.getLocation().add(0, -1, 0));
+        var event = new org.bukkit.event.entity.EntityDamageEvent(body,
+                org.bukkit.event.entity.EntityDamageEvent.DamageCause.SUFFOCATION, 1);
+        new net.tfminecraft.companionpets.listen.PetListener(runtime, actions).onSpawnSuffocation(event);
+        assertTrue(event.isCancelled());
+        assertTrue(net.tfminecraft.companionpets.body.PetPlacement.clear(body.getLocation(),
+                net.tfminecraft.companionpets.body.PetPlacement.bounds(body)));
+    }
 
     @Test void trainingStartsWithAvailableHeadTiltWithoutCancellingItOnRepeatedTreatClicks() {
         headTiltAvailable = true;

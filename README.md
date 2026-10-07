@@ -255,15 +255,33 @@ toys or putting them away renews it. Favorites extend attention without a speed 
 `moments.dig-loot` accepts item/weight entries (or the legacy material/weight map);
 weights are positive chances, and `[]` disables loot.
 
-### Inspecting the result
+### Water shakes and custom trick sounds
 
-Use `/companionpets inspect beagle` from chat or the console. It shows the resolved
-species, body, egg, voice (preset/generated/none) and event pitches, configured and active behaviors,
-reasons for automatic disabling, allowed/default tricks, unavailable custom tricks,
-and model clips found, missing or explicitly disabled. It uses the same capability
-resolution as gameplay and requires `companionpets.admin.list`. Tab completes
-configured type IDs. `/companionpets reload` refreshes configuration, active models
-and cached capabilities.
+Modeled wolves follow the native two-second water shake. The clip's speed is
+adjusted to the native time remaining on its first tick; walking does not stop
+it. Water, lying down, sleeping and the native shake end stop the clip and drops.
+If another action blocks the first tick, that shake cycle is skipped rather than
+starting an unsynchronized clip late. A deferred shake finishes dry; returning
+a toy or finishing a greeting never wets the pet again. Vanilla bodies retain
+Minecraft's own shake animation and droplets.
+
+Custom tricks accept optional `sound` and `at`. Sounds use the same validated
+names, lists or `{sounds, volume, pitch}` mapping as voice events. `at` is seconds
+from the trick start, as a number or list, default `[0]`. The sounds also work
+with fallback text when the model has no clip. For example:
+
+```yaml
+custom-tricks:
+  croak:
+    animation: croak
+    sound: {sounds: [ENTITY_FROG_AMBIENT], volume: 0.8, pitch: 1}
+    at: [0.54, 2.33, 2.67]
+```
+
+Pet House exits, calls and follow teleports choose block-centered spaces with
+solid ground for the entire scaled body. Furniture exits prefer positions behind
+or beside the player. New bodies have three seconds of suffocation protection
+and move to the nearest clear space if a collision appears during that interval.
 
 ### Compatibility notes
 

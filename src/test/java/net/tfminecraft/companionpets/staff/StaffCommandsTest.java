@@ -290,7 +290,7 @@ class StaffCommandsTest {
 
     @Test void readOnlyPermissionCanBrowseButCannotRecoverOrUseInventoryMutations() {
         staff.setOp(false); staff.addAttachment(plugin, "companionpets.admin.list", true);
-        assertEquals(List.of("inspect", "list"), commands.complete(staff, new String[]{""}));
+        assertEquals(List.of("list"), commands.complete(staff, new String[]{""}));
         command("list", "Owner", "Toby"); assertEquals(StaffMenuHolder.Kind.INSPECT, menu().kind());
         assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, menu().getInventory().getItem(38).getType());
         assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, menu().getInventory().getItem(44).getType());
@@ -337,54 +337,9 @@ class StaffCommandsTest {
         assertFalse(saved.contains("test-pet")); assertFalse(saved.contains("test-frozen"));
     }
 
-    @Test void inspectShowsInheritedModelVoiceAndMissingCapabilitiesWithoutMutatingPets() throws Exception {
-        var yaml = new YamlConfiguration();
-        yaml.loadFromString("""
-                species:
-                  dog:
-                    voice: {preset: frog, pitch: 1.3}
-                    behaviors: {remove: [dig-gifts]}
-                pets:
-                  wolf: {species: dog, model: beagle, egg: WOLF_SPAWN_EGG}
-                """);
-        runtime.config(CompanionConfig.load(plugin, yaml));
-        int pets = runtime.store().all().size(), entities = owner.getWorld().getEntities().size();
-        command("inspect", "wolf");
-        var messages = new ArrayList<String>();
-        String message;
-        while ((message = staff.nextMessage()) != null) messages.add(message);
-        String report = String.join("\n", messages);
-        assertTrue(report.contains("Species: dog"));
-        assertTrue(report.contains("Voice: frog | Pitch multiplier: 1.3"));
-        assertTrue(report.contains("Profile: preset"));
-        assertTrue(report.contains("Behaviors active:"));
-        assertFalse(report.contains("dig-gifts"));
-        assertTrue(report.contains("Disabled toy-tail-wag: model unavailable"));
-        assertTrue(report.contains("missing animations: belly_up, get_up, lie_back"));
-        assertTrue(report.contains("Tricks configured:"));
-        assertTrue(report.contains("Default learned tricks: follow"));
-        assertTrue(report.contains("Model: beagle"));
-        assertTrue(report.contains("Missing lie -> lie"));
-        assertEquals(pets, runtime.store().all().size());
-        assertEquals(entities, owner.getWorld().getEntities().size());
-        assertTrue(pet.stored());
-    }
 
-    @Test void inspectIdentifiesAGeneratedVoiceAndItsResolvedEventSounds() throws Exception {
-        var yaml = new YamlConfiguration(); yaml.loadFromString("""
-                pets:
-                  wolf: {species: dog, voice: rabbit, egg: WOLF_SPAWN_EGG}
-                """);
-        runtime.config(CompanionConfig.load(plugin, yaml));
-        command("inspect", "wolf");
-        var messages = new ArrayList<String>();
-        String message;
-        while ((message = staff.nextMessage()) != null) messages.add(message);
-        String report = String.join("\n", messages);
-        assertTrue(report.contains("Voice: rabbit"));
-        assertTrue(report.contains("Profile: generated"));
-        assertTrue(report.contains("minecraft:entity.rabbit.ambient"));
-    }
+
+
 
 
 }

@@ -23,7 +23,7 @@ import net.tfminecraft.companionpets.runtime.PetRuntime;
  * jump and fly on its own, so this runs a few times a second without sampling motion.
  */
 public final class PetVisualTicker implements Runnable {
-    public static final long PERIOD_TICKS = 4L;
+    public static final long PERIOD_TICKS = 1L;
     private final PetRuntime runtime;
     private final Map<UUID, Boolean> shaking = new HashMap<>();
 
@@ -36,13 +36,14 @@ public final class PetVisualTicker implements Runnable {
         for (Pet pet : runtime.store().active()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             if (type == null || !(runtime.entity(pet) instanceof Mob body)) continue;
+            runtime.bodies().recover(body);
             UUID id = body.getUniqueId();
             loaded.add(id);
             boolean fetching = pet.fetch() != null;
             boolean greeting = pet.activity() == net.tfminecraft.companionpets.pet.Activity.GREETING;
             boolean toyFocus = pet.activity() == net.tfminecraft.companionpets.pet.Activity.TOY_FOCUS;
             boolean trainingFocus = runtime.trainingFocused(pet, body);
-            if (body instanceof Wolf wolf) {
+            if (type.appearance().modeled() && body instanceof Wolf wolf) {
                 if (fetching || greeting || toyFocus || trainingFocus || pet.socialTailHz() > 0) net.tfminecraft.companionpets.integration.WolfShake.defer(wolf);
                 else net.tfminecraft.companionpets.integration.WolfShake.restore(wolf);
             }
@@ -68,11 +69,9 @@ public final class PetVisualTicker implements Runnable {
                     : greeting ? net.tfminecraft.companionpets.config.PetBehavior.GREETING_TAIL_WAG
                     : net.tfminecraft.companionpets.config.PetBehavior.SOCIAL_TAIL_WAG) ? tailHz : 0);
             if (!fetching && runtime.visual().holdsMovement(body)) net.tfminecraft.companionpets.integration.PetMotion.stop(body);
-            boolean shakes = !fetching && !greeting && !toyFocus && !trainingFocus && body instanceof Wolf wolf && net.tfminecraft.companionpets.integration.WolfShake.shaking(wolf);
-            if (shakes && !Boolean.TRUE.equals(shaking.get(id))) {
-                runtime.visual().play(body, type, "SHAKE");
-            }
-            if (shakes && runtime.visual().attached(body)) {
+            double progress = body instanceof Wolf wolf ? net.tfminecraft.companionpets.integration.WolfShake.progress(wolf) : 0;
+            boolean shakes = runtime.visual().shake(body, type, progress);
+            if (shakes && runtime.visual().attached(body) && body.getTicksLived() % 4 == 0) {
                 // The hidden vanilla wolf cannot render its client-side water droplets.
                 body.getWorld().spawnParticle(org.bukkit.Particle.SPLASH,
                         body.getLocation().add(0, body.getHeight() * 0.55, 0), 24,

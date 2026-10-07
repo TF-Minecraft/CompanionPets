@@ -37,7 +37,7 @@ class SpeciesConfigTest {
         assertEquals(0, beagle.sounds().ambientIntervalSeconds());
         assertEquals(Set.of(Trick.values()), beagle.tricks());
         assertEquals(EntityType.CAT, config.type("cat").entity());
-        assertEquals("cat", config.type("cat").sounds().preset());
+        assertEquals("minecraft:entity.cat.ambient", config.type("cat").sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
     }
 
     @Test void omittedTricksOnlyGrantBuiltinsEvenWithCustomDefinitions() throws Exception {
@@ -142,13 +142,13 @@ class SpeciesConfigTest {
         var frog = config.type("frog");
         assertNotNull(frog); assertEquals("frog", frog.id());
         assertEquals(EntityType.CAT, frog.entity());
-        assertEquals("frog", frog.sounds().preset());
+        assertEquals("minecraft:entity.frog.ambient", frog.sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
         assertFalse(frog.sounds().nativeSounds());
         assertEquals(List.of("minecraft:entity.frog.ambient"), frog.sounds().cue(PetSounds.Event.AMBIENT).sounds());
         assertEquals("lay", frog.appearance().animations().get(PetAnimation.LIE).name());
         assertEquals("lay", frog.appearance().animations().get(PetAnimation.SLEEP).name());
         var tiny = config.type("tiny_frog");
-        assertEquals("frog", tiny.sounds().preset());
+        assertEquals("minecraft:entity.frog.ambient", tiny.sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
         assertEquals(1.3f, tiny.sounds().cue(PetSounds.Event.AMBIENT).pitch(), .001);
         assertEquals(1.43f, tiny.sounds().cue(PetSounds.Event.GREETING).pitch(), .001);
         assertFalse(tiny.behaves(PetBehavior.GREETING_JUMPS));
@@ -221,11 +221,11 @@ class SpeciesConfigTest {
         assertEquals(.8, pet.appearance().scale());
         assertEquals("pet3", pet.appearance().animations().get(PetAnimation.PET).name());
         assertEquals("give_paw", pet.appearance().animations().get(PetAnimation.PAW).name());
-        assertEquals("fox", pet.sounds().preset());
+        assertEquals("minecraft:entity.fox.ambient", pet.sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
         assertNull(pet.sounds().cue(PetSounds.Event.TOY));
         assertEquals(2f, pet.sounds().cue(PetSounds.Event.GREETING).pitch(), "Global pitch is clamped after per-event pitch");
         assertTrue(config.type("silent").sounds().cues().isEmpty());
-        assertEquals("frog", config.type("advanced").sounds().preset());
+        assertEquals("minecraft:entity.frog.ambient", config.type("advanced").sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
     }
 
     @Test void invalidPetAndTemplateEntitiesReportClearWarningsEvenWithAnOverride() throws Exception {

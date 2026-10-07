@@ -26,6 +26,7 @@ public final class Bodies {
     private final JavaPlugin plugin;
     private final NamespacedKey petKey;
     private final PetVisual visual;
+    private final java.util.Map<UUID, Long> spawnProtection = new java.util.HashMap<>();
 
     public Bodies(JavaPlugin plugin, NamespacedKey petKey, PetVisual visual) {
         this.plugin = plugin;
@@ -34,7 +35,7 @@ public final class Bodies {
     }
 
     public Entity spawn(Pet pet, PetTypeDef type, Location location, Player owner) {
-        if (location.getWorld() == null || type == null || !PetBase.supported(type.entity())) {
+        if (location == null || location.getWorld() == null || type == null || !PetBase.supported(type.entity())) {
             return null;
         }
         Entity entity;
@@ -61,8 +62,25 @@ public final class Bodies {
             return null;
         }
         prepare(entity, pet, type, owner);
+        Location safe = PetPlacement.nearest(location, PetPlacement.bounds(entity), null);
+        if (safe == null) { visual.removeBody(entity); return null; }
+        if (!entity.teleport(safe)) { visual.removeBody(entity); return null; }
+        protect(entity);
         visual.play(entity, type, "SPAWN");
         return entity;
+    }
+
+    public void protect(Entity entity) { spawnProtection.put(entity.getUniqueId(), System.currentTimeMillis() + 3000); }
+    public boolean protectedFromSuffocation(Entity entity) {
+        Long until = spawnProtection.get(entity.getUniqueId());
+        if (until == null) return false;
+        if (System.currentTimeMillis() < until) return true;
+        spawnProtection.remove(entity.getUniqueId()); return false;
+    }
+    public void recover(Entity entity) {
+        if (!protectedFromSuffocation(entity) || PetPlacement.clear(entity.getLocation(), PetPlacement.bounds(entity))) return;
+        Location safe = PetPlacement.nearest(entity.getLocation(), PetPlacement.bounds(entity), null);
+        if (safe != null) entity.teleport(safe);
     }
 
     public void reattach(Entity entity, Pet pet, PetTypeDef type) {

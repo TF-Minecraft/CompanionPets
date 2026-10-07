@@ -86,7 +86,7 @@ public final class FurniturePetHouses implements Listener {
             PetFx.bar(interaction.getPlayer(), "This Pet House belongs to someone else");
             return;
         }
-        menus.openKennel(interaction.getPlayer());
+        menus.openKennel(interaction.getPlayer(), 0, entity.getLocation());
     }
 
     void broken(Event event) {
