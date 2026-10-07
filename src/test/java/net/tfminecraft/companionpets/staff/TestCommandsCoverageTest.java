@@ -18,6 +18,7 @@ import net.tfminecraft.companionpets.runtime.PetRuntime;
 import net.tfminecraft.companionpets.session.Sessions;
 import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
+import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import net.tfminecraft.companionpets.visual.IdleVisual;
 import org.bukkit.*;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -47,9 +48,9 @@ class TestCommandsCoverageTest {
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
-        world = new WorldMock() {
+        world = new CollisionWorldMock() {
             @Override public BlockMock getBlockAt(int x, int y, int z) {
-                return new BlockMock(new Location(this, x, y, z)) {
+                return new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
                     @Override public boolean isPassable() { return !getType().isSolid(); }
                 };
             }

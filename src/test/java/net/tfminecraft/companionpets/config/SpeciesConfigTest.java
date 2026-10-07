@@ -31,13 +31,13 @@ class SpeciesConfigTest {
         assertEquals("dog", beagle.species());
         assertEquals(EntityType.WOLF, beagle.entity());
         assertEquals("beagle", beagle.appearance().model());
-        assertEquals(PetBehavior.defaults(EntityType.WOLF), beagle.behaviors());
+        assertEquals(BehaviorProfile.DOG.behaviors(), beagle.behaviors());
         assertEquals(config.type("legacy").behaviors(), beagle.behaviors());
         assertTrue(beagle.sounds().nativeSounds());
         assertEquals(0, beagle.sounds().ambientIntervalSeconds());
         assertEquals(Set.of(Trick.values()), beagle.tricks());
         assertEquals(EntityType.CAT, config.type("cat").entity());
-        assertEquals("cat", config.type("cat").sounds().preset());
+        assertEquals("minecraft:entity.cat.ambient", config.type("cat").sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
     }
 
     @Test void omittedTricksOnlyGrantBuiltinsEvenWithCustomDefinitions() throws Exception {
@@ -125,7 +125,7 @@ class SpeciesConfigTest {
                   frog:
                     entity: CAT
                     voice: frog
-                    behaviors: [greeting, greeting-approach, greeting-jumps, toy-anticipation, toy-jumps, fetch]
+                    behavior: basic
                     tricks: [follow, come, stay, jump, lay, tongue, croak]
                     animations: {lie: lay, sleep: lay}
                 pets:
@@ -135,20 +135,20 @@ class SpeciesConfigTest {
                     model: frog
                     egg: EGG
                     voice: {pitch: 1.3}
-                    behaviors: {add: [social-greeting], remove: [greeting-jumps]}
+                    behavior: cat
                     tricks: {add: [sit], remove: [croak]}
                     animations: {eat: tongue}
                 """);
         var frog = config.type("frog");
         assertNotNull(frog); assertEquals("frog", frog.id());
         assertEquals(EntityType.CAT, frog.entity());
-        assertEquals("frog", frog.sounds().preset());
+        assertEquals("minecraft:entity.frog.ambient", frog.sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
         assertFalse(frog.sounds().nativeSounds());
         assertEquals(List.of("minecraft:entity.frog.ambient"), frog.sounds().cue(PetSounds.Event.AMBIENT).sounds());
         assertEquals("lay", frog.appearance().animations().get(PetAnimation.LIE).name());
         assertEquals("lay", frog.appearance().animations().get(PetAnimation.SLEEP).name());
         var tiny = config.type("tiny_frog");
-        assertEquals("frog", tiny.sounds().preset());
+        assertEquals("minecraft:entity.frog.ambient", tiny.sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
         assertEquals(1.3f, tiny.sounds().cue(PetSounds.Event.AMBIENT).pitch(), .001);
         assertEquals(1.43f, tiny.sounds().cue(PetSounds.Event.GREETING).pitch(), .001);
         assertFalse(tiny.behaves(PetBehavior.GREETING_JUMPS));
@@ -160,27 +160,27 @@ class SpeciesConfigTest {
         assertTrue(frog.allowsTrick(Trick.valueOf("croak")), "Resolving a pet never mutates its template or siblings");
     }
 
-    @Test void speciesAndPetPatchesStackWhileListsStillReplaceAndRemovalWins() throws Exception {
+    @Test void trickPatchesStackWhileBehaviorProfilesOverride() throws Exception {
         var config = load("""
                 species:
                   dog:
-                    behaviors: {remove: [dig-gifts]}
+                    behavior: basic
                     tricks: {remove: [paw]}
                     items: {treats: [COD]}
                 pets:
                   dog:
                     species: dog
                     egg: EGG
-                    behaviors: {add: [dig-gifts, cat-play], remove: [cat-play]}
+                    behavior: dog
                     tricks: {add: [paw, jump], remove: [jump]}
                   quiet:
                     species: dog
                     egg: STICK
-                    behaviors: []
+                    behavior: basic
                     tricks: []
                     default-tricks: []
                     items: {treats: []}
-                  legacy: {entity: CAT, egg: CAT_SPAWN_EGG, behaviors: [fetch], tricks: [sit]}
+                  legacy: {entity: CAT, egg: CAT_SPAWN_EGG, behavior: cat, tricks: [sit]}
                 """);
         var dog = config.type("dog");
         assertTrue(dog.behaves(PetBehavior.DIG_GIFTS));
@@ -188,10 +188,10 @@ class SpeciesConfigTest {
         assertFalse(dog.behaves(PetBehavior.CAT_PLAY));
         assertTrue(dog.allowsTrick(Trick.PAW)); assertFalse(dog.allowsTrick(Trick.JUMP));
         assertEquals(1, dog.treats().size());
-        assertTrue(config.type("quiet").behaviors().isEmpty());
+        assertEquals(BehaviorProfile.BASIC, config.type("quiet").behavior());
         assertTrue(config.type("quiet").tricks().isEmpty());
         assertTrue(config.type("quiet").treats().isEmpty());
-        assertEquals(Set.of(PetBehavior.FETCH), config.type("legacy").behaviors());
+        assertEquals(BehaviorProfile.CAT.behaviors(), config.type("legacy").behaviors());
         assertEquals(Set.of(Trick.SIT, Trick.FOLLOW), config.type("legacy").tricks());
     }
 
@@ -221,11 +221,11 @@ class SpeciesConfigTest {
         assertEquals(.8, pet.appearance().scale());
         assertEquals("pet3", pet.appearance().animations().get(PetAnimation.PET).name());
         assertEquals("give_paw", pet.appearance().animations().get(PetAnimation.PAW).name());
-        assertEquals("fox", pet.sounds().preset());
+        assertEquals("minecraft:entity.fox.ambient", pet.sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
         assertNull(pet.sounds().cue(PetSounds.Event.TOY));
         assertEquals(2f, pet.sounds().cue(PetSounds.Event.GREETING).pitch(), "Global pitch is clamped after per-event pitch");
         assertTrue(config.type("silent").sounds().cues().isEmpty());
-        assertEquals("frog", config.type("advanced").sounds().preset());
+        assertEquals("minecraft:entity.frog.ambient", config.type("advanced").sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
     }
 
     @Test void invalidPetAndTemplateEntitiesReportClearWarningsEvenWithAnOverride() throws Exception {
@@ -266,11 +266,11 @@ class SpeciesConfigTest {
                     species: dog
                     egg: WOLF_SPAWN_EGG
                     voice: {pitch: .nan}
-                    behaviors: {add: [bogus, 42], remove: invalid}
+                    behavior: unknown
                     tricks: {add: [spin, unknown], remove: [sleep]}
                 """);
         assertEquals(Set.of("valid"), config.types().keySet());
-        assertEquals(PetBehavior.defaults(EntityType.WOLF), config.type("valid").behaviors());
+        assertEquals(BehaviorProfile.DOG.behaviors(), config.type("valid").behaviors());
         assertEquals(1, config.type("valid").sounds().pitch());
         assertFalse(config.type("valid").allowsTrick(Trick.LAY));
     }

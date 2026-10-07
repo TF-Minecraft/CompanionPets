@@ -23,7 +23,7 @@ public record PetTypeDef(
         PetItems items,
         Set<Trick> tricks,
         List<Trick> defaultTricks,
-        Set<PetBehavior> behaviors,
+        BehaviorProfile behavior,
         PetSounds sounds,
         boolean nativeCombat,
         String species) {
@@ -31,10 +31,11 @@ public record PetTypeDef(
     public PetTypeDef {
         tricks = Set.copyOf(tricks);
         defaultTricks = List.copyOf(defaultTricks);
-        behaviors = Set.copyOf(behaviors);
+        java.util.Objects.requireNonNull(behavior);
     }
 
-    public boolean behaves(PetBehavior behavior) { return behaviors.contains(behavior); }
+    public Set<PetBehavior> behaviors() { return behavior.behaviors(); }
+    public boolean behaves(PetBehavior behavior) { return behaviors().contains(behavior); }
 
     public boolean allowsTrick(Trick trick) {
         return trick != null && tricks.contains(trick);

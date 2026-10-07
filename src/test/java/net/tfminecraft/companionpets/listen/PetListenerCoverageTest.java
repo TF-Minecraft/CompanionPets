@@ -13,6 +13,8 @@ import net.tfminecraft.companionpets.runtime.*;
 import net.tfminecraft.companionpets.session.Sessions;
 import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
+import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
+import org.mockbukkit.mockbukkit.block.BlockMock;
 import net.tfminecraft.companionpets.visual.PetVisual;
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -56,7 +58,15 @@ class PetListenerCoverageTest {
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
-        world = server.addSimpleWorld("listener");
+        world = new CollisionWorldMock() {
+            private final Map<String, BlockMock> blocks = new HashMap<>();
+            @Override public BlockMock getBlockAt(int x, int y, int z) {
+                return blocks.computeIfAbsent(x + ":" + y + ":" + z, unused -> new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
+                    @Override public boolean isPassable() { return !getType().isSolid(); }
+                });
+            }
+        };
+        server.addWorld(world);
         owner = server.addPlayer();
         owner.teleport(new Location(world, 0, 64, 0));
         var plugin = MockBukkit.createMockPlugin();
@@ -335,13 +345,14 @@ class PetListenerCoverageTest {
         assertEquals(body.getUniqueId(), pet.entityId());
         assertTrue(body.isTamed());
         assertEquals(owner.getUniqueId(), body.getOwner().getUniqueId());
-        body.teleport(new Location(world, 7, 65, 9, 35, 0));
+        assertTrue(body.teleport(new Location(world, 7.5, 64, 9.5, 35, 0)));
+        Location authoritative = body.getLocation();
         var duplicate = wolf(new Location(world, 20, 70, 22));
         duplicate.getPersistentDataContainer().set(runtime.petKey(), PersistentDataType.STRING, pet.id().toString());
         fire(new EntitiesUnloadEvent(body.getChunk(), List.of(owner, body, duplicate)));
-        assertEquals(7, pet.x());
-        assertEquals(65, pet.y());
-        assertEquals(9, pet.z());
+        assertEquals(authoritative.getX(), pet.x());
+        assertEquals(authoritative.getY(), pet.y());
+        assertEquals(authoritative.getZ(), pet.z());
         assertEquals(35, pet.yaw());
         assertEquals(body.getUniqueId(), pet.entityId());
         fire(new EntitiesLoadEvent(duplicate.getChunk(), List.of(duplicate)));

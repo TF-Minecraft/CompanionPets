@@ -328,7 +328,7 @@ public final class CompanionConfig {
                     eggCustomModelData,
                     sexMode,
                     appearance,
-                    petItems, tricks, defaults, resolved.behaviors(),
+                    petItems, tricks, defaults, resolved.behavior(),
                     PetSounds.read(section, entity, logger), section.getBoolean("native-combat", false), resolved.species()));
         }
         return Collections.unmodifiableMap(types);

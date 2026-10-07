@@ -57,7 +57,11 @@ public final class PetMenus {
     }
 
     public void openCare(org.bukkit.entity.Player player, Pet pet, boolean petHouseBack, int petHousePage) {
+        openCare(player, pet, petHouseBack, petHousePage, null);
+    }
+    public void openCare(org.bukkit.entity.Player player, Pet pet, boolean petHouseBack, int petHousePage, org.bukkit.Location house) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.CARE, pet.id(), null);
+        holder.house(house);
         holder.petHouseBack(petHouseBack);
         holder.petHousePage(petHousePage);
         Inventory inventory = Bukkit.createInventory(holder, 45, title(pet.name()));
@@ -214,7 +218,11 @@ public final class PetMenus {
     }
 
     public void openKennel(org.bukkit.entity.Player player, int requestedPage) {
+        openKennel(player, requestedPage, null);
+    }
+    public void openKennel(org.bukkit.entity.Player player, int requestedPage, org.bukkit.Location house) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.KENNEL, null, null);
+        holder.house(house);
         Inventory inventory = Bukkit.createInventory(holder, 54, title("Pet House"));
         holder.inventory(inventory);
         frame(inventory);
@@ -320,6 +328,7 @@ public final class PetMenus {
                 && holder.petId().equals(previous.petId())) {
             holder.petHouseBack(previous.petHouseBack());
             holder.petHousePage(previous.petHousePage());
+            holder.house(previous.house());
         }
     }
 

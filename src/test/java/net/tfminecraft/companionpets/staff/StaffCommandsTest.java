@@ -157,6 +157,40 @@ class StaffCommandsTest {
         assertEquals(100, created.progress(Trick.LAY));
     }
 
+    @Test void creationKeepsDogCatAndBasicProfilesInTheirConfiguredPetTypes() throws Exception {
+        configure("""
+                limits: {max-stored: 4}
+                pets:
+                  wolf: {entity: WOLF, behavior: dog, egg: WOLF_SPAWN_EGG}
+                  cat: {entity: CAT, behavior: cat, egg: CAT_SPAWN_EGG}
+                  plain: {entity: WOLF, behavior: basic, egg: SHEEP_SPAWN_EGG}
+                """);
+        int bodies = owner.getWorld().getEntities().size();
+        var profiles = new LinkedHashMap<String, net.tfminecraft.companionpets.config.BehaviorProfile>();
+        profiles.put("wolf", net.tfminecraft.companionpets.config.BehaviorProfile.DOG);
+        profiles.put("cat", net.tfminecraft.companionpets.config.BehaviorProfile.CAT);
+        profiles.put("plain", net.tfminecraft.companionpets.config.BehaviorProfile.BASIC);
+        for (var entry : profiles.entrySet()) {
+            command("create", "Owner", entry.getKey(), entry.getValue().name(), "tricks=follow,sit");
+            assertTrue(staff.nextMessage().contains("Created " + entry.getValue().name()));
+            var created = commands.resolveNamedPet("Owner", entry.getValue().name());
+            assertEquals(entry.getKey(), created.typeId());
+            assertEquals(entry.getValue(), runtime.config().type(created.typeId()).behavior());
+            assertTrue(created.stored()); assertNull(created.entityId());
+            assertEquals(100, created.progress(Trick.SIT));
+        }
+        var reloaded = new PetStore(plugin); assertTrue(reloaded.load());
+        assertEquals(4, reloaded.countStored(owner.getUniqueId()));
+        for (var entry : profiles.entrySet()) {
+            var restored = reloaded.of(owner.getUniqueId()).stream()
+                    .filter(p -> p.name().equals(entry.getValue().name())).findFirst().orElseThrow();
+            assertEquals(entry.getKey(), restored.typeId());
+            assertEquals(Trick.SIT, restored.trickFor("sit"));
+        }
+        assertEquals(bodies, owner.getWorld().getEntities().size());
+        assertTrue(reloaded.close());
+    }
+
     @Test void invalidEggAmountsExplainTheRangeAndDeliverNothing() {
         for (String amount : List.of("abc", "0", "65", "999999999999999999999999")) {
             command("egg", "wolf", "Owner", amount);
@@ -297,7 +331,7 @@ class StaffCommandsTest {
 
     @Test void removedCommandsNeitherMutatePetsNorAppearInCompletion() {
         pet.need(Need.HEALTH, 20);
-        for (String removed : List.of("animation", "freeze", "cleantestpets", "heal", "needs", "transfer", "teach", "validate", "store", "remove", "rename", "recover")) {
+        for (String removed : List.of("inspect", "profile", "animation", "freeze", "cleantestpets", "heal", "needs", "transfer", "teach", "validate", "store", "remove", "rename", "recover")) {
             command(removed, id(), "all", "100");
             assertTrue(commands.complete(staff, new String[]{removed}).isEmpty());
             assertTrue(commands.complete(staff, new String[]{removed, ""}).isEmpty());
@@ -371,7 +405,7 @@ class StaffCommandsTest {
 
     @Test void readOnlyPermissionCanBrowseButCannotRecoverOrUseInventoryMutations() {
         staff.setOp(false); staff.addAttachment(plugin, "companionpets.admin.list", true);
-        assertEquals(List.of("inspect", "list"), commands.complete(staff, new String[]{""}));
+        assertEquals(List.of("list"), commands.complete(staff, new String[]{""}));
         command("list", "Owner", "Toby"); assertEquals(StaffMenuHolder.Kind.INSPECT, menu().kind());
         assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, menu().getInventory().getItem(38).getType());
         assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, menu().getInventory().getItem(44).getType());
@@ -417,56 +451,6 @@ class StaffCommandsTest {
         String saved = Files.readString(file.toPath());
         assertFalse(saved.contains("test-pet")); assertFalse(saved.contains("test-frozen"));
     }
-
-    @Test void inspectShowsInheritedModelVoiceAndMissingCapabilitiesWithoutMutatingPets() throws Exception {
-        var yaml = new YamlConfiguration();
-        yaml.loadFromString("""
-                species:
-                  dog:
-                    voice: {preset: frog, pitch: 1.3}
-                    behaviors: {remove: [dig-gifts]}
-                pets:
-                  wolf: {species: dog, model: beagle, egg: WOLF_SPAWN_EGG}
-                """);
-        runtime.config(CompanionConfig.load(plugin, yaml));
-        int pets = runtime.store().all().size(), entities = owner.getWorld().getEntities().size();
-        command("inspect", "wolf");
-        var messages = new ArrayList<String>();
-        String message;
-        while ((message = staff.nextMessage()) != null) messages.add(message);
-        String report = String.join("\n", messages);
-        assertTrue(report.contains("Species: dog"));
-        assertTrue(report.contains("Voice: frog | Pitch multiplier: 1.3"));
-        assertTrue(report.contains("Profile: preset"));
-        assertTrue(report.contains("Behaviors active:"));
-        assertFalse(report.contains("dig-gifts"));
-        assertTrue(report.contains("Disabled toy-tail-wag: model unavailable"));
-        assertTrue(report.contains("missing animations: belly_up, get_up, lie_back"));
-        assertTrue(report.contains("Tricks configured:"));
-        assertTrue(report.contains("Default learned tricks: follow"));
-        assertTrue(report.contains("Model: beagle"));
-        assertTrue(report.contains("Missing lie -> lie"));
-        assertEquals(pets, runtime.store().all().size());
-        assertEquals(entities, owner.getWorld().getEntities().size());
-        assertTrue(pet.stored());
-    }
-
-    @Test void inspectIdentifiesAGeneratedVoiceAndItsResolvedEventSounds() throws Exception {
-        var yaml = new YamlConfiguration(); yaml.loadFromString("""
-                pets:
-                  wolf: {species: dog, voice: rabbit, egg: WOLF_SPAWN_EGG}
-                """);
-        runtime.config(CompanionConfig.load(plugin, yaml));
-        command("inspect", "wolf");
-        var messages = new ArrayList<String>();
-        String message;
-        while ((message = staff.nextMessage()) != null) messages.add(message);
-        String report = String.join("\n", messages);
-        assertTrue(report.contains("Voice: rabbit"));
-        assertTrue(report.contains("Profile: generated"));
-        assertTrue(report.contains("minecraft:entity.rabbit.ambient"));
-    }
-
 
     @Test void consoleNamedProfileReportsSavedNeedsOrderIllnessAndLearnedWords() {
         pet.need(Need.HUNGER, 61.7); pet.need(Need.ENERGY, 42.1);
@@ -551,8 +535,9 @@ class StaffCommandsTest {
                 pets:
                   wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}
                   custom: {entity: CAT, egg: 'mmoitems:PETS:CAT_EGG'}
-                  last: {entity: PIG, egg: PIG_SPAWN_EGG}
+                  last: {entity: WOLF, egg: PIG_SPAWN_EGG}
                 """);
+        assertEquals(List.of("wolf", "custom", "last"), List.copyOf(runtime.config().types().keySet()));
         var give = PluginCommandUtils.createPluginCommand("mi", provider);
         give.setExecutor((sender, command, label, args) -> {
             assertSame(server.getConsoleSender(), sender);

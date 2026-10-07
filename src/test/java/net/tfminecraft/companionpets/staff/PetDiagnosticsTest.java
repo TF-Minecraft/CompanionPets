@@ -2,7 +2,6 @@ package net.tfminecraft.companionpets.staff;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +9,7 @@ import java.util.Set;
 import java.util.UUID;
 import net.tfminecraft.companionpets.body.Bodies;
 import net.tfminecraft.companionpets.config.CompanionConfig;
+import net.tfminecraft.companionpets.config.BehaviorProfile;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
@@ -28,6 +28,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
@@ -218,7 +220,8 @@ class PetDiagnosticsTest {
         assertEquals(0, runtime.sessions().restUntil(pet.id()));
     }
 
-    @Test void operatorInspectionShowsResolvedClipsAndCustomWarningsWithoutMutatingPets() throws Exception {
+    @ParameterizedTest @EnumSource(BehaviorProfile.class)
+    void diagnosticsPreserveCustomClipWarningsForEveryBehaviorProfile(BehaviorProfile profile) throws Exception {
         runtime.config(config("""
                 custom-tricks:
                   wave: {animation: wave_clip}
@@ -228,40 +231,42 @@ class PetDiagnosticsTest {
                     entity: WOLF
                     egg: WOLF_SPAWN_EGG
                     model: canine
+                    behavior: %s
                     animations: {idle: relax, walk: stroll, swim: ''}
                     tricks: {add: [wave, optional]}
-                """));
+                """.formatted(profile.id())));
         blueprints.put("canine", Set.of("relax", "stroll"));
         Pet pet = add("wolf");
         pet.stored(true);
         int entities = operator.getWorld().getEntities().size();
-        assertTrue(commands.execute(operator, "inspect", "wolf"));
-        String report = messages();
-        assertTrue(report.contains("Model: canine | Scale: 1.0 | Available: true"), report);
-        assertTrue(report.contains("Blueprint clips found: relax, stroll"), report);
-        assertTrue(report.contains("Found idle -> relax"), report);
-        assertTrue(report.contains("Found walk -> stroll"), report);
-        assertTrue(report.contains("Unavailable trick wave: missing animation wave_clip"), report);
-        assertFalse(report.contains("Unavailable trick optional"), report);
-        assertTrue(report.contains("Disabled animation: swim"), report);
+        assertEquals(profile, runtime.config().type("wolf").behavior());
         assertEquals(List.of("wolf: unavailable custom animation wave_clip"), diagnostics.validate());
+        blueprints.put("canine", Set.of("relax", "stroll", "wave_clip"));
+        assertEquals(List.of(), diagnostics.validate(), "Optional fallback text remains usable without its animation");
+        assertNull(operator.nextMessage(), "Validation stays internal after the inspection command was removed");
         assertTrue(pet.stored());
         assertNull(pet.entityId());
         assertEquals(entities, operator.getWorld().getEntities().size());
         assertEquals(1, runtime.store().all().size());
     }
 
-    @Test void inspectionPermissionAndUsageFailuresDoNotExposeTypeDiagnostics() {
-        operator.setOp(false);
-        commands.execute(operator, "inspect", "wolf");
-        assertEquals("You do not have permission to use inspect.", messages());
-        operator.setOp(true);
-        commands.execute(operator, "inspect");
-        assertEquals("Usage: /companionpets inspect <configured-type>", messages());
-        commands.execute(operator, "inspect", "missing");
-        assertEquals("Unknown configured pet type: missing", messages());
-        commands.execute(operator, "inspect", "wolf");
-        assertTrue(messages().contains("Appearance: vanilla | Model animations: not applicable"));
+    @Test void retiredInspectionRouteHasNoCompletionOrTypeReportEvenForOperators() {
+        Pet pet = add("wolf"); pet.stored(true);
+        var inventory = operator.getOpenInventory().getTopInventory();
+        for (boolean op : List.of(false, true)) {
+            operator.setOp(op);
+            for (String[] args : List.of(new String[]{"inspect"}, new String[]{"inspect", "wolf"},
+                    new String[]{"inspect", "missing"}, new String[]{"profile", "wolf"})) {
+                assertTrue(commands.execute(operator, args));
+                assertEquals("Use /companionpets to see the available staff commands.", operator.nextMessage());
+                assertNull(operator.nextMessage());
+            }
+            assertTrue(commands.complete(operator, new String[]{"inspect"}).isEmpty());
+            assertTrue(commands.complete(operator, new String[]{"inspect", ""}).isEmpty());
+        }
+        assertSame(inventory, operator.getOpenInventory().getTopInventory());
+        assertTrue(pet.stored()); assertNull(pet.entityId());
+        assertEquals(List.of(pet), List.copyOf(runtime.store().all()));
     }
 
     private CompanionConfig config(String text) throws Exception {
@@ -276,10 +281,4 @@ class PetDiagnosticsTest {
         return pet;
     }
 
-    private String messages() {
-        var messages = new ArrayList<String>();
-        String next;
-        while ((next = operator.nextMessage()) != null) messages.add(next);
-        return String.join("\n", messages);
-    }
 }

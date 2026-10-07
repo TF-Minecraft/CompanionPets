@@ -34,21 +34,26 @@ class NativeBoundariesCoverageTest {
     }
     @Test void partialWolfApiCanReportShakingWithoutClaimingToDeferIt() {
         MinimalWolf body=new MinimalWolf(server);
+        assertEquals(1F, WolfShake.progress(body));
         assertTrue(WolfShake.shaking(body)); assertFalse(WolfShake.defer(body));
-        body.fail=true; assertFalse(WolfShake.shaking(body));
+        body.fail=true; assertEquals(0F, WolfShake.progress(body)); assertFalse(WolfShake.shaking(body));
     }
     @Test void nativeShakeFailuresDoNotLeakDeferredStateOrEscapeCleanup() {
         ShakeWolf body=new ShakeWolf(server,UUID.randomUUID());
-        body.nativeHandle.isWet=true;
-        assertTrue(WolfShake.defer(body)); assertFalse(body.nativeHandle.isWet);
+        body.nativeHandle.wet(true); body.nativeHandle.progress=.4F;
+        assertEquals(.4F, WolfShake.progress(body));
+        assertTrue(WolfShake.defer(body)); assertFalse(body.nativeHandle.isWet());
+        assertEquals(0F, body.nativeHandle.progress);
+        assertEquals(1F, body.nativeHandle.partialTick);
+        assertEquals(List.of((byte)56), body.nativeHandle.level.events);
         body.fail=true;
         assertFalse(WolfShake.shaking(body)); assertFalse(WolfShake.defer(body));
         assertDoesNotThrow(()->WolfShake.restore(body));
-        body.fail=false; WolfShake.restore(body); assertFalse(body.nativeHandle.isWet);
-        body.nativeHandle.isWet=true; assertTrue(WolfShake.defer(body));
+        body.fail=false; WolfShake.restore(body); assertFalse(body.nativeHandle.isWet());
+        body.nativeHandle.wet(true); assertTrue(WolfShake.defer(body));
         // A reloaded body with the same identity may come from an unsupported server implementation.
         WolfShake.restore(new WolfMock(server,body.getUniqueId()));
-        WolfShake.restore(body); assertFalse(body.nativeHandle.isWet);
+        WolfShake.restore(body); assertFalse(body.nativeHandle.isWet());
     }
     public static class NativeWolf extends WolfMock {
         final MoveHandle nativeHandle=new MoveHandle(); boolean fail;
@@ -90,8 +95,22 @@ class NativeBoundariesCoverageTest {
     }
     public static class ProgressClock { public float getShakeAnim(float partialTick) { return 1; } }
     public static class ShakeWolf extends WolfMock {
-        final WolfShakeTest.NativeClock nativeHandle=new WolfShakeTest.NativeClock(); boolean fail;
+        final NativeClock nativeHandle=new NativeClock(); boolean fail;
         ShakeWolf(ServerMock server,UUID id) { super(server,id); }
-        public WolfShakeTest.NativeClock getHandle() { if(fail) throw new IllegalStateException("unloaded"); return nativeHandle; }
+        public NativeClock getHandle() { if(fail) throw new IllegalStateException("unloaded"); return nativeHandle; }
+    }
+    public static class NativeClock {
+        private boolean isWet;
+        float progress, partialTick;
+        final NativeLevel level=new NativeLevel();
+        public boolean isWet() { return isWet; }
+        public void wet(boolean value) { isWet=value; }
+        public float getShakeAnim(float partialTick) { this.partialTick=partialTick; return progress; }
+        public void handleEntityEvent(byte event) { if(event==56) progress=0; }
+        public NativeLevel level() { return level; }
+    }
+    public static class NativeLevel {
+        final List<Byte> events=new ArrayList<>();
+        public void broadcastEntityEvent(NativeClock wolf,byte event) { events.add(event); }
     }
 }

@@ -6,7 +6,12 @@ import java.util.logging.Logger;
 import org.bukkit.configuration.ConfigurationSection;
 import net.tfminecraft.companionpets.pet.Trick;
 
-public record CustomTrick(String displayName, String animation, String fallbackText, double duration) {
+public record CustomTrick(String displayName, String animation, String fallbackText, double duration,
+                          PetSounds.Cue sound, java.util.List<Double> at) {
+    public CustomTrick { at = java.util.List.copyOf(at); }
+    public CustomTrick(String displayName, String animation, String fallbackText, double duration) {
+        this(displayName, animation, fallbackText, duration, null, java.util.List.of(0.0));
+    }
     public static Map<Trick, CustomTrick> read(ConfigurationSection section, Logger logger) {
         Map<Trick, CustomTrick> result = new LinkedHashMap<>();
         if (section == null) return Map.of();
@@ -28,7 +33,16 @@ public record CustomTrick(String displayName, String animation, String fallbackT
                 if (entry.contains("duration") && !(entry.get("duration") instanceof Number)
                         || !Double.isFinite(duration) || duration <= 0 || duration > 60)
                     throw new IllegalArgumentException("duration must be 0 < seconds <= 60");
-                result.put(trick, new CustomTrick(display, animation, fallback, duration));
+                Object rawAt = entry.get("at", 0);
+                java.util.List<?> times = rawAt instanceof java.util.List<?> list ? list : java.util.List.of(rawAt);
+                var at = new java.util.ArrayList<Double>();
+                for (Object value : times) {
+                    if (!(value instanceof Number n) || !Double.isFinite(n.doubleValue()) || n.doubleValue() < 0 || n.doubleValue() > 60)
+                        throw new IllegalArgumentException("at must contain seconds between 0 and 60");
+                    at.add(n.doubleValue());
+                }
+                result.put(trick, new CustomTrick(display, animation, fallback, duration,
+                        PetSounds.readCue(entry, "sound", logger), at));
             } catch (IllegalArgumentException ex) { logger.warning("Skipping custom trick " + id + ": " + ex.getMessage()); }
         }
         return java.util.Collections.unmodifiableMap(result);

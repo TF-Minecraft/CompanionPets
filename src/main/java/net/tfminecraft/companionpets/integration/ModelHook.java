@@ -111,6 +111,14 @@ public final class ModelHook implements PetVisual {
         catch (RuntimeException ex) { fail(entity, session.type, ex); }
     }
 
+    @Override public boolean shake(Entity entity, PetTypeDef type, double progress) {
+        apply(entity, type);
+        Session session = sessions.get(entity.getUniqueId());
+        if (session == null) return false;
+        try { return session.controller.shake(progress); }
+        catch (RuntimeException ex) { fail(entity, session.type, ex); return false; }
+    }
+
     @Override
     public boolean attached(Entity entity) {
         return entity != null && sessions.containsKey(entity.getUniqueId());

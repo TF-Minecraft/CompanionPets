@@ -16,6 +16,7 @@ import net.tfminecraft.companionpets.session.Sessions;
 import net.tfminecraft.companionpets.session.TrainingSession;
 import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
+import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import net.tfminecraft.companionpets.visual.PetVisual;
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -53,7 +54,7 @@ class PetMomentsCoverageTest {
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
-        world = new WorldMock() {
+        world = new CollisionWorldMock() {
             @Override public BlockMock getBlockAt(int x, int y, int z) {
                 return blocks.computeIfAbsent(x + ":" + y + ":" + z, key -> new BlockMock(new Location(this, x, y, z)) {
                     @Override public boolean isPassable() { return !getType().isSolid(); }
@@ -64,6 +65,8 @@ class PetMomentsCoverageTest {
                     double x, double y, double z, double extra) { particles.add(particle); }
         };
         server.addWorld(world);
+        for (int x = -8; x <= 16; x++) for (int z = -8; z <= 8; z++)
+            world.getBlockAt(x, 63, z).setType(Material.STONE);
         owner = server.addPlayer(); owner.teleport(new Location(world, 0, 64, 0));
         var plugin = MockBukkit.createMockPlugin();
         yaml = new YamlConfiguration();
@@ -85,7 +88,7 @@ class PetMomentsCoverageTest {
                   dig-loot: {BONE: 1}
                   belly-up: {chance: 100, cooldown-seconds: 60}
                 pets:
-                  wolf: {entity: WOLF, model: canine, egg: WOLF_SPAWN_EGG, default-tricks: []}
+                  wolf: {entity: WOLF, behavior: dog, model: canine, egg: WOLF_SPAWN_EGG, default-tricks: []}
                 """);
         var visual = new PetVisual() {
             @Override public void apply(Entity entity, PetTypeDef type) { }
@@ -294,7 +297,9 @@ class PetMomentsCoverageTest {
     }
 
     @Test void zeroDigChanceDoesNotBecomeAFallbackForUnavailableBarking() {
-        configure("pets.wolf.behaviors.remove", List.of("social-protest"));
+        // Keep DOG's digging available: only the selected bark lacks a visible target.
+        visible = false;
+        assertTrue(runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.DIG_GIFTS));
         configure("moments.adult-bark-chance", 100);
         var stranger = server.addPlayer(); stranger.teleport(body.getLocation().add(1, 0, 0));
         world.dropItem(body.getLocation(), new ItemStack(Material.STICK));

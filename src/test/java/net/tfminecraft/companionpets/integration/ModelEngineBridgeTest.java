@@ -345,7 +345,7 @@ class ModelEngineBridgeTest {
         body = world.spawn(new org.bukkit.Location(world, 0, 64, 0), org.bukkit.entity.Wolf.class);
         provider = new Provider(Set.of());
         bridge = provider.bridge();
-        provider.api("blueprint", "beagle", new String[]{"idle", "walk", "sit", "paw", "head_tilt", "lie_back", "belly_up", "get_up", "custom"});
+        provider.api("blueprint", "beagle", new String[]{"idle", "walk", "sit", "paw", "head_tilt", "lie_back", "belly_up", "get_up", "custom", "shake"});
         var clips = new EnumMap<PetAnimation, Clip>(PetAnimation.class);
         for (PetAnimation animation : PetAnimation.values()) clips.put(animation, new Clip(animation.name().toLowerCase(Locale.ROOT), 1.2, 0.25));
         appearance = new PetAppearance("beagle", 0.8, clips);
@@ -615,6 +615,33 @@ class ModelEngineBridgeTest {
         hook.close(); assertNull(owner()); assertFalse(hook.attached(body));
     }
 
+    @Test void hookSynchronizesShakeToTheNativeClockWithoutRestartingEverySample() throws Exception {
+        PetVisual hook = provider.hook(); var type = type();
+        assertTrue(hook.shake(body, type, 0.1));
+        assertTrue(hook.attached(body)); assertEquals(1, created().size());
+        Object renderer = model(), handler = field(renderer, "handler");
+        Object firstShake = map(handler, "playing").get("shake");
+        assertNotNull(firstShake);
+        assertEquals("ONCE", field(firstShake, "loop").toString());
+        assertEquals("OVERRIDE", field(firstShake, "override").toString());
+        assertEquals(1.25 / 1.9, (double) field(handler, "speed"), 0.00001);
+        assertEquals(0.0, field(handler, "blendIn")); assertEquals(0.0, field(handler, "blendOut"));
+
+        hook.update(body, type, PetAnimation.WALK);
+        assertTrue(hook.shake(body, type, 0.8));
+        assertSame(firstShake, map(handler, "playing").get("shake"));
+        assertSame(renderer, model());
+        assertFalse(hook.shake(body, type, 0));
+        assertFalse(map(handler, "playing").containsKey("shake"));
+        assertTrue(hook.shake(body, type, 0.2));
+        assertNotSame(firstShake, map(handler, "playing").get("shake"));
+        assertEquals(1.25 / 1.8, (double) field(handler, "speed"), 0.00001);
+
+        hook.close();
+        assertNull(owner()); assertFalse(hook.attached(body));
+        assertEquals(true, field(renderer, "destroyed")); assertTrue(body.isValid());
+    }
+
     @Test void hookFailureFallsBackAndRateLimitsRetriesWhileDeletionStillRemovesBody() throws Exception {
         PetVisual hook = provider.hook(); var type = type();
         hook.apply(body, type); Object model = model();
@@ -747,7 +774,7 @@ class ModelEngineBridgeTest {
 
     @Test void hookFallsBackSafelyForEachFailedAnimationAndHeadOperation() throws Exception {
         var type = type();
-        for (String operation : List.of("update", "training", "custom", "belly", "movement", "cancel", "head", "release")) {
+        for (String operation : List.of("update", "training", "custom", "belly", "movement", "cancel", "head", "release", "shake")) {
             var records = new ArrayList<LogRecord>();
             PetVisual hook = hookWithLogs(records);
             hook.apply(body, type);
@@ -772,6 +799,7 @@ class ModelEngineBridgeTest {
                     case "cancel" -> hook.cancelAction(body);
                     case "head" -> hook.holdHeadLook(body, 30, 45, 5);
                     case "release" -> hook.releaseHeadLook(body);
+                    case "shake" -> assertFalse(hook.shake(body, type, 0.1));
                     default -> throw new AssertionError(operation);
                 }
                 assertFalse(hook.attached(body), operation);
@@ -855,6 +883,7 @@ class ModelEngineBridgeTest {
         hook.apply(body, vanilla);
         hook.update(body, vanilla, PetAnimation.IDLE);
         hook.trainingAttention(body, vanilla, false);
+        assertFalse(hook.shake(body, vanilla, 0.1));
         hook.holdHeadLook(body, 0, 0, 0);
         hook.releaseHeadLook(body);
         hook.wagTail(body, 2);

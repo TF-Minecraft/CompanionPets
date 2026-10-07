@@ -62,6 +62,13 @@ class PublicContractsCoverageTest {
         assertTrue(player.hold(new PetAppearance.Clip("sit",1,0))); assertEquals(List.of("sit:true"),calls);
         assertEquals(1,player.length("sit"));
     }
+    @Test void customTrickCompatibilityConstructorHasImmediateSilentAudio() {
+        var trick = new CustomTrick("Wave", "wave", "waves", 2);
+        assertNull(trick.sound()); assertEquals(List.of(0.0), trick.at());
+        assertThrows(UnsupportedOperationException.class, () -> trick.at().add(1.0));
+        assertEquals("social-tail-wag", PetBehavior.SOCIAL_TAIL_WAG.id());
+    }
+
     @Test void namesAndSpokenCommandsRejectMissingInputAndBoundPlayerNames() {
         assertEquals("",Names.sanitize(null)); assertEquals("",SpokenOrder.line(null));
         assertFalse(SpokenOrder.matches("sit",null)); assertFalse(SpokenOrder.matches("sit","  "));

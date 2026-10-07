@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, 'feat/pet-items-foundation', 'feat/pet-models-behavior', 'feat/pet-species']
+    branches: [main, 'feat/pet-items-foundation', 'feat/pet-models-behavior', 'feat/pet-species', 'fix/pet-shake-tricks-and-spawning']
 
 permissions:
   contents: read

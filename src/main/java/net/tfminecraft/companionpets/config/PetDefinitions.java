@@ -14,11 +14,12 @@ import net.tfminecraft.companionpets.pet.Trick;
 
 /** Resolves one species layer and one pet layer without modifying the source YAML. */
 final class PetDefinitions {
-    record Resolved(ConfigurationSection section, String species, Set<PetBehavior> behaviors, Set<Trick> tricks) { }
+    record Resolved(ConfigurationSection section, String species, BehaviorProfile behavior, Set<Trick> tricks) { }
     private final Map<String, ConfigurationSection> species = new LinkedHashMap<>();
     private final Set<Trick> builtinTricks = new LinkedHashSet<>(List.of(Trick.values()));
     private final Map<Trick, CustomTrick> custom;
     private final Logger logger;
+    private boolean warnedBehaviors;
 
     PetDefinitions(ConfigurationSection definitions, Map<Trick, CustomTrick> custom, Logger logger) {
         this.custom = custom;
@@ -27,6 +28,7 @@ final class PetDefinitions {
         builtin("cat", EntityType.CAT);
         if (definitions != null) for (String id : definitions.getKeys(false)) {
             ConfigurationSection definition = definitions.getConfigurationSection(id);
+            warnLegacy(definition);
             if (definition == null) {
                 logger.warning("Species " + id + " must be a mapping; ignoring it");
                 continue;
@@ -50,6 +52,7 @@ final class PetDefinitions {
     }
 
     Resolved resolve(ConfigurationSection pet) {
+        warnLegacy(pet);
         String id = null;
         ConfigurationSection template = null;
         if (pet.contains("species")) {
@@ -64,11 +67,17 @@ final class PetDefinitions {
         merge(effective, template);
         merge(effective, normalize(pet));
         EntityType entity = entity(effective, "WOLF");
-        EntityType speciesEntity = template == null ? entity : entity(template, entity.name());
-        Set<PetBehavior> behaviors = template == null ? PetBehavior.defaults(entity)
-                : PetBehavior.read(template, speciesEntity, logger);
+        if (template != null) entity(template, entity.name()); // Invalid species bodies remain invalid despite pet overrides.
+        BehaviorProfile behavior = BehaviorProfile.read(effective.get("behavior"), entity, logger);
         Set<Trick> tricks = template == null ? builtinTricks : tricks(template, builtinTricks);
-        return new Resolved(effective, id, PetBehavior.read(pet, behaviors, logger), tricks(pet, tricks));
+        return new Resolved(effective, id, behavior, tricks(pet, tricks));
+    }
+
+    private void warnLegacy(ConfigurationSection section) {
+        if (!warnedBehaviors && section != null && section.contains("behaviors")) {
+            logger.warning("behaviors is no longer configurable; use behavior: dog|cat|basic");
+            warnedBehaviors = true;
+        }
     }
 
     private static EntityType entity(ConfigurationSection section, String fallback) {

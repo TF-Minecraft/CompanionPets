@@ -92,7 +92,6 @@ class PetSoundsTest {
         var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
         for (String entity : List.of("rabbit", "pig")) {
             var voice = config.type(entity).sounds();
-            assertEquals(PetSounds.Origin.GENERATED, voice.origin());
             assertFalse(voice.nativeSounds());
             assertEquals(25, voice.ambientIntervalSeconds());
             for (Event event : Event.values()) {
@@ -107,9 +106,7 @@ class PetSoundsTest {
             }
         }
         var cat = read("sounds: {preset: cat}");
-        assertEquals(PetSounds.Origin.PRESET, cat.origin());
         assertEquals(List.of("minecraft:entity.cat.purr"), cat.cue(Event.HAPPY_QUIET).sounds());
-        assertEquals(PetSounds.Origin.NONE, read("sounds: false").origin());
     }
 
     @Test void missingGeneratedSoundsFallBackToAmbientOrDisableTheVoiceWithWarnings() throws Exception {

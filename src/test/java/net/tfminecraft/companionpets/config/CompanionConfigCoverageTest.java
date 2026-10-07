@@ -188,7 +188,8 @@ class CompanionConfigCoverageTest {
                     tricks: {add: [sit], remove: [jump], append: [paw]}
                 """);
         assertTrue(config.type("muted").sounds().cues().isEmpty());
-        assertEquals("frog", config.type("voiced").sounds().preset());
+        assertEquals(List.of("minecraft:entity.frog.ambient"),
+                config.type("voiced").sounds().cue(PetSounds.Event.AMBIENT).sounds());
         assertTrue(config.type("voiced").allowsTrick(Trick.SIT));
         assertFalse(config.type("voiced").allowsTrick(Trick.JUMP));
         assertTrue(warnings.stream().anyMatch(s -> s.contains("Unknown list adjustment pets.voiced.tricks.append")));
@@ -267,6 +268,24 @@ class CompanionConfigCoverageTest {
         assertThrows(UnsupportedOperationException.class, () -> roundTrip.types().clear());
         assertThrows(UnsupportedOperationException.class, () -> roundTrip.tricks().clear());
         assertThrows(UnsupportedOperationException.class, () -> pet.foods().clear());
+    }
+
+    @Test void malformedTrickListsWarnWithoutAcceptingInvalidOverrides() throws Exception {
+        var scalar = load("pets: {wolf: {entity: WOLF, egg: BONE, tricks: broken, default-tricks: []}}");
+        assertTrue(scalar.type("wolf").tricks().isEmpty());
+        assertTrue(warnings.stream().anyMatch(s -> s.contains("tricks must be a list")));
+        warnings.clear();
+        var adjusted = load("pets: {wolf: {entity: WOLF, egg: BONE, tricks: {add: broken, remove: broken}}}");
+        var defaults = load("pets: {wolf: {entity: WOLF, egg: BONE}}");
+        assertEquals(defaults.type("wolf").tricks(), adjusted.type("wolf").tricks());
+        assertEquals(2, warnings.stream().filter(s -> s.contains("must be a list; ignoring adjustment")).count());
+    }
+
+    @Test void mythicOnlyTypeUsesTheDocumentedWolfFallbackWithAWarning() throws Exception {
+        MockBukkit.createMockPlugin("MythicMobs");
+        var config = load("pets: {mythic: {mythic-mob: CustomPet, egg: BONE}}");
+        assertEquals(EntityType.WOLF, config.type("mythic").entity());
+        assertTrue(warnings.stream().anyMatch(s -> s.contains("assuming WOLF")));
     }
 
     private YamlConfiguration yaml(String source) throws Exception {

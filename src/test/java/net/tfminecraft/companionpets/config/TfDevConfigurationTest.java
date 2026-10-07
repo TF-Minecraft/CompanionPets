@@ -25,15 +25,20 @@ class TfDevConfigurationTest {
             var current = new YamlConfiguration(); current.load(path.toFile());
             var original = new YamlConfiguration(); original.load(path.getParent().resolve("snapshots/2026-10-04-config.yml").toFile());
             var config = CompanionConfig.load(MockBukkit.createMockPlugin(), current);
-            assertEquals(original.getConfigurationSection("pets").getKeys(false), config.types().keySet());
-            assertEquals(14, config.types().size());
-            for (String root : Set.of("care", "play", "training", "custom-tricks", "limits", "moments", "social", "items", "orders"))
+            var expectedTypes = new java.util.HashSet<>(original.getConfigurationSection("pets").getKeys(false));
+            expectedTypes.remove("fox_custom");
+            assertEquals(expectedTypes, config.types().keySet());
+            assertEquals(13, config.types().size());
+            for (String root : Set.of("care", "play", "training", "limits", "moments", "social", "items", "orders"))
                 assertEquals(values(original.getConfigurationSection(root)), values(current.getConfigurationSection(root)), root);
             Path assets = path.getParent().getParent().getParent();
             for (var pet : config.types().values()) {
-                var saved = original.getConfigurationSection("pets." + pet.id());
+                var saved = original.getConfigurationSection("pets." + (pet.id().equals("fox") ? "fox_custom" : pet.id()));
                 assertEquals(ItemRef.parse(saved.getString("egg")), pet.egg(), pet.id() + " egg");
-                assertFalse(pet.behaves(PetBehavior.ROAM));
+                BehaviorProfile expectedProfile = pet.id().equals("frog") ? BehaviorProfile.BASIC
+                        : pet.id().equals("fox") || Set.of("cat", "catblack", "catfunny", "catorange", "mainecoon").contains(pet.id())
+                        ? BehaviorProfile.CAT : BehaviorProfile.DOG;
+                assertEquals(expectedProfile, pet.behavior(), pet.id());
                 if (saved.getString("sex", "random").equals("choose")) assertEquals(SexMode.CHOOSE, pet.sexMode());
                 String model = saved.getString("appearance.model");
                 if (model != null) assertEquals(model, pet.appearance().model(), pet.id() + " model");
@@ -52,7 +57,10 @@ class TfDevConfigurationTest {
                 assertTrue(report.animations().containsKey(PetAnimation.IDLE), pet.id() + " idle");
                 assertTrue(report.animations().containsKey(PetAnimation.WALK), pet.id() + " walk");
                 assertTrue(report.animations().containsKey(PetAnimation.LIE), pet.id() + " rest");
-                if (pet.behaves(PetBehavior.BELLY_RUB)) assertFalse(report.disabledBehaviors().containsKey(PetBehavior.BELLY_RUB), pet.id());
+                if (pet.behaves(PetBehavior.BELLY_RUB)) {
+                    boolean complete = Set.of(PetAnimation.LIE_BACK, PetAnimation.BELLY_UP, PetAnimation.GET_UP).stream().allMatch(report.animations()::containsKey);
+                    assertEquals(!complete, report.disabledBehaviors().containsKey(PetBehavior.BELLY_RUB), pet.id());
+                }
                 if (pet.behaves(PetBehavior.TOY_TAIL_WAG)) assertTrue(tail, pet.id() + " tail");
                 for (Trick trick : pet.tricks()) {
                     var custom = config.customTrick(trick);
@@ -61,26 +69,13 @@ class TfDevConfigurationTest {
                 }
             }
             assertEquals(EntityType.WOLF, config.type("fox").entity());
-            assertEquals(EntityType.WOLF, config.type("fox_custom").entity());
-            assertEquals("fox", config.type("fox_custom").sounds().preset());
-            var fox = config.type("fox");
-            var foxCustom = config.type("fox_custom");
-            var foxBehaviors = new java.util.HashSet<>(PetBehavior.read(original.getConfigurationSection("pets.fox"),
-                    EntityType.FOX, java.util.logging.Logger.getAnonymousLogger()));
-            foxBehaviors.remove(PetBehavior.ROAM);
-            foxBehaviors.addAll(Set.of(PetBehavior.SOCIAL_GREETING, PetBehavior.SOCIAL_VOCALIZING, PetBehavior.CAT_PLAY));
-            assertEquals(foxBehaviors, fox.behaviors(), "Keep captured fox actions, social reactions and favorite-toy side steps");
-            assertFalse(fox.behaves(PetBehavior.TOY_WIGGLE));
-            assertEquals(fox.behaviors(), foxCustom.behaviors());
-            assertEquals(fox.appearance(), foxCustom.appearance());
-            assertEquals(fox.sounds(), foxCustom.sounds());
-            assertEquals(fox.sexMode(), foxCustom.sexMode());
-            assertEquals(fox.tricks(), foxCustom.tricks());
-            assertEquals(fox.defaultTricks(), foxCustom.defaultTricks());
-            assertEquals(fox.items(), foxCustom.items());
-            assertNotEquals(fox.egg(), foxCustom.egg());
+            assertEquals("minecraft:entity.fox.ambient", config.type("fox").sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
+            assertEquals(ItemRef.parse("mmoitems:PETS:PET_FOX_EGG"), config.type("fox").egg());
+            assertNull(config.type("fox_custom"));
+            assertEquals(java.util.List.of(.54, 2.33, 2.67), config.customTrick(Trick.valueOf("croak")).at());
+            assertEquals(java.util.List.of("minecraft:entity.frog.ambient"), config.customTrick(Trick.valueOf("croak")).sound().sounds());
             assertEquals(EntityType.WOLF, config.type("frog").entity());
-            assertEquals("frog", config.type("frog").sounds().preset());
+            assertEquals("minecraft:entity.frog.ambient", config.type("frog").sounds().cue(PetSounds.Event.AMBIENT).sounds().getFirst());
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_GREETING));
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_TAIL_WAG));
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_JUMPS));

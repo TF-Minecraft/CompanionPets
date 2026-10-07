@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import net.tfminecraft.companionpets.body.Bodies;
+import net.tfminecraft.companionpets.body.PetPlacement;
 import net.tfminecraft.companionpets.config.CompanionConfig;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
@@ -14,6 +15,7 @@ import net.tfminecraft.companionpets.pet.*;
 import net.tfminecraft.companionpets.session.Sessions;
 import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
+import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import net.tfminecraft.companionpets.visual.PetAnimation;
 import net.tfminecraft.companionpets.visual.PetVisual;
 import org.bukkit.*;
@@ -24,6 +26,7 @@ import org.bukkit.entity.Wolf;
 import org.bukkit.util.Vector;
 import org.junit.jupiter.api.*;
 import org.mockbukkit.mockbukkit.MockBukkit;
+import org.mockbukkit.mockbukkit.block.BlockMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.entity.WolfMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
@@ -51,7 +54,14 @@ class PetRoamingCoverageTest {
                 return unloaded.contains(id) ? null : super.getEntity(id);
             }
         });
-        world = new WorldMock() {
+        world = new CollisionWorldMock() {
+            private final java.util.Map<String, BlockMock> blocks = new java.util.HashMap<>();
+            @Override public BlockMock getBlockAt(int x, int y, int z) {
+                return blocks.computeIfAbsent(x + ":" + y + ":" + z, key ->
+                        new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
+                            @Override public boolean isPassable() { return !getType().isSolid(); }
+                        });
+            }
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
                 return type == Wolf.class ? type.cast(body(at)) : super.spawn(at, type);
             }
@@ -293,6 +303,11 @@ class PetRoamingCoverageTest {
         var replacement = (Mob) actions.restoreBody(pet);
         assertNotNull(replacement);
         assertNotEquals(previousBody, replacement.getUniqueId());
+        Location recovered = replacement.getLocation();
+        assertEquals(64, recovered.getY());
+        assertEquals(.5, recovered.getX() - Math.floor(recovered.getX()));
+        assertEquals(.5, recovered.getZ() - Math.floor(recovered.getZ()));
+        assertTrue(PetPlacement.safe(recovered, PetPlacement.bounds(replacement)));
         assertTrue(replacement.isPersistent());
         assertFalse(replacement.getRemoveWhenFarAway());
         assertEquals(pet.id(), runtime.bodies().readId(replacement));

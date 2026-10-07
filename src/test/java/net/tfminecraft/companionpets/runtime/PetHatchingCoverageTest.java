@@ -9,11 +9,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import javax.tools.ToolProvider;
 import java.util.UUID;
 import net.tfminecraft.companionpets.body.Bodies;
+import net.tfminecraft.companionpets.body.PetPlacement;
 import net.tfminecraft.companionpets.config.CompanionConfig;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.visual.PetVisual;
@@ -27,6 +29,7 @@ import net.tfminecraft.companionpets.session.HatchPrompt;
 import net.tfminecraft.companionpets.session.Sessions;
 import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
+import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import net.tfminecraft.companionpets.visual.IdleVisual;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -38,7 +41,10 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.entity.Wolf;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.EntityTeleportEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -62,14 +68,18 @@ class PetHatchingCoverageTest {
     private PetRuntime runtime;
     private PetActions actions;
     private YamlConfiguration yaml;
+    private WolfMock lastSpawned;
+    private final List<Boolean> taggedTeleports = new ArrayList<>();
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
-        world = new WorldMock() {
+        world = new CollisionWorldMock() {
+            private final java.util.Map<String, BlockMock> blocks = new java.util.HashMap<>();
             @Override public BlockMock getBlockAt(int x, int y, int z) {
-                return new BlockMock(new Location(this, x, y, z)) {
-                    @Override public boolean isPassable() { return true; }
-                };
+                return blocks.computeIfAbsent(x + ":" + y + ":" + z, key ->
+                        new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
+                            @Override public boolean isPassable() { return !getType().isSolid(); }
+                        });
             }
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
                 if (type != Wolf.class) return super.spawn(at, type);
@@ -77,6 +87,7 @@ class PetHatchingCoverageTest {
                     @Override public void setRemoveWhenFarAway(boolean remove) { }
                 };
                 server.registerEntity(wolf);
+                lastSpawned = wolf;
                 wolf.teleport(at);
                 return type.cast(wolf);
             }
@@ -100,6 +111,7 @@ class PetHatchingCoverageTest {
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
         actions = new PetActions(runtime);
         server.getPluginManager().registerEvents(new PetListener(runtime, actions), plugin);
+        onTaggedTeleport(EventPriority.MONITOR, event -> taggedTeleports.add(event.isCancelled()));
     }
 
     @AfterEach void cleanup() {
@@ -145,6 +157,22 @@ class PetHatchingCoverageTest {
         return messages.toString();
     }
 
+    private void onTaggedTeleport(EventPriority priority, java.util.function.Consumer<EntityTeleportEvent> handler) {
+        server.getPluginManager().registerEvent(EntityTeleportEvent.class, new Listener() { }, priority,
+                (unused, raw) -> {
+                    var event = (EntityTeleportEvent) raw;
+                    if (runtime.bodies().readId(event.getEntity()) != null) handler.accept(event);
+                }, runtime.plugin());
+    }
+
+    private void assertSafePlacement(Entity entity) {
+        Location at = entity.getLocation();
+        assertEquals(64, at.getY());
+        assertEquals(.5, at.getX() - Math.floor(at.getX()));
+        assertEquals(.5, at.getZ() - Math.floor(at.getZ()));
+        assertTrue(PetPlacement.safe(at, PetPlacement.bounds(entity)), "spawned body must fit above the solid floor");
+    }
+
     private Pet onlyPet() {
         assertEquals(1, runtime.store().all().size());
         return runtime.store().all().iterator().next();
@@ -178,6 +206,8 @@ class PetHatchingCoverageTest {
         chat("yes");
 
         Pet pet = onlyPet();
+        assertEquals(List.of(false), taggedTeleports,
+                "the pet listener must allow verified initial placement before the new pet's location is remembered");
         assertNull(runtime.sessions().hatch(player.getUniqueId()));
         assertEquals(1, player.getInventory().getItemInMainHand().getAmount());
         assertEquals("Luna Moon", pet.name());
@@ -188,6 +218,7 @@ class PetHatchingCoverageTest {
         assertTrue(pet.bornAt() > 0);
         assertFalse(pet.stored());
         assertInstanceOf(Wolf.class, runtime.entity(pet));
+        assertSafePlacement(runtime.entity(pet));
         assertEquals(player.getUniqueId(), ((Wolf) runtime.entity(pet)).getOwner().getUniqueId());
         assertEquals(pet.id(), runtime.bodies().readId(runtime.entity(pet)));
         assertTrue(runtime.store().pending());
@@ -233,6 +264,57 @@ class PetHatchingCoverageTest {
         assertEquals(100, onlyPet().progress(Trick.FOLLOW));
     }
 
+    @Test void externalCancellationStillStopsInitialPlacementAndStoresThePet() {
+        onTaggedTeleport(EventPriority.HIGH, event -> event.setCancelled(true));
+        begin(); namePet(); chat("yes");
+        assertEquals(List.of(true), taggedTeleports);
+        assertStoredAfterRejectedPlacement();
+    }
+
+    @Test void anExternalUnsafeRetargetCannotLeaveANewPetInsideTheFloor() {
+        onTaggedTeleport(EventPriority.HIGHEST, event -> event.setTo(event.getTo().clone().subtract(0, 1, 0)));
+        begin(); namePet(); chat("yes");
+        assertEquals(List.of(false), taggedTeleports, "external retarget is checked after the actual teleport");
+        assertStoredAfterRejectedPlacement();
+    }
+
+    @Test void anExternalSafeRetargetIsRememberedAfterInitialPlacementCompletes() {
+        Location destination = new Location(world, 4.5, 64, 4.5);
+        onTaggedTeleport(EventPriority.HIGHEST, event -> {
+            Pet pending = onlyPet();
+            assertNull(pending.entityId(), "a spawn must not be remembered before teleport listeners finish");
+            assertNull(runtime.entity(pending));
+            event.setTo(destination.clone());
+        });
+        begin(); namePet(); chat("yes");
+        Pet pet = onlyPet();
+        assertEquals(List.of(false), taggedTeleports);
+        assertFalse(pet.stored());
+        assertEquals(destination, runtime.entity(pet).getLocation());
+        assertEquals(destination.getX(), pet.x());
+        assertEquals(destination.getY(), pet.y());
+        assertEquals(destination.getZ(), pet.z());
+        assertSafePlacement(runtime.entity(pet));
+        assertFalse(runtime.bodies().recovering(lastSpawned));
+        assertFalse(runtime.bodies().claimRecoveryTeleport(lastSpawned, destination));
+        assertEquals(1, player.getInventory().getItemInMainHand().getAmount());
+    }
+
+    private void assertStoredAfterRejectedPlacement() {
+        Pet pet = onlyPet();
+        assertTrue(pet.stored());
+        assertNull(pet.entityId());
+        assertNull(runtime.entity(pet));
+        assertNotNull(lastSpawned);
+        assertFalse(lastSpawned.isValid(), "rejected body must not remain orphaned");
+        assertFalse(runtime.bodies().recovering(lastSpawned), "initial placement authorization must be scoped to the teleport");
+        assertFalse(runtime.bodies().claimRecoveryTeleport(lastSpawned, lastSpawned.getLocation()));
+        assertFalse(runtime.bodies().protectedFromSuffocation(lastSpawned));
+        assertEquals(1, player.getInventory().getItemInMainHand().getAmount());
+        assertTrue(runtime.store().pending());
+        assertTrue(messages().contains("waiting for you in the Pet House"));
+    }
+
     @Test void droppingTheEggBeforeQueuedConfirmationLeavesTheWorldItemIntact() {
         begin();
         namePet();
@@ -273,6 +355,7 @@ class PetHatchingCoverageTest {
         assertEquals(announced, onlyPet().sex());
         assertEquals("Toby", onlyPet().name());
         assertNotNull(runtime.entity(onlyPet()));
+        assertSafePlacement(runtime.entity(onlyPet()));
         assertEquals(2, player.getInventory().getItemInMainHand().getAmount());
     }
 

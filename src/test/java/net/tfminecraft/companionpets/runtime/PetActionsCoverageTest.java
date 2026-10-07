@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.lang.reflect.Proxy;
 import java.util.*;
 import net.tfminecraft.companionpets.body.Bodies;
+import net.tfminecraft.companionpets.body.PetPlacement;
 import net.tfminecraft.companionpets.config.CompanionConfig;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
@@ -20,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import net.tfminecraft.companionpets.session.Sessions;
 import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
+import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import net.tfminecraft.companionpets.visual.PetVisual;
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -69,9 +71,9 @@ class PetActionsCoverageTest {
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
-        world = new WorldMock() {
+        world = new CollisionWorldMock() {
             @Override public BlockMock getBlockAt(int x, int y, int z) {
-                return blocks.computeIfAbsent(x + ":" + y + ":" + z, unused -> new BlockMock(new Location(this, x, y, z)) {
+                return blocks.computeIfAbsent(x + ":" + y + ":" + z, unused -> new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
                     @Override public boolean isPassable() { return !getType().isSolid(); }
                     @Override public boolean isReplaceable() { return getType().isAir() || getType() == Material.SHORT_GRASS; }
                 });
@@ -102,7 +104,7 @@ class PetActionsCoverageTest {
                 custom-tricks:
                   wave: {display-name: Wave, animation: wave_clip, duration: 2, fallback-text: "{pet} waves to {owner}"}
                 pets:
-                  wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, default-tricks: [], tricks: {add: [wave]}}
+                  wolf: {entity: WOLF, behavior: dog, egg: WOLF_SPAWN_EGG, default-tricks: [], tricks: {add: [wave]}}
                 """);
         var visual = new PetVisual() {
             @Override public void apply(Entity entity, PetTypeDef type) { }
@@ -380,13 +382,25 @@ class PetActionsCoverageTest {
         assertEquals(1, runtime.store().countOut(owner.getUniqueId()));
     }
 
+    @Test void bringingOutAPetWithoutSafeRoomKeepsItStoredWithItsIdentityAndNeeds() {
+        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false));
+        assertTrue(pet.stored()); assertNull(pet.entityId());
+        for (int x=-8; x<=8; x++) for (int y=60; y<=68; y++) for (int z=-8; z<=8; z++)
+            world.getBlockAt(x,y,z).setType(Material.STONE);
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertTrue(pet.stored()); assertNull(pet.entityId());
+        assertSame(pet, runtime.store().get(pet.id())); assertEquals(80, pet.need(Need.HUNGER));
+        assertTrue(bars().contains("no room"));
+        assertTrue(world.getEntities().stream().noneMatch(Wolf.class::isInstance));
+    }
+
     @Test void bringingOutOrCallingAnUnavailableTypeRetainsSavedIdentityAndNeeds() {
         care(PetMenus.careSlot(PetMenus.STORE_SLOT, false));
         configure("pets.wolf", null);
         care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
         assertTrue(pet.stored());
         assertEquals(80, pet.need(Need.HUNGER));
-        assertTrue(bars().contains("no room"));
+        assertTrue(bars().contains("not configured"));
         pet.stored(false);
         care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
         assertNull(runtime.entity(pet));
@@ -407,7 +421,13 @@ class PetActionsCoverageTest {
         world.loadChunk(-1, -1);
         Entity replacement = actions.restoreBody(pet);
         assertNotNull(replacement);
-        assertEquals(new Location(world, -2, 65, -3, 30, 0), replacement.getLocation());
+        Location restoredAt = replacement.getLocation();
+        assertEquals(64, restoredAt.getY(), "Restore onto solid support near the saved position");
+        assertEquals(restoredAt.getBlockX() + .5, restoredAt.getX());
+        assertEquals(restoredAt.getBlockZ() + .5, restoredAt.getZ());
+        assertEquals(30, restoredAt.getYaw()); assertEquals(0, restoredAt.getPitch());
+        assertTrue(restoredAt.distance(new Location(world, -2, 65, -3)) < 2);
+        assertTrue(PetPlacement.safe(restoredAt, PetPlacement.bounds(replacement)));
         assertEquals(pet.id(), runtime.bodies().readId(replacement));
         assertEquals(80, pet.need(Need.MOOD));
     }
@@ -578,10 +598,12 @@ class PetActionsCoverageTest {
         assertEquals(80, pet.need(Need.MOOD));
     }
 
-    @Test void unavailableTypesAndDisabledFetchingDoNotClaimUnsupportedInteractions() {
+    @Test void legacyBehaviorListsDoNotDisableFetchingAndMissingTypesRemainUnhandled() {
         configure("pets.wolf.behaviors.remove", List.of("fetch"));
-        assertFalse(actions.useOnPet(owner, body, new ItemStack(Material.STICK)));
+        assertTrue(actions.useOnPet(owner, body, new ItemStack(Material.STICK)), "Legacy allowlists are ignored by fixed profiles");
+        assertTrue(bars().contains("Throw it into the air"));
         configure("pets.wolf", null);
+        assertFalse(actions.useOnPet(owner, body, new ItemStack(Material.STICK)));
         assertFalse(actions.useOnPet(owner, body, new ItemStack(Material.BEEF)));
         assertEquals(80, pet.need(Need.HUNGER));
     }
@@ -647,8 +669,11 @@ class PetActionsCoverageTest {
         assertTrue(actions.triggerTestMoment(owner, "affection"));
         assertTrue(bars().contains("attention"));
         assertTrue(actions.triggerTestMoment(owner, "bark"));
-        configure("pets.wolf.behaviors.remove", List.of("affection", "social-protest", "dig-gifts"));
-        assertFalse(actions.triggerTestMoment(owner, "cry"));
+        assertFalse(actions.triggerTestMoment(owner, "mischief"), "DOG supports mischief, but no plants are nearby");
+        assertTrue(messages().contains("No small plant"));
+        configure("pets.wolf.behavior", "basic");
+        assertTrue(actions.triggerTestMoment(owner, "cry"), "Every supported profile retains affection");
+        assertTrue(bars().contains("attention"));
         assertFalse(actions.triggerTestMoment(owner, "anger"));
         assertFalse(actions.triggerTestMoment(owner, "gift"));
         assertFalse(actions.triggerTestMoment(owner, "mischief"));
@@ -777,15 +802,21 @@ class PetActionsCoverageTest {
         assertEquals(0, world.getEntities().stream().filter(Wolf.class::isInstance).count());
     }
 
-    @Test void spawningBesideAVerticallyLookingOwnerAvoidsObstructionsAndHasAFinalFallback() {
+    @Test void spawningBesideAVerticallyLookingOwnerFindsSafeGroundOrRefusesABlockedSearch() {
         owner.teleport(new Location(world, 0, 64, 0, 35, -90));
         var open = PetRuntime.beside(owner);
-        assertEquals(0, open.getX(), .001); assertEquals(1.6, open.getZ(), .001);
-        assertEquals(0, open.getPitch()); assertEquals(35, open.getYaw());
+        assertEquals(new Location(world, .5, 64, 1.5, 35, 0), open);
+        assertTrue(PetPlacement.safe(open, PetPlacement.normal(1)));
         for (int x=-2; x<=2; x++) for (int y=64; y<=67; y++) for (int z=-2; z<=2; z++)
             world.getBlockAt(x,y,z).setType(Material.STONE);
-        var fallback = PetRuntime.beside(owner);
-        assertEquals(new Location(world, 0,65,0,35,0), fallback);
+        var farther = PetRuntime.beside(owner);
+        assertNotNull(farther);
+        assertTrue(PetPlacement.safe(farther, PetPlacement.normal(1)));
+        assertTrue(Math.abs(farther.getBlockX()) > 2 || Math.abs(farther.getBlockZ()) > 2);
+        assertEquals(64, farther.getY()); assertEquals(35, farther.getYaw()); assertEquals(0, farther.getPitch());
+        for (int x=-6; x<=6; x++) for (int y=61; y<=68; y++) for (int z=-6; z<=6; z++)
+            world.getBlockAt(x,y,z).setType(Material.STONE);
+        assertNull(PetRuntime.beside(owner), "A fully blocked search must not place the pet above the owner inside solid blocks");
     }
 
     @Test void feedingWithoutAnItemLeavesThePetsNeedsAndInventoryUnchanged() {

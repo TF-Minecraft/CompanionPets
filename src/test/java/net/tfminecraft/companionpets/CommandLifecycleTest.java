@@ -31,6 +31,14 @@ class CommandLifecycleTest {
         assertTrue(plugin.onCommand(player, plugin.getCommand("companionpets"), "companionpets", args));
     }
 
+    @Test void removedInspectCommandHasNoCompletionOrHelpEntry() {
+        player.setOp(true);
+        assertTrue(complete("ins").isEmpty());
+        assertTrue(complete("inspect", "").isEmpty());
+        command("inspect", "wolf");
+        String message; while ((message = player.nextMessage()) != null) assertFalse(message.contains("inspect"));
+    }
+
     @Test void testCommandsAndTypesRequirePermission() {
         player.setOp(false);
         assertTrue(complete("testpet").isEmpty());
@@ -42,27 +50,7 @@ class CommandLifecycleTest {
         assertEquals(List.of("cat", "wolf"), complete("testpet", ""));
     }
 
-    @Test void inspectHasTypeCompletionAndWorksForReadOnlyStaffAndConsole() {
-        player.setOp(false);
-        assertTrue(complete("inspect", "").isEmpty());
-        command("inspect", "wolf");
-        assertTrue(player.nextMessage().contains("staff only"));
-        player.addAttachment(plugin, "companionpets.admin.list", true);
-        assertEquals(List.of("inspect"), complete("ins"));
-        assertEquals(List.of("wolf"), complete("inspect", "w"));
-        int entities = player.getWorld().getEntities().size();
-        command("inspect", "wolf");
-        assertTrue(player.nextMessage().contains("Species: dog"));
-        while (player.nextMessage() != null) { }
-        assertEquals(entities, player.getWorld().getEntities().size());
-        command("inspect", "missing");
-        assertTrue(player.nextMessage().contains("Unknown configured pet type"));
-        command("inspect");
-        assertTrue(player.nextMessage().contains("Usage:"));
-        var console = server.getConsoleSender();
-        assertTrue(plugin.onCommand(console, plugin.getCommand("companionpets"), "companionpets", new String[]{"inspect", "cat"}));
-        assertTrue(console.nextMessage().contains("Species: cat"));
-    }
+
 
     @Test void invalidAndMissingTypesDoNotSpawnAnything() {
         player.setOp(true);
@@ -127,7 +115,7 @@ class CommandLifecycleTest {
 
     @Test void commandTreeContainsOnlyCanonicalCommandsAndRejectsRemovedDuplicates() {
         player.setOp(true);
-        assertEquals(List.of("create", "egg", "find", "inspect", "list", "moment", "reload", "testpet"), complete("")); assertFalse(complete("").contains("order"));
+        assertEquals(List.of("create", "egg", "find", "list", "moment", "reload", "testpet"), complete("")); assertFalse(complete("").contains("order"));
         assertFalse(complete("test", "").contains("needs"));
         for (String old : List.of("admin", "test", "order", "testdog", "social", "personality", "follow", "calm", "animation", "cleantestpets", "freeze", "heal", "needs", "validate", "transfer", "teach", "store", "remove", "rename", "recover")) {
             command(old); assertTrue(player.nextMessage().contains("staff commands")); while (player.nextMessage() != null) { }

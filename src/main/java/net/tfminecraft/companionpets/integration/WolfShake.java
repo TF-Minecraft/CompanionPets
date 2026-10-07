@@ -26,9 +26,12 @@ public final class WolfShake {
                             .filter(m -> m.getName().equals("broadcastEntityEvent") && m.getParameterCount() == 2
                                     && m.getParameterTypes()[0].isAssignableFrom(nativeType)
                                     && m.getParameterTypes()[1] == byte.class).findFirst().orElse(null);
-                    return new Access(handle, progress, nativeType.getField("isWet"),
+                    Field wet = nativeType.getDeclaredField("isWet");
+                    if (!wet.trySetAccessible()) throw new IllegalAccessException("isWet is inaccessible");
+                    return new Access(handle, progress, wet,
                             nativeType.getMethod("handleEntityEvent", byte.class), level, broadcast);
                 } catch (ReflectiveOperationException ex) {
+                    org.bukkit.Bukkit.getLogger().warning("CompanionPets: cannot access native wolf wetness for " + type.getName() + "; shake deferral disabled: " + ex.getMessage());
                     return new Access(handle, progress, null, null, null, null);
                 }
             } catch (ReflectiveOperationException ex) { return new Access(null, null, null, null, null, null); }
@@ -36,11 +39,15 @@ public final class WolfShake {
     };
 
     public static boolean shaking(Wolf wolf) {
+        return progress(wolf) > 0;
+    }
+
+    public static float progress(Wolf wolf) {
         Access access = ACCESS.get(wolf.getClass());
-        if (access.handle == null) return false;
+        if (access.handle == null) return 0;
         try {
-            return ((Number) access.progress.invoke(access.handle.invoke(wolf), 1F)).floatValue() > 0;
-        } catch (ReflectiveOperationException ex) { return false; }
+            return ((Number) access.progress.invoke(access.handle.invoke(wolf), 1F)).floatValue();
+        } catch (ReflectiveOperationException ex) { return 0; }
     }
 
     /** Clear the native shake clock before Wolf.aiStep can interrupt a fetch route. */
@@ -59,13 +66,9 @@ public final class WolfShake {
         } catch (ReflectiveOperationException ex) { return false; }
     }
 
-    /** Put wetness back once so vanilla can shake after the toy has been returned. */
+    /** A deferred shake ends dry; finishing an interaction must never re-wet the wolf. */
     public static void restore(Wolf wolf) {
-        if (!deferred.remove(wolf.getUniqueId())) return;
-        Access access = ACCESS.get(wolf.getClass());
-        if (access.wet == null) return;
-        try { access.wet.setBoolean(access.handle.invoke(wolf), true); }
-        catch (ReflectiveOperationException ignored) { }
+        deferred.remove(wolf.getUniqueId());
     }
 
     public static void retain(Set<UUID> loaded) { deferred.retainAll(loaded); }

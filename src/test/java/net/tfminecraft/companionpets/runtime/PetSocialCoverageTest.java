@@ -14,11 +14,13 @@ import java.util.UUID;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.tfminecraft.companionpets.body.Bodies;
 import net.tfminecraft.companionpets.config.CompanionConfig;
+import net.tfminecraft.companionpets.config.BehaviorProfile;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.pet.*;
 import net.tfminecraft.companionpets.session.Sessions;
 import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
+import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import net.tfminecraft.companionpets.visual.PetVisual;
 import org.bukkit.*;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -56,7 +58,7 @@ class PetSocialCoverageTest {
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
-        world = new WorldMock() {
+        world = new CollisionWorldMock() {
             @Override public boolean isChunkLoaded(int x, int z) { return true; }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
                 Material type = floor && y == 63 || ceiling != 0 && y == ceiling ? Material.STONE : Material.AIR;
@@ -76,7 +78,7 @@ class PetSocialCoverageTest {
         yaml = new YamlConfiguration(); yaml.loadFromString("""
             roaming: {stationary-seconds: 0}
             social: {encounter-chance: 100, chase-chance: 0, search-interval-seconds: 0.5}
-            pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}}
+            pets: {wolf: {entity: WOLF, behavior: dog, egg: WOLF_SPAWN_EGG}}
             """);
         var visual = new PetVisual() {
             @Override public void apply(Entity entity, PetTypeDef type) { }
@@ -100,8 +102,22 @@ class PetSocialCoverageTest {
         body.getPersistentDataContainer().set(runtime.petKey(), PersistentDataType.STRING, result.id().toString());
         runtime.store().add(result); runtime.remember(result, body); return result;
     }
-    private void behaviors(String... choices) {
-        yaml.set("pets.wolf.behaviors", List.of(choices)); configure();
+    private void profile(BehaviorProfile profile) {
+        yaml.set("pets.wolf.behavior", profile.id()); configure();
+    }
+    private void finishInitialGreeting() {
+        // Every profile greets first. Isolate the later meeting's friendship reward.
+        yaml.set("social.greeting-friendship-gain", 0);
+        yaml.set("social.encounter-cooldown-seconds", 2);
+        configure();
+        social().tick(now);
+        assertTrue(social().engaged(first));
+        social().advance(first, now + 100);
+        social().advance(first, now + 3000);
+        assertEnded();
+        assertEquals(0, social().friendship(first, second));
+        now += 6000;
+        sounds.clear(); particles.clear();
     }
     private void configure() { runtime.config(CompanionConfig.load(runtime.plugin(), yaml)); }
     private PetSocial social() { return actions.social(); }
@@ -167,8 +183,9 @@ class PetSocialCoverageTest {
     }
 
     @Test void nearbyUnfamiliarTerritorialPetsCanAutomaticallyBark() {
-        territorial(); behaviors("social-protest", "pet-friendships");
+        territorial(); profile(BehaviorProfile.DOG);
         yaml.set("social.same-owner-bark-chance", 100); configure();
+        finishInitialGreeting();
         social().tick(now + 1000);
         assertNotNull(social().status(first)); assertNotNull(social().status(second));
         assertEquals(2, sounds.stream().filter(sound -> sound == Sound.ENTITY_WOLF_GROWL).count());
@@ -176,14 +193,16 @@ class PetSocialCoverageTest {
     }
 
     @Test void nonPlayingFriendlyPetsAutomaticallySniffAndRememberTheMeeting() {
-        behaviors("social-sniff", "pet-friendships");
+        profile(BehaviorProfile.BASIC);
+        finishInitialGreeting();
         social().tick(now + 1000); assertTrue(social().engaged(first));
         social().advance(first, now + 1100); social().advance(first, now + 6200);
         assertEnded(); assertEquals(6, social().friendship(first, second));
     }
 
     @Test void cautiousPetsAutomaticallyObserveWithoutApproachingAnUnfamiliarPet() {
-        behaviors("social-sniff", "pet-friendships"); first.personality(PetPersonality.SHY);
+        profile(BehaviorProfile.BASIC); first.personality(PetPersonality.SHY);
+        finishInitialGreeting();
         b.teleport(new Location(world, 6, 64, 0));
         social().tick(now + 1000); assertTrue(social().engaged(first));
         social().advance(first, now + 1500);
@@ -194,8 +213,9 @@ class PetSocialCoverageTest {
     }
 
     @Test void automaticChaseEndsWhenTheOwnerMoves() {
-        behaviors("social-chase", "pet-friendships"); first.personality(PetPersonality.PLAYFUL);
+        profile(BehaviorProfile.DOG); first.personality(PetPersonality.PLAYFUL);
         yaml.set("social.chase-chance", 100); yaml.set("roaming.stationary-seconds", 1); configure();
+        finishInitialGreeting();
         social().tick(now + 2000); assertTrue(social().engaged(first));
         social().advance(first, now + 2100); assertFalse(paths.isEmpty());
         owner.teleport(owner.getLocation().add(1, 0, 0)); actions.roaming().tickOwners(now + 2200);

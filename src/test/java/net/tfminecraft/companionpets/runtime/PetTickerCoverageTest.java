@@ -24,6 +24,7 @@ import net.tfminecraft.companionpets.session.Sessions;
 import net.tfminecraft.companionpets.session.TrainingSession;
 import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
+import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import net.tfminecraft.companionpets.visual.PetVisual;
 import org.bukkit.*;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -62,7 +63,7 @@ class PetTickerCoverageTest {
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
-        world = new WorldMock() {
+        world = new CollisionWorldMock() {
             @Override public boolean isChunkLoaded(int x, int z) { return chunksLoaded; }
             @Override public ChunkMock getChunkAt(int x, int z) {
                 lastChunkX = x; lastChunkZ = z;

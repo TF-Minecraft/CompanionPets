@@ -21,7 +21,7 @@ import net.tfminecraft.companionpets.play.FetchPhase;
 import net.tfminecraft.companionpets.session.Sessions;
 import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
-import net.tfminecraft.companionpets.visual.IdleVisual;
+import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import org.bukkit.*;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.*;
@@ -49,6 +49,7 @@ class PetFetchActionsCoverageTest {
     private YamlConfiguration yaml;
     private ItemStack toy;
     private boolean failSpawn;
+    private java.util.Set<String> modelClips = java.util.Set.of();
     private Runnable beforeSpawnFailure = () -> { };
     private final Map<UUID, Location> targets = new HashMap<>();
     private final Map<UUID, Double> speeds = new HashMap<>();
@@ -57,7 +58,7 @@ class PetFetchActionsCoverageTest {
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
-        world = new WorldMock() {
+        world = new CollisionWorldMock() {
             @Override public <T extends Entity> T spawn(Location at, Class<T> type, java.util.function.Consumer<? super T> callback) {
                 if (type == Snowball.class && failSpawn) {
                     beforeSpawnFailure.run(); throw new IllegalStateException("Projectile spawning is unavailable");
@@ -65,8 +66,8 @@ class PetFetchActionsCoverageTest {
                 return super.spawn(at, type, callback);
             }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
-                return new BlockMock(Material.AIR, new Location(this, x, y, z)) {
-                    @Override public boolean isPassable() { return true; }
+                return new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
+                    @Override public boolean isPassable() { return !getType().isSolid(); }
                 };
             }
             @Override public void spawnParticle(Particle particle, Location at, int count, double x, double y, double z, double extra) { }
@@ -97,9 +98,14 @@ class PetFetchActionsCoverageTest {
             social: {enabled: false}
             pets:
               wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}
-              cat: {entity: CAT, egg: CAT_SPAWN_EGG, behaviors: [fetch, cat-play]}
+              cat: {entity: CAT, egg: CAT_SPAWN_EGG, behavior: cat}
             """);
-        var visual = new IdleVisual(); var key = new NamespacedKey(plugin, "pet");
+        var visual = new net.tfminecraft.companionpets.visual.PetVisual() {
+            @Override public void apply(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type) { }
+            @Override public boolean modelAvailable(net.tfminecraft.companionpets.config.PetTypeDef type) { return true; }
+            @Override public java.util.Set<String> clips(net.tfminecraft.companionpets.config.PetTypeDef type) { return modelClips; }
+        };
+        var key = new NamespacedKey(plugin, "pet");
         var store = new PetStore(plugin); assertTrue(store.load());
         runtime = new PetRuntime(plugin, CompanionConfig.load(plugin, yaml), store, new Sessions(),
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
@@ -252,14 +258,35 @@ class PetFetchActionsCoverageTest {
         var item = land(throwToy()); body.teleport(item.getLocation());
         actions.fetchActions().step(cat, body, 1000);
         assertTrue(body.isSneaking()); assertEquals(FetchPhase.GROUND, cat.fetch().phase());
-        actions.fetchActions().step(cat, body, 1500);
+        actions.fetchActions().step(cat, body, 2499);
+        assertTrue(body.isSneaking()); assertEquals(FetchPhase.GROUND, cat.fetch().phase());
+        actions.fetchActions().step(cat, body, 2500);
+        assertFalse(body.isSneaking()); assertEquals(.3, body.getVelocity().getY(), .0001);
+        assertEquals(FetchPhase.GROUND, cat.fetch().phase(), "Pouncing precedes pickup");
+        actions.fetchActions().step(cat, body, 3500);
         assertFalse(body.isSneaking()); assertEquals(FetchPhase.CARRY, cat.fetch().phase());
         actions.releaseFetch(cat, owner, true); assertOnePlainToy(); items().getFirst().remove();
         body.setSneaking(true); body.teleport(new Location(world, 3, 64, 0));
         item = land(throwToy()); body.teleport(item.getLocation());
-        actions.fetchActions().step(cat, body, 2000);
+        actions.fetchActions().step(cat, body, 4000);
         actions.releaseFetch(cat, owner, true);
         assertTrue(body.isSneaking(), "The pre-existing crouch survives cancellation"); assertOnePlainToy();
+    }
+
+    @Test void modeledCatOnlyUsesNativeCrouchWhenItsModelCanRenderThePose() {
+        pet.order(PetOrder.STAY);
+        var cat = cat(false); var body = (Cat) runtime.entity(cat);
+        yaml.set("pets.cat.model", "feline");
+        for (boolean available : new boolean[]{false, true}) {
+            modelClips = available ? java.util.Set.of("crouch") : java.util.Set.of();
+            runtime.config(CompanionConfig.load(runtime.plugin(), yaml));
+            var item = land(throwToy()); body.teleport(item.getLocation());
+            actions.fetchActions().step(cat, body, 1000);
+            assertEquals(available, body.isSneaking());
+            assertTrue(cat.fetch().stalking(cat.id())); assertEquals(FetchPhase.GROUND, cat.fetch().phase());
+            actions.releaseFetch(cat, owner, true);
+            assertFalse(body.isSneaking()); assertOnePlainToy(); items().getFirst().remove();
+        }
     }
 
     @Test void ownerWorldChangeStashesOwnCarriedToyWithoutDroppingItInAnotherWorld() {
