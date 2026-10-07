@@ -60,30 +60,12 @@ public final class PetListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onTeleport(EntityTeleportEvent event) {
         Pet pet = runtime.byEntity(event.getEntity());
-        if (pet == null || pet.stored() || pet.dead()) return;
-        boolean recoveryInProgress = runtime.bodies().recovering(event.getEntity());
-        boolean recoveryTeleport = runtime.bodies().claimRecoveryTeleport(event.getEntity(), event.getTo());
-        if (!recoveryTeleport && (actions.fetchingOrReturning(pet) || actions.greeting(pet) || actions.socializing(pet) || pet.activity() == net.tfminecraft.companionpets.pet.Activity.TOY_FOCUS
+        if (pet == null || pet.stored() || pet.dead() || runtime.bodies().claimRecoveryTeleport(event.getEntity(), event.getTo())) return;
+        if (actions.fetchingOrReturning(pet) || actions.greeting(pet) || actions.socializing(pet) || pet.activity() == net.tfminecraft.companionpets.pet.Activity.TOY_FOCUS
                 || pet.staying() || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW
                 || pet.activity() == net.tfminecraft.companionpets.pet.Activity.SLEEPING
                 || !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId()))
-                || System.currentTimeMillis() < pet.forcedSitUntilMillis())) event.setCancelled(true);
-        if (event.isCancelled() || event.getTo() == null) return;
-        var bounds = net.tfminecraft.companionpets.body.PetPlacement.bounds(event.getEntity());
-        if (!net.tfminecraft.companionpets.body.PetPlacement.safe(event.getTo(), bounds)) {
-            var safe = net.tfminecraft.companionpets.body.PetPlacement.nearest(event.getTo(), bounds, null);
-            if (safe == null) event.setCancelled(true); else event.setTo(safe);
-        }
-        if (!event.isCancelled() && !recoveryInProgress) runtime.bodies().protect(event.getEntity());
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onSpawnSuffocation(EntityDamageEvent event) {
-        if (event.getCause() == EntityDamageEvent.DamageCause.SUFFOCATION
-                && runtime.byEntity(event.getEntity()) != null && runtime.bodies().protectedFromSuffocation(event.getEntity())) {
-            event.setCancelled(true);
-            runtime.bodies().recover(event.getEntity());
-        }
+                || System.currentTimeMillis() < pet.forcedSitUntilMillis()) event.setCancelled(true);
     }
 
     @EventHandler

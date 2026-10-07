@@ -309,7 +309,6 @@ class PetHatchingCoverageTest {
         assertFalse(lastSpawned.isValid(), "rejected body must not remain orphaned");
         assertFalse(runtime.bodies().recovering(lastSpawned), "initial placement authorization must be scoped to the teleport");
         assertFalse(runtime.bodies().claimRecoveryTeleport(lastSpawned, lastSpawned.getLocation()));
-        assertFalse(runtime.bodies().protectedFromSuffocation(lastSpawned));
         assertEquals(1, player.getInventory().getItemInMainHand().getAmount());
         assertTrue(runtime.store().pending());
         assertTrue(messages().contains("waiting for you in the Pet House"));

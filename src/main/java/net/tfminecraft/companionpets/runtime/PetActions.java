@@ -1068,7 +1068,7 @@ public final class PetActions {
                     + PetTexts.him(pet.sex()) + " back");
             return;
         }
-        // Find room first, so a failed call leaves the pet's order and activity untouched.
+        // Find room first, so a call without safe room leaves the pet's order and activity untouched.
         Location safe = net.tfminecraft.companionpets.body.PetPlacement.beside(player,
                 net.tfminecraft.companionpets.body.PetPlacement.bounds(entity), null);
         if (safe == null) { PetFx.bar(player, "There is no safe place here for " + pet.name()); return; }
@@ -1077,10 +1077,16 @@ public final class PetActions {
         pet.staying(false);
         wakeToFollow(pet, System.currentTimeMillis());
         runtime.resumeFollowing(pet);
-        entity.teleport(safe);
-        runtime.bodies().protect(entity);
+        boolean arrived = entity.teleport(safe)
+                && net.tfminecraft.companionpets.body.PetPlacement.safe(entity.getLocation(),
+                        net.tfminecraft.companionpets.body.PetPlacement.bounds(entity));
+        // Keep the requested FOLLOW order and remember the actual location even if another plugin blocks or retargets the call.
         runtime.remember(pet, entity);
         runtime.store().requestSave();
+        if (!arrived) {
+            PetFx.bar(player, pet.name() + " couldn't reach a safe place beside you");
+            return;
+        }
         PetFx.bar(player, pet.name() + " comes running to your side");
     }
 

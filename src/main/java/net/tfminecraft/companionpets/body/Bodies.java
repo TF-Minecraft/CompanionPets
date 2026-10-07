@@ -26,7 +26,6 @@ public final class Bodies {
     private final JavaPlugin plugin;
     private final NamespacedKey petKey;
     private final PetVisual visual;
-    private final java.util.Map<UUID, Long> spawnProtection = new java.util.HashMap<>();
     private final java.util.Map<UUID, Recovery> recovering = new java.util.HashMap<>();
 
     private static final class Recovery {
@@ -71,38 +70,21 @@ public final class Bodies {
         Location safe = PetPlacement.nearest(location, PetPlacement.bounds(entity), null);
         if (safe == null) { visual.removeBody(entity); return null; }
         if (!teleportToVerifiedSpace(entity, safe)) {
-            spawnProtection.remove(entity.getUniqueId());
             visual.removeBody(entity);
             return null;
         }
-        protect(entity);
         visual.play(entity, type, "SPAWN");
         return entity;
     }
 
-    public void protect(Entity entity) { spawnProtection.put(entity.getUniqueId(), System.currentTimeMillis() + 3000); }
-    public boolean protectedFromSuffocation(Entity entity) {
-        Long until = spawnProtection.get(entity.getUniqueId());
-        if (until == null) return false;
-        if (System.currentTimeMillis() < until) return true;
-        spawnProtection.remove(entity.getUniqueId()); return false;
-    }
-    /** A failed or retargeted move remains eligible for the next recovery tick during protection. */
-    public boolean recover(Entity entity) {
-        if (!protectedFromSuffocation(entity) || PetPlacement.clear(entity.getLocation(), PetPlacement.bounds(entity))) return false;
-        Location safe = PetPlacement.nearest(entity.getLocation(), PetPlacement.bounds(entity), null);
-        if (safe == null) return false;
-        return teleportToVerifiedSpace(entity, safe);
-    }
-
     private boolean teleportToVerifiedSpace(Entity entity, Location safe) {
-        // New pets have no remembered location yet; resting pets also reject ordinary teleports.
+        // New pets have no remembered location yet, so posture rules must not cancel their first placement.
         recovering.put(entity.getUniqueId(), new Recovery(safe));
         try { return entity.teleport(safe) && PetPlacement.safe(entity.getLocation(), PetPlacement.bounds(entity)); }
         finally { recovering.remove(entity.getUniqueId()); }
     }
 
-    /** True while initial placement or recovery moves the body to a verified clear space. */
+    /** True while initial placement moves the body to a verified clear space. */
     public boolean recovering(Entity entity) { return recovering.containsKey(entity.getUniqueId()); }
 
     /** Only one event targeting the verified destination may bypass posture restrictions. */
