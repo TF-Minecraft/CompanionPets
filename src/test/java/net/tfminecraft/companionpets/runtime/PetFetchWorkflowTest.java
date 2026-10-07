@@ -125,6 +125,7 @@ class PetFetchWorkflowTest {
 
     public static class FetchWolf extends WolfMock {
             boolean inWater;
+            boolean airborne;
             int navigationRequests;
             final NativeClock clock = new NativeClock();
             public FetchWolf(ServerMock server, UUID id, java.util.Map<UUID, Location> navigationTargets,
@@ -160,7 +161,7 @@ class PetFetchWorkflowTest {
             @Override public void setBodyYaw(float yaw) { bodyYaw = yaw; }
             @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() { return pathfinder; }
             @Override public boolean isInWater() { return inWater; }
-            @Override public boolean isOnGround() { return true; }
+            @Override public boolean isOnGround() { return !airborne; }
             public NativeClock getHandle() { return clock; }
     }
 
@@ -313,6 +314,50 @@ class PetFetchWorkflowTest {
         actions.fetchActions().step(cat, body, 1300); assertFalse(job.stalking(cat.id()));
         body.teleport(toyAt); actions.fetchActions().step(cat, body, 1350);
         assertEquals(FetchPhase.CARRY, job.phase());
+    }
+
+    private Pet pouncingCatWithAnApproachingCompetitor() {
+        var cat = outsidePet(owner.getUniqueId(), "Cat", 2, "cat"); catProfile(cat);
+        land(throwToy()); var toyAt = items().getFirst().getLocation();
+        var body = (FetchWolf) runtime.entity(cat); body.teleport(toyAt.clone().add(1.9, 0, 0));
+        runtime.entity(pet).teleport(toyAt.clone().add(6, 0, 0));
+        actions.fetchActions().step(cat, body, 1000);
+        actions.fetchActions().step(cat, body, 2500);
+        assertTrue(cat.fetch().pouncing(cat.id()));
+        body.teleport(toyAt);
+        runtime.entity(pet).teleport(toyAt.clone().add(3, 0, 0));
+        return cat;
+    }
+
+    @Test void competitorDuringPounceCannotBypassMinimumPickupDelayEvenIfGrounded() {
+        var cat = pouncingCatWithAnApproachingCompetitor();
+        var body = (FetchWolf) runtime.entity(cat); var job = cat.fetch();
+        actions.fetchActions().step(cat, body, 2749);
+        assertEquals(FetchPhase.GROUND, job.phase()); assertTrue(job.pouncing(cat.id()));
+        assertEquals(1, items().size());
+        actions.fetchActions().step(cat, body, 2750);
+        assertEquals(FetchPhase.CARRY, job.phase()); assertEquals(cat.id(), job.carrierId());
+    }
+
+    @Test void competitorDuringPounceWaitsUntilTheCatLands() {
+        var cat = pouncingCatWithAnApproachingCompetitor();
+        var body = (FetchWolf) runtime.entity(cat); var job = cat.fetch(); body.airborne = true;
+        actions.fetchActions().step(cat, body, 2800);
+        assertEquals(FetchPhase.GROUND, job.phase()); assertTrue(job.pouncing(cat.id()));
+        assertEquals(1, items().size());
+        body.airborne = false;
+        actions.fetchActions().step(cat, body, 2900);
+        assertEquals(FetchPhase.CARRY, job.phase()); assertEquals(cat.id(), job.carrierId());
+    }
+
+    @Test void competitorDuringPounceRetainsTheOneSecondLandingTimeout() {
+        var cat = pouncingCatWithAnApproachingCompetitor();
+        var body = (FetchWolf) runtime.entity(cat); var job = cat.fetch(); body.airborne = true;
+        actions.fetchActions().step(cat, body, 3499);
+        assertEquals(FetchPhase.GROUND, job.phase()); assertTrue(job.pouncing(cat.id()));
+        assertEquals(1, items().size());
+        actions.fetchActions().step(cat, body, 3500);
+        assertEquals(FetchPhase.CARRY, job.phase()); assertEquals(cat.id(), job.carrierId());
     }
 
     @Test void throwSucceedsWithOnlyASickPetAndLandsAsOnePickableToy() {

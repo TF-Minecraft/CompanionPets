@@ -164,6 +164,13 @@ final class PetFetchActions {
             if (runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.CAT_PLAY)
                     && (mob.getLocation().distanceSquared(item.getLocation()) <= 4 || job.stalking(pet.id()) || job.pouncing(pet.id()))) {
                 if (competing(pet, item.getLocation())) {
+                    if (job.pouncing(pet.id())) {
+                        FetchJob.Stalk stalk = job.stalk(pet.id(), now);
+                        if (now - stalk.pounceAt < 250 || !mob.isOnGround() && now - stalk.pounceAt < 1000) {
+                            runtime.visual().cancelAction(mob);
+                            return;
+                        }
+                    }
                     job.stopStalk(pet.id(), now); restoreCat(pet);
                     runtime.visual().cancelAction(mob);
                 } else {
