@@ -1078,7 +1078,6 @@ public final class PetActions {
         wakeToFollow(pet, System.currentTimeMillis());
         runtime.resumeFollowing(pet);
         entity.teleport(safe);
-        runtime.bodies().protect(entity);
         runtime.remember(pet, entity);
         runtime.store().requestSave();
         PetFx.bar(player, pet.name() + " comes running to your side");

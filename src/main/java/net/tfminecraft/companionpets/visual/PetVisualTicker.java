@@ -36,7 +36,6 @@ public final class PetVisualTicker implements Runnable {
         for (Pet pet : runtime.store().active()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             if (type == null || !(runtime.entity(pet) instanceof Mob body)) continue;
-            runtime.bodies().recover(body);
             UUID id = body.getUniqueId();
             loaded.add(id);
             boolean fetching = pet.fetch() != null;

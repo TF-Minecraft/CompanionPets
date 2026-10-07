@@ -14,26 +14,29 @@ import org.junit.jupiter.api.Test;
 import net.tfminecraft.companionpets.config.PetAppearance.Clip;
 
 class AnimationControllerTest {
-    @Test void nativeShakeScalesTheClipAndStopsExactlyWithTheNativeClock() {
+    @Test void nativeShakePlaysTheClipAtItsOwnSpeedAndLastsAsLongAsTheClip() {
         Player player = new Player(); player.lengths.put("shake", 1.04);
         var now = new java.util.concurrent.atomic.AtomicLong();
         AnimationController controller = new AnimationController(player, clips(), now::get);
         assertTrue(controller.shake(.05));
-        assertEquals(1.95, player.length("shake") / player.lastClip.speed(), .00001);
-        now.set(1400); controller.update(PetAnimation.RUN);
-        assertTrue(controller.shake(1.45)); assertTrue(player.active.contains("shake"));
-        assertFalse(controller.shake(0)); assertFalse(player.active.contains("shake"));
+        assertEquals(1, player.lastClip.speed(), "The configured clip speed is never stretched to the native clock");
+        now.set(600); controller.update(PetAnimation.RUN);
+        assertTrue(controller.shake(1.25)); assertTrue(player.active.contains("shake"));
+        now.set(1100);
+        assertTrue(controller.shake(0), "The native end does not cut the clip short");
+        now.set(1200);
+        assertFalse(controller.shake(1.6), "The droplets stop when the clip ends"); assertFalse(player.active.contains("shake"));
+        assertFalse(controller.shake(1.7), "The same native cycle never replays it");
         assertFalse(controller.shake(.7), "A model attached late must skip the cycle");
         controller.shake(0); controller.play(PetAnimation.PAW);
         assertFalse(controller.shake(.05)); controller.cancelAction();
         assertFalse(controller.shake(.5), "Finishing another action must not restart the shake");
     }
-    @Test void firstSampleWithinTheTickerWindowStartsTheShakeForTheRemainingTime() {
+    @Test void firstSampleWithinTheTickerWindowStartsTheShake() {
         Player player = new Player(); player.lengths.put("shake", 1.04);
         AnimationController controller = new AnimationController(player, clips());
         assertTrue(controller.shake(.2), "One 4-tick visual sample after the native start");
-        assertEquals(1.8, player.length("shake") / player.lastClip.speed(), .00001);
-        controller.shake(0);
+        controller.cancelAction(); controller.shake(0);
         assertFalse(controller.shake(.3), "Later than one sample window skips the cycle");
     }
     @Test void waterAndRestStopShakeWithoutReplayingTheSameCycle() {
@@ -52,8 +55,6 @@ class AnimationControllerTest {
         assertFalse(controller.holdsMovement());
         controller.update(PetAnimation.WALK);
         assertTrue(player.active.contains("shake"));
-        controller.shake(0);
-        assertTrue(player.active.isEmpty(), "Native shake end stops the overlay");
     }
     @Test
     void airAndWaterWithoutClipsAreLeftToModelEngineAndLyingDownSleeps() {

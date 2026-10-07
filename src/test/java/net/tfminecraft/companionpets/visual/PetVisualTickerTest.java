@@ -72,24 +72,29 @@ class PetVisualTickerTest {
     }
     @AfterEach void stop() { try { if(store!=null) store.close(); } finally { MockBukkit.unmock(); } }
     @Test void nativeShakeStartsOneAnimationAndRendersWaterWhileTheBodyIsHidden() {
+        modelClips.put(PetAnimation.SHAKE, new PetAppearance.Clip("shake", 1.6, .3));
         var ticker=new PetVisualTicker(runtime); body.clock.progress=.05F;
         ticker.run(); body.clock.progress=.6F; ticker.run();
         assertEquals(List.of("shake"),animations.played); assertEquals(2,splashes);
         assertEquals(List.of((double).05F,(double).6F),shakeSamples);
-        assertEquals(1.04/(2-.05F),animations.lastClip.speed(),.00001);
-        assertEquals(0,animations.lastClip.blend());
+        assertEquals(modelClips.get(PetAnimation.SHAKE),animations.lastClip);
         assertFalse(animations.looped);
         verify(body.path,never()).stopPathfinding();
         body.clock.progress=0; ticker.run();
-        assertEquals(2,splashes); assertFalse(animations.active.contains("shake"));
+        assertEquals(3,splashes); assertTrue(animations.active.contains("shake"));
+        assertEquals(List.of("shake"),animations.played);
+        animations.active.remove("shake"); ticker.run();
+        assertEquals(3,splashes); assertFalse(animations.active.contains("shake"));
         body.clock.progress=.05F; ticker.run();
-        assertEquals(List.of("shake","shake"),animations.played); assertEquals(3,splashes);
+        assertEquals(List.of("shake","shake"),animations.played); assertEquals(4,splashes);
         int samples=shakeSamples.size();
         pet.stored(true); ticker.run();
-        assertEquals(3,splashes); assertEquals(samples,shakeSamples.size()); assertTrue(retained.isEmpty());
+        assertEquals(4,splashes); assertEquals(samples,shakeSamples.size()); assertTrue(retained.isEmpty());
+        animations.active.remove("shake");
         pet.stored(false); body.clock.progress=0; ticker.run();
+        assertEquals(4,splashes);
         body.clock.progress=.05F; ticker.run();
-        assertEquals(3,animations.played.size()); assertEquals(4,splashes);
+        assertEquals(3,animations.played.size()); assertEquals(5,splashes);
         assertEquals(Set.of(body.getUniqueId()),retained);
     }
     @Test void lateNativeShakeSkipsTheCycleUntilANewShakeStarts() {
@@ -99,7 +104,13 @@ class PetVisualTickerTest {
         assertTrue(animations.played.isEmpty()); assertEquals(0,splashes);
         body.clock.progress=0; ticker.run(); body.clock.progress=.2F; ticker.run();
         assertEquals(List.of("shake"),animations.played); assertEquals(1,splashes);
-        assertEquals(1.04/(2-.2F),animations.lastClip.speed(),.00001);
+        assertEquals(modelClips.get(PetAnimation.SHAKE),animations.lastClip);
+        body.clock.progress=.8F; ticker.run();
+        assertEquals(List.of("shake"),animations.played); assertEquals(2,splashes);
+        animations.active.remove("shake"); ticker.run();
+        assertEquals(2,splashes); assertFalse(animations.active.contains("shake"));
+        body.clock.progress=1.4F; ticker.run();
+        assertEquals(List.of("shake"),animations.played); assertEquals(2,splashes);
     }
     @Test void nativeProgressDoesNotCreateWaterUntilTheModelIsAttached() {
         var ticker=new PetVisualTicker(runtime); attached=false; body.clock.progress=.05F;
