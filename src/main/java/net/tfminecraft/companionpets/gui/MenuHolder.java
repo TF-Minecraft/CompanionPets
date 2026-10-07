@@ -20,6 +20,9 @@ public final class MenuHolder implements InventoryHolder {
     private int page;
     private int pages = 1;
     private boolean petHouseBack;
+    private org.bukkit.Location house;
+    public org.bukkit.Location house() { return house == null ? null : house.clone(); }
+    public void house(org.bukkit.Location location) { house = location == null ? null : location.clone(); }
     private int petHousePage;
     public boolean petHouseBack() { return petHouseBack; }
     public void petHouseBack(boolean value) { petHouseBack = value; }

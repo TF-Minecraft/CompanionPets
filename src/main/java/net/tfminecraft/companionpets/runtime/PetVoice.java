@@ -21,6 +21,7 @@ public final class PetVoice {
     private final PetRuntime runtime;
     private final Map<UUID, Map<Event, Long>> lastPlayed = new HashMap<>();
     private final Map<UUID, Long> nextAmbient = new HashMap<>();
+    private final Map<UUID, Object> trickSounds = new HashMap<>();
 
     PetVoice(PetRuntime runtime) { this.runtime = runtime; }
 
@@ -52,6 +53,31 @@ public final class PetVoice {
     }
 
     public void ambient(Entity body) { play(body, Event.AMBIENT); }
+
+    public void cancelTrick(Pet pet) { trickSounds.remove(pet.id()); }
+
+    public void customTrick(Pet pet, Entity body, net.tfminecraft.companionpets.config.CustomTrick trick) {
+        cancelTrick(pet);
+        if (trick.sound() == null) return;
+        Object token = new Object(); trickSounds.put(pet.id(), token);
+        long last = 0;
+        for (double seconds : trick.at()) {
+            long ticks = Math.round(seconds * 20); last = Math.max(last, ticks);
+            Runnable play = () -> {
+                if (trickSounds.get(pet.id()) != token || runtime.entity(pet) != body || pet.stored() || pet.dead()) return;
+                var cue = trick.sound();
+                String key = cue.sounds().get(runtime.random().nextInt(cue.sounds().size()));
+                NamespacedKey parsed = NamespacedKey.fromString(key);
+                Sound sound = parsed == null ? null : Registry.SOUNDS.get(parsed);
+                if (sound != null) body.getWorld().playSound(body.getLocation(), sound, cue.volume(), cue.pitch());
+                else if (parsed != null && !parsed.getNamespace().equals("minecraft"))
+                    body.getWorld().playSound(body.getLocation(), key, cue.volume(), cue.pitch());
+            };
+            if (ticks == 0) play.run();
+            else org.bukkit.Bukkit.getScheduler().runTaskLater(runtime.plugin(), play, ticks);
+        }
+        org.bukkit.Bukkit.getScheduler().runTaskLater(runtime.plugin(), () -> trickSounds.remove(pet.id(), token), last + 1);
+    }
     public void happy(Entity body, boolean loud) { play(body, loud ? Event.HAPPY : Event.HAPPY_QUIET); }
     public void sad(Entity body) { play(body, Event.SAD); }
     public void hurt(Entity body) { play(body, Event.HURT); }
@@ -80,5 +106,5 @@ public final class PetVoice {
         lastPlayed.keySet().removeIf(id -> runtime.store().get(id) == null);
     }
 
-    void clear() { lastPlayed.clear(); nextAmbient.clear(); }
+    void clear() { lastPlayed.clear(); nextAmbient.clear(); trickSounds.clear(); }
 }

@@ -9,7 +9,7 @@ import net.tfminecraft.companionpets.config.PetAppearance.Clip;
 import net.tfminecraft.companionpets.config.PetBehavior;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 
-/** The same resolved model capabilities drive runtime behavior and staff inspection. */
+/** Resolved model capabilities adapt gameplay to the available bones and clips. */
 public record PetCapabilities(boolean modelAvailable, boolean tail, Set<String> clips,
         Map<PetAnimation, Clip> animations, Map<PetBehavior, String> disabledBehaviors) {
     private static final Set<PetBehavior> TAIL = EnumSet.of(PetBehavior.GREETING_TAIL_WAG,

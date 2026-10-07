@@ -13,12 +13,8 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.EntityType;
 
 /** Sound identity is independent of the entity supplying navigation and the visible model. */
-public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boolean nativeSounds, String preset, float pitch) {
+public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boolean nativeSounds, float pitch) {
     private static final java.util.Set<String> PRESETS = java.util.Set.of("wolf", "cat", "parrot", "fox", "frog");
-    public enum Origin { PRESET, GENERATED, NONE }
-    public Origin origin() {
-        return preset.equals("none") ? Origin.NONE : PRESETS.contains(preset) ? Origin.PRESET : Origin.GENERATED;
-    }
     public enum Event { AMBIENT, HAPPY, HAPPY_QUIET, SAD, HURT, DEATH, GREETING, TOY, SOCIAL, PROTEST, EAT }
     public record Cue(List<String> sounds, float volume, float pitch, double minIntervalSeconds) {
         public Cue { sounds = List.copyOf(sounds); }
@@ -28,11 +24,11 @@ public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boo
     public Cue cue(Event event) { return cues.get(event); }
 
     public static PetSounds read(ConfigurationSection pet, EntityType identity, Logger logger) {
-        if (Boolean.FALSE.equals(pet.get("sounds"))) return new PetSounds(Map.of(), 0, false, "none", 1);
+        if (Boolean.FALSE.equals(pet.get("sounds"))) return new PetSounds(Map.of(), 0, false, 1);
         ConfigurationSection section = pet.getConfigurationSection("sounds");
         if (section == null && pet.contains("sounds")) {
             logger.warning("Pet " + pet.getName() + ": sounds must be a mapping or false; disabling sounds");
-            return new PetSounds(Map.of(), 0, false, "none", 1);
+            return new PetSounds(Map.of(), 0, false, 1);
         }
         String preset = section == null ? identity.name().toLowerCase(Locale.ROOT)
                 : section.getString("preset", identity.name()).trim().toLowerCase(Locale.ROOT);
@@ -62,7 +58,7 @@ public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boo
         float pitch = (float) number(section, "pitch", 1, .1, 2, logger);
         if (pitch != 1) cues.replaceAll((event, cue) -> new Cue(cue.sounds(), cue.volume(),
                 Math.max(.1f, Math.min(2, cue.pitch() * pitch)), cue.minIntervalSeconds()));
-        return new PetSounds(cues, interval, section == null, preset, pitch);
+        return new PetSounds(cues, interval, section == null, pitch);
     }
 
     private static String soundKey(String value) {
@@ -78,6 +74,26 @@ public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boo
         }
         NamespacedKey key = NamespacedKey.fromString(token);
         return key == null || key.getNamespace().equals("minecraft") && !registered(key.toString()) ? null : key.toString();
+    }
+
+    /** Custom tricks use the same sound names and registry validation as voice events. */
+    public static Cue readCue(ConfigurationSection parent, String key, Logger logger) {
+        if (!parent.contains(key) || Boolean.FALSE.equals(parent.get(key))) return null;
+        ConfigurationSection entry = parent.getConfigurationSection(key);
+        Object raw = entry == null ? parent.get(key) : entry.get("sounds");
+        List<?> values = raw instanceof List<?> list ? list : raw instanceof String s ? List.of(s) : List.of();
+        var sounds = new java.util.ArrayList<String>();
+        for (Object value : values) {
+            String parsed = value instanceof String s ? soundKey(s) : null;
+            if (parsed == null) logger.warning("Invalid " + parent.getCurrentPath() + "." + key + " sound " + value);
+            else sounds.add(parsed);
+        }
+        if (sounds.isEmpty()) {
+            if (values.isEmpty()) logger.warning("Invalid " + parent.getCurrentPath() + "." + key + "; expected a sound name, list or mapping");
+            return null;
+        }
+        return new Cue(sounds, (float) number(entry, "volume", .8, 0, 4, logger),
+                (float) number(entry, "pitch", 1, .1, 2, logger), 0);
     }
 
     private static boolean registered(String sound) {

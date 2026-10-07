@@ -18,6 +18,7 @@ public final class AnimationController {
     private final java.util.function.LongSupplier clock;
     private long headUntil, actionUntil;
     private boolean customAction;
+    private boolean shakeAttempted;
     private boolean trainingAttention;
     private PetAnimation belly;
     private long bellyUntil, bellyIdleMillis, stageUntil;
@@ -34,14 +35,13 @@ public final class AnimationController {
 
     public void update(PetAnimation next) {
         if (!next.pose()) throw new IllegalArgumentException("Expected a pose: " + next);
-        if (action == PetAnimation.SHAKE && (next == PetAnimation.WALK || next == PetAnimation.RUN
-                || next == PetAnimation.CROUCH || next == PetAnimation.FLY || next == PetAnimation.HOVER)) cancelAction();
         if (next != pose && (next == PetAnimation.SLEEP || next == PetAnimation.LIE
-                || next == PetAnimation.SWIM || next == PetAnimation.JUMP || next == PetAnimation.FALL)) cancelAction();
+                || next == PetAnimation.SWIM || action != PetAnimation.SHAKE && (next == PetAnimation.JUMP || next == PetAnimation.FALL))) cancelAction();
         pose = next;
         long now = clock.getAsLong();
         if (headTilt != null && ((!trainingAttention && now >= headUntil) || !player.playing(headTilt.name()))) stopHeadTilt();
         if (advanceBelly(now)) return;
+        if (action == PetAnimation.SHAKE) return; // The native clock owns its end, including while moving.
         if (action != null || customAction) {
             if (now < actionUntil && active != null && player.playing(active.name())) return;
             stopActive();
@@ -86,6 +86,30 @@ public final class AnimationController {
         action = next;
         active = clip;
         actionUntil = clock.getAsLong() + duration(clip, 2);
+        return true;
+    }
+
+    /** The visual ticker samples every few ticks, so a shake may start within its first sample window;
+     * the clip speed covers the native time left. Busy/late models skip this cycle instead of restarting halfway. */
+    static final double SHAKE_START_WINDOW = .25;
+    public boolean shake(double progress) {
+        if (progress <= 0 || progress >= 2 || pose == PetAnimation.SWIM || pose == PetAnimation.SLEEP || pose == PetAnimation.LIE) {
+            if (action == PetAnimation.SHAKE) cancelAction();
+            if (progress <= 0) shakeAttempted = false;
+            return false;
+        }
+        if (action == PetAnimation.SHAKE) return true;
+        if (shakeAttempted) return false;
+        shakeAttempted = true;
+        Clip clip = clips.get(PetAnimation.SHAKE);
+        if (progress > SHAKE_START_WINDOW || clip == null || action != null || customAction || belly != null) return false;
+        double length = player.length(clip.name());
+        if (length <= 0) return false;
+        Clip synchronizedClip = new Clip(clip.name(), length / (2 - progress), 0);
+        stopHeadTilt(); stopActive();
+        if (!player.play(synchronizedClip, false)) return false;
+        action = PetAnimation.SHAKE; active = synchronizedClip;
+        actionUntil = clock.getAsLong() + Math.round((2 - progress) * 1000);
         return true;
     }
 

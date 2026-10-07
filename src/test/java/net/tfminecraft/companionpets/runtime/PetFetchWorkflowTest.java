@@ -30,6 +30,37 @@ import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.visual.IdleVisual;
 
 class PetFetchWorkflowTest {
+    @Test void modeledWaterDropsStopWithTheNativeShakeAndDoNotRestartAfterGreeting() throws Exception {
+        var yaml = new YamlConfiguration();
+        yaml.loadFromString("pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, model: beagle}}\n");
+        var player = new net.tfminecraft.companionpets.visual.AnimationPlayer() {
+            private boolean active;
+            public boolean play(net.tfminecraft.companionpets.config.PetAppearance.Clip clip, boolean loop) { active = true; return true; }
+            public void stop(String clip) { active = false; }
+            public boolean playing(String clip) { return active; }
+            public double length(String clip) { return 1.08; }
+        };
+        var controller = new net.tfminecraft.companionpets.visual.AnimationController(player,
+                java.util.Map.of(net.tfminecraft.companionpets.visual.PetAnimation.SHAKE,
+                        new net.tfminecraft.companionpets.config.PetAppearance.Clip("shake", 1, 0)));
+        var visual = new net.tfminecraft.companionpets.visual.PetVisual() {
+            public void apply(org.bukkit.entity.Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type) { }
+            public void update(org.bukkit.entity.Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, net.tfminecraft.companionpets.visual.PetAnimation pose) { controller.update(pose); }
+            public boolean attached(org.bukkit.entity.Entity entity) { return true; }
+            public boolean shake(org.bukkit.entity.Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, double progress) { return controller.shake(progress); }
+        };
+        var updated = new PetRuntime(runtime.plugin(), CompanionConfig.load(runtime.plugin(), yaml), runtime.store(), runtime.sessions(),
+                runtime.bodies(), visual, runtime.petKey(), runtime.toyKey());
+        var ticker = new net.tfminecraft.companionpets.visual.PetVisualTicker(updated);
+        var body = (FetchWolf) runtime.entity(pet);
+        body.clock.progress = .05f; body.clock.isWet = true; ticker.run();
+        assertEquals(1, splashes);
+        body.clock.progress = 1.7f; ticker.run(); assertEquals(2, splashes);
+        body.clock.progress = 0; body.clock.isWet = false; ticker.run(); assertEquals(2, splashes);
+        pet.activity(Activity.GREETING); body.clock.isWet = true; ticker.run();
+        pet.activity(Activity.NONE); ticker.run();
+        assertFalse(body.clock.isWet); assertEquals(2, splashes);
+    }
     private ServerMock server;
     private PetRuntime runtime;
     private PetActions actions;
@@ -38,6 +69,7 @@ class PetFetchWorkflowTest {
     private Pet pet;
     private WorldMock world;
     private ItemStack toy;
+    private int splashes;
     private final java.util.Map<UUID, Location> navigationTargets = new java.util.HashMap<>();
     private final java.util.Map<UUID, Double> navigationSpeeds = new java.util.HashMap<>();
 
@@ -57,12 +89,12 @@ class PetFetchWorkflowTest {
                         });
             }
         }); var plugin = MockBukkit.createMockPlugin();
-        world = new WorldMock() {
+        world = new net.tfminecraft.companionpets.testutil.CollisionWorldMock() {
             @Override public boolean isChunkLoaded(int x, int z) { return true; }
             @Override public void spawnParticle(org.bukkit.Particle particle, Location at, int count,
-                    double x, double y, double z, double extra) { }
+                    double x, double y, double z, double extra) { if (particle == org.bukkit.Particle.SPLASH) splashes++; }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
-                return new BlockMock(new Location(this, x, y, z)) { @Override public boolean isPassable() { return true; } };
+                return new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) { @Override public boolean isPassable() { return y != 63; } };
             }
         };
         server.addWorld(world); owner = server.addPlayer(); owner.teleport(new Location(world, 0, 64, 0));
@@ -101,7 +133,9 @@ class PetFetchWorkflowTest {
                             (proxy, method, args) -> switch (method.getName()) {
                                 case "moveTo" -> {
                                     navigationRequests++;
-                                    navigationTargets.put(getUniqueId(), ((Location) args[0]).clone());
+                                    Location target = args[0] instanceof Location at ? at
+                                            : ((com.destroystokyo.paper.entity.Pathfinder.PathResult) args[0]).getFinalPoint();
+                                    navigationTargets.put(getUniqueId(), target.clone());
                                     navigationSpeeds.put(getUniqueId(), ((Number) args[1]).doubleValue()); yield true;
                                 }
                                 case "stopPathfinding" -> { navigationTargets.remove(getUniqueId()); yield null; }
@@ -109,7 +143,11 @@ class PetFetchWorkflowTest {
                                 case "getEntity" -> this;
                                 case "findPath" -> (com.destroystokyo.paper.entity.Pathfinder.PathResult) java.lang.reflect.Proxy.newProxyInstance(
                                         getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.PathResult.class},
-                                        (p, m, a) -> m.getName().equals("canReachFinalPoint") ? true : null);
+                                        (p, m, a) -> switch (m.getName()) {
+                                            case "canReachFinalPoint" -> true;
+                                            case "getFinalPoint" -> args[0];
+                                            default -> null;
+                                        });
                                 default -> throw new AssertionError("Unexpected navigation call: " + method.getName());
                             });
             }
@@ -311,7 +349,7 @@ class PetFetchWorkflowTest {
         assertSame(other.fetch(), pet.fetch());
     }
 
-    @Test void wetWolfKeepsFetchingAndCanShakeOnlyAfterReturningTheToy() {
+    @Test void wetWolfKeepsFetchingAndFinishesDryWithoutAnotherShake() {
         var body = (FetchWolf) runtime.entity(pet);
         body.clock.isWet = true; body.clock.progress = 0.5F;
         Snowball ball = throwToy(); var job = pet.fetch();
@@ -332,7 +370,7 @@ class PetFetchWorkflowTest {
         assertFalse(body.clock.isWet); assertEquals(0, body.clock.progress);
         assertSame(job, pet.fetch());
         body.teleport(owner.getLocation()); actions.fetchActions().step(pet, body);
-        assertNull(pet.fetch()); assertTrue(body.clock.isWet);
+        assertNull(pet.fetch()); assertFalse(body.clock.isWet);
         assertEquals(1, items().size()); assertTrue(toy.isSimilar(items().getFirst().getItemStack()));
         body.clock.isWet = false;
         net.tfminecraft.companionpets.integration.WolfShake.restore(body);

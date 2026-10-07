@@ -9,14 +9,14 @@ import org.mockbukkit.mockbukkit.entity.WolfMock;
 
 class WolfShakeTest {
     @AfterEach void teardown() { MockBukkit.unmock(); }
-    @Test void fetchCancelsNativeShakeAndRestoresWetnessOnlyAfterFinishing() {
+    @Test void fetchCancelsNativeShakeAndFinishesDryWithoutASecondShake() {
         var server = MockBukkit.mock(); var wolf = new NativeWolfFixture(server);
         wolf.handle.isWet = true; wolf.handle.progress = 0.7F;
         assertTrue(WolfShake.defer(wolf));
         assertFalse(wolf.handle.isWet); assertFalse(WolfShake.shaking(wolf));
         assertEquals(java.util.List.of((byte) 56), wolf.handle.level.events);
         assertTrue(WolfShake.defer(wolf));
-        WolfShake.restore(wolf); assertTrue(wolf.handle.isWet);
+        WolfShake.restore(wolf); assertFalse(wolf.handle.isWet);
         wolf.handle.isWet = false;
         WolfShake.restore(wolf); assertFalse(wolf.handle.isWet, "Finishing a race must not restart shaking repeatedly");
     }
@@ -36,7 +36,7 @@ class WolfShakeTest {
     }
     public static class NativeClock {
         float progress;
-        public boolean isWet;
+        private boolean isWet;
         final NativeLevel level = new NativeLevel();
         public float getShakeAnim(float partialTick) { return progress; }
         public void handleEntityEvent(byte event) { if (event == 56) progress = 0; }
