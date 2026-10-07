@@ -28,7 +28,11 @@ final class PetToyAnticipation {
     private final Map<UUID, Long> nextOwnerVoice = new HashMap<>();
     PetToyAnticipation(PetRuntime runtime, PetActions actions) { this.runtime = runtime; this.actions = actions; }
     void tick(long now) {
-        for (Pet pet : runtime.store().all()) {
+        for (UUID id : List.copyOf(active.keySet())) {
+            Pet pet = runtime.store().get(id);
+            if (pet != null && (pet.stored() || pet.dead())) { interests.remove(id); cancel(pet); }
+        }
+        for (Pet pet : runtime.store().active()) {
             Player owner = Bukkit.getPlayer(pet.ownerId());
             ItemRef toy = owner != null && owner.isOnline() ? heldToy(pet, owner) : null;
             if (toy == null) { interests.remove(pet.id()); cancel(pet); continue; }
@@ -97,9 +101,8 @@ final class PetToyAnticipation {
         var feeling = GreetingMood.of(pet, pet.bond());
         if (reacting && runtime.behaves(pet, PetBehavior.TOY_VOCALIZING) && focus.sounds < 2 && now >= focus.nextSoundAt
                 && now >= nextOwnerVoice.getOrDefault(pet.ownerId(), 0L)) {
-            Sound sound = runtime.behaves(pet, PetBehavior.GREETING_MEOWS) ? Sound.ENTITY_CAT_AMBIENT : PetFx.ambientSound(body);
-            if (sound != null) body.getWorld().playSound(body.getLocation(), sound,
-                    (float) (0.3 + 0.1 * feeling.intensity()), (float) (1.0 + runtime.random().nextDouble() * 0.15));
+            runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.TOY,
+                    (float) (.75 + .25 * feeling.intensity()), (float) (1 + runtime.random().nextDouble() * .1));
             focus.sounds++;
             focus.nextSoundAt = now + 3000 + runtime.random().nextInt(1000);
             nextOwnerVoice.put(pet.ownerId(), now + 2800);
@@ -192,7 +195,7 @@ final class PetToyAnticipation {
                 && !body.isInWater() && body.getTarget() == null && owner != null && owner.isOnline()
                 && pet.ownerId().equals(owner.getUniqueId())
                 && owner.getWorld().equals(body.getWorld())
-                && runtime.distance(owner, pet) <= (active(pet) ? runtime.config().followTeleportBlocks() : 6)
+                && runtime.distance(owner, pet) <= (active(pet) ? 16 : 6)
                 && runtime.followingAllowed(pet, owner)
                 && !runtime.sessions().resting(pet.id(), now)
                 && !(runtime.sessions().training(pet.ownerId()) instanceof net.tfminecraft.companionpets.session.TrainingSession s

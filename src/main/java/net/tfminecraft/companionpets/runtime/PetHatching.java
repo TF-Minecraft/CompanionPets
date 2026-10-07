@@ -124,7 +124,7 @@ final class PetHatching {
             pet.stored(false);
             runtime.remember(pet, entity);
         }
-        runtime.store().save();
+        runtime.store().requestSave();
     }
 
 

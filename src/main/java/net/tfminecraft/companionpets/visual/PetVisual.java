@@ -13,6 +13,8 @@ public interface PetVisual {
 
     default void update(Entity entity, PetTypeDef type, PetAnimation pose) { }
 
+    default void trainingAttention(Entity entity, PetTypeDef type, boolean focused) { }
+
     default boolean holdsMovement(Entity entity) { return false; }
 
     default boolean attached(Entity entity) { return false; }
@@ -27,6 +29,8 @@ public interface PetVisual {
     default void cancelAction(Entity entity) { }
     /** Hz > 0 enables an independent tail gesture; zero restores its normal animation. */
     default void wagTail(Entity entity, double hz) { }
+    /** Moves wagging tails one frame; called every tick. */
+    default void animateTails() { }
 
     default void holdHeadLook(Entity entity, float bodyYaw, float headYaw, float pitch) { }
     default void releaseHeadLook(Entity entity) { }

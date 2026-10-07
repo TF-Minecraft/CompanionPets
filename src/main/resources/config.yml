@@ -90,7 +90,6 @@ limits:
 presence:
   owner-near-radius: 32
   away-rate: 0.25
-  follow-teleport-blocks: 16
   cry-interval-seconds: 45
 
 moments:
@@ -183,7 +182,14 @@ social:
   max-friendship-gain-per-minute: 12
   bark-radius: 6
   owner-radius: 16
-  encounter-cooldown-seconds: 18
+  # Pets look for a new meeting this often. Meetings already started stay smooth.
+  search-interval-seconds: 3
+  # After a meeting, the same pair waits this long before another sniff or chase.
+  encounter-cooldown-seconds: 60
+  # Once that wait is over, each search has this % chance to start a sniff, chase
+  # or bark, while both owners stand still. The first greeting is not left to chance.
+  # Average extra wait: search-interval-seconds * 100 / encounter-chance (15 s here).
+  encounter-chance: 20
   bark-seconds: 8
   calm-cooldown-seconds: 30
   territorial-bark-chance: 80
@@ -192,13 +198,8 @@ social:
   calm-clicks: 3
 
 roaming:
-  enabled: true
+  # Only interaction timing remains here. Idle roaming uses the base entity's AI.
   stationary-seconds: 2
-  radius: 4
-  choice-min-seconds: 3
-  choice-max-seconds: 6
-  player-radius: 6
-  pet-radius: 6
   # Quiet time after arriving, so you can type the next order.
   name-attention-seconds: 10
 
@@ -254,7 +255,10 @@ items:
 pets:
   # HOW TO ADD A PET
   # 1. Copy a complete example below and give it a unique lowercase key.
-  # 2. Choose its entity, appearance and egg, then its food and toys.
+  # 2. Choose entity: WOLF or CAT, then appearance, egg, food and toys.
+  #    entity chooses native movement/instincts; appearance chooses the visible model.
+  #    behaviors chooses optional plugin actions; sounds chooses the voice.
+  #    These are separate settings: changing the model does not change AI or sounds.
   # 3. Optionally restrict its tricks. Omit tricks to allow all existing tricks.
   # 4. Omit default-tricks to inherit training.default-tricks. A pet-specific
   #    list REPLACES the global list. [] gives no initial learning for that type.
@@ -264,7 +268,7 @@ pets:
   #    Essential care/rest and taught tricks still work independently.
   #    Available IDs: greeting, greeting-circles, greeting-approach, greeting-jumps,
   #    greeting-tail-wag, greeting-meows, toy-anticipation, toy-vocalizing,
-  #    toy-jumps, toy-tail-wag, fetch, cat-play, roam,
+  #    toy-jumps, toy-tail-wag, fetch, cat-play,
   #    social-greeting, social-tail-wag, social-jumps, social-vocalizing,
   #    social-sniff, social-chase, social-protest, affection, affection-jumps,
   #    belly-rub, mischief, dig-gifts, recognize-carers, pet-friendships.
@@ -272,21 +276,46 @@ pets:
   #    cat-play adds a brief stalk/inspection before collecting a thrown toy (with fetch).
   #    toy-anticipation prioritizes any held toy over spontaneous activities until put away/thrown.
   #    toy-vocalizing, toy-jumps and toy-tail-wag repeat while the held toy is a favorite.
-  #    Dogs have all three; cats/foxes only vocalize; frogs croak and make small hops.
+  #    Dogs have all three; cats normally only vocalize.
   #    belly-rub still requires its three model clips. Tail wag needs a model tail bone.
   #    Example inside a cat: behaviors: [greeting, greeting-circles, greeting-meows,
-  #      affection, belly-rub, roam, toy-anticipation, fetch, cat-play,
+  #      affection, belly-rub, toy-anticipation, fetch, cat-play,
   #      social-sniff, social-chase, social-protest, recognize-carers, pet-friendships]
   #    Dogs normally also jump/wag on greeting, dig gifts and do mischief.
-  #    Frogs normally approach, croak and make up to two safe approaching hops;
-  #    they also play/fetch toys, but do not dig, roll for belly rubs or wag a tail by default.
+  #    The old roam behavior is accepted for compatibility and has no effect.
+  #    Normal following, idle roaming and catch-up teleportation are vanilla.
   # Use spaces, not tabs. Keep each pet key at the same indentation as wolf.
   #
   # COMMON FIELDS (apply to vanilla AND ModelEngine pets)
   # wolf / beagle: saved pet type ID and label in menus. Both may use WOLF.
   #   Keep this key stable once pets exist; changing it does not migrate them.
-  # entity: Minecraft entity type in uppercase, e.g. WOLF, CAT, FOX or FROG.
+  # entity: Minecraft entity type in uppercase, WOLF or CAT. Other entity types are not supported.
   #   This supplies the body and AI; it does not select a custom model/skin.
+  #   WOLF retains wolf follow/wandering; CAT also retains cat resting/block-seeking AI.
+  #   Keep CAT for cats and WOLF for dogs to preserve their native differences.
+  #   Unsupported types (including FOX, FROG and PARROT) are skipped, not converted.
+  #   Their saved pets are retained. A model does not enable an unsupported entity.
+  #   A different species modeled on WOLF/CAT would inherit that base's instincts;
+  #   this requires a deliberate configuration choice, not automatic substitution.
+  # native-combat: false (default) prevents native targeting/attacks while keeping
+  #   native movement. Set true to allow the base entity's combat AI.
+  # sounds: omit to retain native audio and normal plugin interaction sounds.
+  #   Without a profile, voice follows entity, NOT the model ID or pet type name.
+  #   A model using a different base needs an explicit voice profile to avoid
+  #   unwanted base sounds. A sound preset does not enable a new entity type.
+  #   A mapping replaces native audio with a configurable profile. sounds: false
+  #   silences the pet's voice. Each event accepts a sound name, list, false/[], or
+  #   {sounds: [...], volume: 0.8, pitch: 1.0, min-interval-seconds: 0}.
+  #   Use Bukkit names (ENTITY_CAT_AMBIENT) or namespaced resource-pack sound keys.
+  #   Events: ambient, happy, happy-quiet, sad, hurt, death, greeting, toy, social,
+  #   protest, eat. Omitted events inherit the preset; false/[] disables one event.
+  #   Example inside a pet:
+  #     sounds:
+  #       preset: cat              # Defaults to entity; none starts with no sounds
+  #       ambient-interval-seconds: 25 # Randomized +/-20%; 0 disables idle sounds
+  #       greeting: {sounds: [ENTITY_CAT_AMBIENT], volume: 0.6, pitch: 1.1}
+  #       toy: "tfmc:pet.excited"
+  #       protest: false
   # appearance.type: vanilla (default) or modelengine. See the beagle example.
   # egg: item selector used to create this pet, e.g. WOLF_SPAWN_EGG,
   #   "mmoitems:PETS:PET_BEAGLE_EGG" or "itemsadder:tfmc:beagle_egg". Each must be unique.
@@ -334,13 +363,6 @@ pets:
       type: vanilla
     egg: CAT_SPAWN_EGG
     sex: random
-  fox:
-    entity: FOX
-    appearance:
-      type: vanilla
-    egg: FOX_SPAWN_EGG
-    sex: choose
-
   # MODELENGINE EXAMPLE: uncomment this complete beagle block to enable it.
   # Install/register the beagle blueprint and serve its generated resource pack.
   # The beagle's body/AI is WOLF; its visible appearance is the ModelEngine model.
@@ -359,39 +381,30 @@ pets:
   #   sex: random
   #   # Interaction items are inherited from the global items lists.
 
-  # VANILLA FROG EXAMPLE: no ModelEngine needed; no paw trick.
-  # frog:
-  #   entity: FROG
-  #   appearance:
-  #     type: vanilla
-  #   egg: FROG_SPAWN_EGG
-  #   sex: random
-  #   tricks: [follow, come, stay, speak, jump]
-  #   # Inherits the same global interaction lists, including both treats.
-
   # OPTIONAL MODELENGINE SETTINGS
   # Put these inside a pet's appearance block, next to type/model/scale.
   # You can OMIT animations entirely when clips use the default names.
   # ALL animations are optional and automatically used IF present:
-  # idle, walk, run, crouch, sit, lie, sleep, jump, fall, swim, head_tilt, shake,
+  # idle, walk, crouch, sit, lie, sleep, jump, swim, head_tilt, shake,
   # paw, pet, fly, hover, attack, hurt, death, eat, speak, spawn,
   # lie_back, belly_up, get_up. Missing clips do not prevent model attachment.
   # idle/walk are recommended to avoid a static model. If lie is absent, the
   # original lay clip is recognized automatically unless lie was disabled.
   # If neither lie nor lay exists, an enabled sleep clip supplies the lie pose.
-  # Missing run uses walk at 1.5x speed; crouch uses walk; sleep uses lie then
-  # sit; lie uses sit if no lay/sleep alias is available. Without jump/swim,
-  # use idle in the air and walk in water.
-  # jump plays once on takeoff, holding its last pose until landing (or fall).
+  # ModelEngine itself plays idle, walk, jump, fly, hover and death from the
+  # body's movement; the plugin only adds postures (sit, lie, sleep, swim,
+  # crouch) and gestures on top. Without jump/hover use idle; without fly or
+  # swim use walk. crouch uses walk; sleep uses lie then sit; lie uses sit.
+  # run, fall and run-speed are no longer used.
   # Shake follows the beginning of the native WOLF shake, alongside its sound.
-  # head_tilt is for training; author only head bones and use a distinct clip.
+  # head_tilt loops while focused on training and plays briefly for confused commands.
+  # Author only head bones and use a distinct clip; missing head_tilt is optional.
   # Without corresponding clips, eating/speaking
   # use effects/sounds. pet is the normal petting reaction; it does not interrupt
   # belly rubs. belly_up may be a zero-length pose; the plugin holds it itself.
   # There are no sick, pet1, pet2 or despawn hooks.
   #
   # Example overrides (copy only the entries you need into appearance):
-  #     run-speed: 0.22             # Movement threshold in blocks per tick
   #     animations:
   #       lie: sleep                # Reuse the sleeping posture for exhaustion
   #       paw: give_paw             # Left: plugin action; right: model clip name
@@ -402,15 +415,11 @@ pets:
   #       # Disable unfinished optional placeholders until you animate them:
   #       shake: ""
   #
-  # For the definitive frog model (idle/walk/jump/swim/lay are automatic):
-  #     animations:
-  #       speak: croak
-  #       eat: tongue               # Optional use of its tongue clip
-  # The definitive dogs/cats/fox have sleep instead of lay and no jump/swim.
+  # The definitive dogs/cats have sleep instead of lay and no jump/swim.
   # They need no overrides for resting, jumping or swimming.
-  # For the fox, pet: pet2 enables its existing petting reaction.
   # Any other absent clips simply use their fallback or remain unanimated.
   #
   # Optional MythicMobs integration: mythic-mob: <internal mob ID> can provide
-  # the body instead of entity. This requires MythicMobs to be installed.
+  # the body. Declare entity: WOLF or CAT, and retain the native FollowOwner goal
+  # in that MythicMob definition. Other bodies or replaced follow AI are refused.
   # Keep appearance ownership with CompanionPets when using ModelEngine here.

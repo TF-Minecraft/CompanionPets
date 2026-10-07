@@ -50,6 +50,10 @@ public final class Pet {
     public void socialTailHz(double value) { socialTailHz = Double.isFinite(value) ? Math.max(0, value) : 0; }
     public long toyExcitedUntilMillis() { return toyExcitedUntilMillis; }
     public void toyExcitedUntilMillis(long value) { toyExcitedUntilMillis = Math.max(0, value); }
+    private long listeningUntilMillis;
+    /** After hearing its name, the pet keeps looking at whoever called until this time. */
+    public long listeningUntilMillis() { return listeningUntilMillis; }
+    public void listeningUntilMillis(long value) { listeningUntilMillis = Math.max(0, value); }
     private String carriedToy;
     private final Map<String, Trick> words = new LinkedHashMap<>();
     private final Map<Trick, Double> progress = new java.util.LinkedHashMap<>();
@@ -60,6 +64,7 @@ public final class Pet {
     private long nextCriticalSoundAtMillis;
     private long pauseUntilMillis;
     private long refuseRestUntilMillis;
+    private Runnable indexChanged;
 
     public Pet(UUID id, UUID ownerId, String typeId, String name, PetSex sex) {
         this.id = id;
@@ -84,13 +89,24 @@ public final class Pet {
     }
 
     public void ownerId(UUID ownerId) {
-        if (!this.ownerId.equals(ownerId)) {
+        boolean changed = !this.ownerId.equals(ownerId);
+        if (changed) {
             lastOwnerNearbyMillis = 0;
             lastGreetingMillis = 0;
             carers.clear(); friends.clear();
             toyExcitedUntilMillis = 0;
         }
         this.ownerId = java.util.Objects.requireNonNull(ownerId);
+        if (changed) reindex();
+    }
+
+    /** Lets the owning store refresh its owner, body and active-pet lookups. */
+    public void indexChanged(Runnable listener) {
+        indexChanged = listener;
+    }
+
+    private void reindex() {
+        if (indexChanged != null) indexChanged.run();
     }
 
     public long lastOwnerNearbyMillis() { return lastOwnerNearbyMillis; }
@@ -163,7 +179,9 @@ public final class Pet {
     }
 
     public void stored(boolean stored) {
+        if (this.stored == stored) return;
         this.stored = stored;
+        reindex();
     }
 
     public String worldName() {
@@ -199,7 +217,9 @@ public final class Pet {
     }
 
     public void entityId(UUID entityId) {
+        if (java.util.Objects.equals(this.entityId, entityId)) return;
         this.entityId = entityId;
+        reindex();
     }
 
     public double need(Need need) {
@@ -286,7 +306,9 @@ public final class Pet {
     }
 
     public void dead(boolean dead) {
+        if (this.dead == dead) return;
         this.dead = dead;
+        reindex();
     }
 
     public String favoriteToy() {

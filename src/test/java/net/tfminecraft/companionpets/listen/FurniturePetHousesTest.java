@@ -62,6 +62,7 @@ class FurniturePetHousesTest {
     @Test void successfulPlacementPersistsOwnerAndOnlyOwnerCanOpen() {
         petHouses.placed(event(owner));
         assertEquals(owner.getUniqueId(), runtime.store().kennelOwner(key));
+        assertTrue(runtime.store().pending()); runtime.store().save();
         var restored = new PetStore(runtime.plugin());
         assertTrue(restored.load());
         assertEquals(owner.getUniqueId(), restored.kennelOwner(key));

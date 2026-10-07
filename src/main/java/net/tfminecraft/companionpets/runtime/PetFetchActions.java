@@ -73,7 +73,7 @@ final class PetFetchActions {
         }
         register(job, ball);
         actions.anticipation().ownerThrew(player);
-        for (Pet pet : runtime.store().all()) {
+        for (Pet pet : runtime.store().active()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             Entity body = runtime.entity(pet);
             if (type == null || !type.acceptsToy(thrown) || !(body instanceof Mob mob)
@@ -283,7 +283,7 @@ final class PetFetchActions {
         if (forward.lengthSquared() < 0.001) forward = new Vector(0, 0, 1);
         forward.normalize();
         int slot = 0;
-        for (Pet other : runtime.store().all())
+        for (Pet other : runtime.store().active())
             if (other.fetch() == job && !other.id().equals(job.carrierId()) && other.id().compareTo(pet.id()) < 0) slot++;
         double side = (slot % 2 == 0 ? -1 : 1) * (0.65 + 0.6 * (slot / 4));
         return at.clone().add(forward.clone().multiply(-1.5 - 0.8 * (slot / 2)))
@@ -362,7 +362,7 @@ final class PetFetchActions {
     }
 
     private List<Pet> chasers(FetchJob job) {
-        return runtime.store().all().stream().filter(pet -> pet.fetch() == job).toList();
+        return runtime.store().active().stream().filter(pet -> pet.fetch() == job).toList();
     }
 
     private void detach(Pet pet) {

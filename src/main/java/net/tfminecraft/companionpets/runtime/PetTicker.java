@@ -14,8 +14,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 
 import net.tfminecraft.companionpets.behavior.Locomotion;
 import net.tfminecraft.companionpets.behavior.Rest;
@@ -34,7 +32,6 @@ import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.pet.Presence;
 import net.tfminecraft.companionpets.play.FavoriteToy;
 import net.tfminecraft.companionpets.session.TrainingSession;
-import net.tfminecraft.companionpets.gui.StatLook;
 import net.tfminecraft.companionpets.text.PetTexts;
 
 public final class PetTicker implements Runnable {
@@ -43,6 +40,7 @@ public final class PetTicker implements Runnable {
     private final PetActions actions;
     private final Map<UUID, Long> missingBodySince = new HashMap<>();
     private long lastCareAt;
+    private final Map<UUID, Locomotion.Mode> previousModes = new HashMap<>();
 
     public PetTicker(PetRuntime runtime, PetActions actions) {
         this.runtime = runtime;
@@ -63,18 +61,27 @@ public final class PetTicker implements Runnable {
         actions.greetings().tick(now);
         actions.social().tick(now);
         move(now);
+        runtime.voice().tick(now);
+        previousModes.keySet().removeIf(id -> runtime.store().get(id) == null || runtime.entity(runtime.store().get(id)) == null);
         watchTraining(now);
     }
 
     private void care(long now, long elapsed) {
         for (Pet pet : runtime.store().all()) {
-            if (pet.dead()) {
+            if (pet.dead() || runtime.config().type(pet.typeId()) == null) {
                 missingBodySince.remove(pet.id());
                 continue;
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
             boolean online = owner != null && owner.isOnline();
+            // Pet House pets with frozen care (owner offline, or no decay while stored) have nothing to update.
+            if (pet.stored() && PresenceRules.resolve(true, online, 0, 0,
+                    runtime.config().care().decayWhileStored()) == Presence.FROZEN) {
+                missingBodySince.remove(pet.id());
+                continue;
+            }
             Entity body = runtime.entity(pet);
+            if (body != null && !runtime.bodies().compatible(body, runtime.config().type(pet.typeId()))) continue;
             if (!pet.stored() && body == null && bodyChunkEntitiesLoaded(pet)) {
                 long firstMissing = missingBodySince.computeIfAbsent(pet.id(), id -> now);
                 if (now - firstMissing >= MISSING_BODY_GRACE_MILLIS) {
@@ -140,8 +147,9 @@ public final class PetTicker implements Runnable {
                     runtime.config().care(),
                     runtime.config().awayRate()));
             if (pet.dead()) {
+                if (body != null && body.isSilent()) runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.DEATH);
                 if (!runtime.store().remove(pet.id())) continue;
-                runtime.store().save();
+                runtime.store().requestSave();
                 actions.clearInteractions(pet);
                 if (body instanceof org.bukkit.entity.LivingEntity living && runtime.visual().attached(body)) {
                     living.setHealth(0);
@@ -158,7 +166,7 @@ public final class PetTicker implements Runnable {
                     if (notice.kind() == CareNotice.Kind.ENTERED_LOW && notice.need() != null) {
                         PetFx.bar(owner, PetTexts.lowNeed(pet.name(), pet.sex(), notice.need()));
                         if (body != null) {
-                            PetFx.ambient(body);
+                            runtime.voice().ambient(body);
                             PetTypeDef petType = runtime.config().type(pet.typeId());
                             PetFx.need(body, notice.need(), petType == null ? null : petType.foodIcon());
                         }
@@ -215,12 +223,16 @@ public final class PetTicker implements Runnable {
     }
 
     private void move(long now) {
-        for (Pet pet : runtime.store().all()) {
+        for (Pet pet : runtime.store().active()) {
             if (pet.stored() || pet.dead()) {
                 continue;
             }
             Entity body = runtime.entity(pet);
             if (!(body instanceof Mob mob)) {
+                continue;
+            }
+            if (!runtime.bodies().compatible(mob, runtime.config().type(pet.typeId()))) {
+                net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
                 continue;
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
@@ -235,6 +247,7 @@ public final class PetTicker implements Runnable {
                 WaterNavigationGoal.ensure(runtime, pet, mob, actions);
                 continue;
             }
+            if (TrainingNavigationGoal.hold(runtime, pet, mob)) continue;
             if (actions.greeting(pet) || actions.anticipation().active(pet)) continue;
             Locomotion.Mode mode = Locomotion.choose(
                     pet.illness(),
@@ -253,8 +266,10 @@ public final class PetTicker implements Runnable {
                 express(pet, mob, owner, mode, now);
                 continue;
             }
+            Locomotion.Mode previous = previousModes.put(pet.id(), mode);
             actions.markSleep(mob, mode == Locomotion.Mode.SLEEP);
-            if (mode == Locomotion.Mode.SLEEP || pet.activity() == Activity.SLEEPING) PetFx.stopLooking(mob);
+            if ((mode == Locomotion.Mode.SLEEP || pet.activity() == Activity.SLEEPING)
+                    && now >= pet.listeningUntilMillis()) PetFx.stopLooking(mob);
             if (actions.moments().tickBelly(pet, mob, owner)) {
                 continue;
             }
@@ -267,10 +282,15 @@ public final class PetTicker implements Runnable {
             if (held && mob.isAware()) actions.clearInteractions(pet);
             if (held) {
                 actions.roaming().cancel(pet);
-                if ((mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.LIE) && pet.activity() != Activity.SLEEPING)
-                    PostureNavigationGoal.hold(runtime, pet, mob);
-                else net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
-            } else mob.setAware(true);
+                // Staying, sitting, lying and sleeping keep native AI awake, so the head looks around natively.
+                PostureNavigationGoal.hold(runtime, pet, mob);
+                actions.roaming().tickListening(pet, mob, now);
+            } else {
+                if (previous != null && previous != mode || !mob.isAware()) {
+                    PetFx.sit(mob, false); PetFx.lie(mob, false); PetFx.stopLooking(mob);
+                }
+                if (!mob.isAware()) mob.setAware(true);
+            }
             if (!held && actions.roaming().tickAttention(pet, mob, now)) {
                 continue;
             }
@@ -278,13 +298,12 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             if (actions.social().engaged(pet)) {
-                actions.roaming().cancelPlan(pet);
                 continue;
             }
-            if (mode == Locomotion.Mode.FOLLOW)
-                FollowNavigationGoal.ensure(runtime, actions, pet, mob, owner,
-                        () -> stepMode(pet, mob, owner, Locomotion.Mode.FOLLOW, System.currentTimeMillis())).advance(now);
-            else stepMode(pet, mob, owner, mode, now);
+            if (mode == Locomotion.Mode.PLAY)
+                PlayNavigationGoal.ensure(runtime, pet, mob,
+                        () -> stepMode(pet, mob, Bukkit.getPlayer(pet.ownerId()), Locomotion.Mode.PLAY, System.currentTimeMillis())).tick();
+            else if (mode != Locomotion.Mode.FOLLOW) stepMode(pet, mob, owner, mode, now);
             express(pet, mob, owner, mode, now);
             actions.moments().tick(pet, mob, owner, mode, now);
         }
@@ -294,51 +313,7 @@ public final class PetTicker implements Runnable {
         boolean sameWorld = owner != null && owner.isOnline() && mob.getWorld().equals(owner.getWorld());
         double speed = Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), false);
         switch (mode) {
-            case FOLLOW -> {
-                PetFx.sit(mob, false);
-                PetFx.lie(mob, false);
-                if (!sameWorld) {
-                    mob.getPathfinder().stopPathfinding();
-                    return;
-                }
-                if (!runtime.followingAllowed(pet, owner)) {
-                    net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
-                    return;
-                }
-                if (pet.illness() == Illness.SICK && now < pet.pauseUntilMillis()) {
-                    mob.getPathfinder().stopPathfinding();
-                    return;
-                }
-                if (pet.illness() == Illness.SICK && now > pet.pauseUntilMillis() + 8_000L) {
-                    pet.pauseUntilMillis(now + 2_000L);
-                }
-                double distance = mob.getLocation().distance(owner.getLocation());
-                if (distance > runtime.config().followTeleportBlocks()
-                        && pet.order() == net.tfminecraft.companionpets.pet.PetOrder.FOLLOW && !pet.staying()) {
-                    mob.teleport(PetRuntime.beside(owner));
-                    mob.getPathfinder().stopPathfinding();
-                } else if (actions.roaming().step(pet, mob, owner, speed, now)) {
-                    // The owner is resting, so this pet explores nearby instead of staring at them.
-                } else {
-                    var destination = PetSpacing.follow(runtime, pet, owner);
-                    // A crowded or obstructed formation slot must not halt a distant follower.
-                    if (destination == null && distance > Locomotion.followDistance(pet.bond())) destination = owner.getLocation();
-                    if (destination != null && (distance > Locomotion.followDistance(pet.bond())
-                            || !destination.equals(owner.getLocation()) && mob.getLocation().distanceSquared(destination) > 2.25)) {
-                        var path = mob.getPathfinder().findPath(destination);
-                        if (!destination.equals(owner.getLocation()) && (path == null || !path.canReachFinalPoint())) {
-                            var fallback = mob.getPathfinder().findPath(owner.getLocation());
-                            if (fallback != null && (fallback.canReachFinalPoint() || usefulFollowPath(mob, owner, fallback))) path = fallback;
-                        }
-                        if (path != null && (path.canReachFinalPoint() || usefulFollowPath(mob, owner, path)))
-                            mob.getPathfinder().moveTo(path, speed);
-                        // Keep an existing useful path if this new request temporarily fails.
-                        else if (!mob.getPathfinder().hasPath()) mob.getPathfinder().stopPathfinding();
-                    } else {
-                        mob.getPathfinder().stopPathfinding(); PetFx.look(mob, owner);
-                    }
-                }
-            }
+            case FOLLOW -> { /* Native AI owns idle roaming, following and teleportation. */ }
             case SIT, STAY -> {
                 mob.getPathfinder().stopPathfinding();
                 PetFx.lie(mob, false);
@@ -380,17 +355,11 @@ public final class PetTicker implements Runnable {
         }
     }
 
-    private static boolean usefulFollowPath(Mob body, Player owner, com.destroystokyo.paper.entity.Pathfinder.PathResult path) {
-        var end = path.getFinalPoint();
-        return end != null && end.getWorld().equals(owner.getWorld())
-                && end.distanceSquared(owner.getLocation()) + 1 < body.getLocation().distanceSquared(owner.getLocation());
-    }
-
     private void express(Pet pet, Mob mob, Player owner, Locomotion.Mode mode, long now) {
         boolean critical = pet.causeCritical() || pet.illness() != Illness.NONE;
         if (critical && now >= pet.nextCriticalSoundAtMillis()) {
             pet.nextCriticalSoundAtMillis(now + Math.round(runtime.config().care().criticalSoundSeconds() * 1000.0));
-            PetFx.ambient(mob);
+            runtime.voice().ambient(mob);
             Need dominant = DominantNeed.select(pet);
             if (pet.illness() == Illness.SICK || pet.illness() == Illness.UNWELL || pet.illness() == Illness.WEAKENED) {
                 PetFx.particle(mob, Particle.SNEEZE, 2);
@@ -406,8 +375,7 @@ public final class PetTicker implements Runnable {
             double distance = runtime.distance(owner, pet);
             if (distance > runtime.config().ownerNearRadius() && now >= pet.nextCryAtMillis()) {
                 pet.nextCryAtMillis(now + Math.round(runtime.config().cryIntervalSeconds() * 1000.0));
-                Sound sound = PetFx.ambientSound(mob);
-                if (sound != null) mob.getWorld().playSound(mob.getLocation(), sound, 0.45f, 0.8f);
+                runtime.voice().play(mob, net.tfminecraft.companionpets.config.PetSounds.Event.SAD, .55f, .9f);
                 PetFx.particle(mob, Particle.SPLASH, 3);
             }
         }
@@ -446,31 +414,6 @@ public final class PetTicker implements Runnable {
             } else if (session.rewardTrick() != null && now > session.rewardUntil()) {
                 actions.missedReward(player, pet, session);
             }
-        }
-    }
-
-    public void lookBars() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (PetFx.refreshHeld(player)) continue;
-            Entity looked = PetActions.lookingAt(player, 4.5);
-            Pet pet = runtime.byEntity(looked);
-            if (pet == null) {
-                continue;
-            }
-            TrainingSession session = runtime.sessions().training(player.getUniqueId());
-            boolean training = session != null && session.petId().equals(pet.id());
-            String socialStatus = actions.social().status(pet);
-            if (training && (session.pendingWord() != null || session.rewardTrick() != null)) {
-                continue;
-            }
-            Component tag = training
-                    ? StatLook.tag("Training · say a command", NamedTextColor.AQUA)
-                    : socialStatus != null
-                            ? StatLook.tag(socialStatus, NamedTextColor.RED)
-                    : pet.illness() == Illness.NONE
-                            ? null
-                            : StatLook.tag(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED);
-            PetFx.status(player, StatLook.summary(pet, tag));
         }
     }
 

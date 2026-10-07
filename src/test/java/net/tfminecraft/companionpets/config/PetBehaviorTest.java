@@ -22,9 +22,9 @@ class PetBehaviorTest {
                       dog: {entity: WOLF, egg: WOLF_SPAWN_EGG}
                     """);
             var config = CompanionConfig.load(plugin, yaml);
-            assertNotNull(config.type("custom")); assertNull(config.type("custom").entity());
+            assertNotNull(config.type("custom")); assertEquals(EntityType.WOLF, config.type("custom").entity());
             assertEquals("ExamplePet", config.type("custom").mythicMob());
-            assertEquals(PetBehavior.defaults(EntityType.PIG), config.type("custom").behaviors());
+            assertEquals(PetBehavior.defaults(EntityType.WOLF), config.type("custom").behaviors());
             assertEquals(Set.of(PetBehavior.GREETING, PetBehavior.FETCH), config.type("explicit").behaviors());
             assertEquals(PetBehavior.defaults(EntityType.WOLF), config.type("dog").behaviors());
         } finally {

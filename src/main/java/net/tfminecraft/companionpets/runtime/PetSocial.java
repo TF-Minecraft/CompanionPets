@@ -30,6 +30,7 @@ final class PetSocial {
     private final Map<Pair, Long> nextAllowed = new HashMap<>();
     private final Map<Pair, Visit> visits = new HashMap<>();
     private final Map<Pair, ArrayDeque<Gain>> gains = new HashMap<>();
+    private long nextSearchAt;
 
     PetSocial(PetRuntime runtime, PetRoaming roaming) { this.runtime = runtime; this.roaming = roaming; }
 
@@ -42,7 +43,10 @@ final class PetSocial {
         refreshVisits(now);
         for (var entry : List.copyOf(active.entrySet()))
             if (active.get(entry.getKey()) == entry.getValue()) advance(entry.getKey(), entry.getValue(), now);
-        for (Pet pet : runtime.store().all()) {
+        // Meetings in progress advance every behavior tick; looking for new ones is rarer.
+        if (now < nextSearchAt) return;
+        nextSearchAt = now + Math.round(settings.searchIntervalSeconds() * 1000);
+        for (Pet pet : runtime.store().active()) {
             if (!available(pet) || engaged(pet)) continue;
             Mob body = body(pet);
             if (body == null) continue;
@@ -64,6 +68,8 @@ final class PetSocial {
                     }
                 } else if ((visit.greeted || !both(pet, other, PetBehavior.SOCIAL_GREETING))
                         && now >= nextAllowed.getOrDefault(pair, 0L) && ownersStationary(pet, other, now)
+                        // First greetings always happen; later meetings are left to chance, so they stay occasional.
+                        && runtime.random().nextDouble() * 100 < settings.encounterChance()
                         && begin(pair, pet, other, body, otherBody, now, null, true)) break;
             }
         }
@@ -108,7 +114,7 @@ final class PetSocial {
     }
     void clear() {
         for (Pair pair : List.copyOf(active.keySet())) end(pair, System.currentTimeMillis(), 0);
-        meetingByPet.clear(); nextAllowed.clear(); visits.clear(); gains.clear();
+        meetingByPet.clear(); nextAllowed.clear(); visits.clear(); gains.clear(); nextSearchAt = 0;
     }
 
     boolean trigger(Player owner, Pet pet, String kind) { return trigger(owner, pet, kind, System.currentTimeMillis()); }
@@ -181,7 +187,13 @@ final class PetSocial {
         SocialNavigationGoal.ensure(runtime, b, bodyB, this);
         if (phase == Phase.GREET) {
             receive(a, bodyA, bodyB, moodA, e); receive(b, bodyB, bodyA, moodB, e);
-        } else if (phase == Phase.BARK) bark(e, bodyA, bodyB);
+        } else if (phase == Phase.BARK) {
+            bark(e, bodyA, bodyB);
+            // Sent once at the start; there is no look-at status bar to repeat it.
+            for (Player owner : new java.util.LinkedHashSet<>(java.util.Arrays.asList(e.ownerA, e.ownerB)))
+                if (owner != null && owner.isOnline())
+                    PetFx.bar(owner, a.name() + " and " + b.name() + " are barking. Right-click repeatedly to calm them");
+        }
         return true;
     }
 
@@ -265,10 +277,9 @@ final class PetSocial {
                 && runtime.behaves(pet, PetBehavior.SOCIAL_PROTEST)) { growl(body); e.positive = false; }
         else if (mood.intensity() >= 0.2 && mood.reaction() != PetMeetingMood.Reaction.GUARD
                 && runtime.behaves(pet, PetBehavior.SOCIAL_VOCALIZING)) {
-            Sound sound = body.getType() == org.bukkit.entity.EntityType.WOLF ? Sound.ENTITY_WOLF_WHINE : PetFx.ambientSound(body);
-            if (sound != null) {
+            if (runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.SOCIAL,
+                    1, (float) (.95 + mood.intensity() * .15))) {
                 runtime.visual().play(body, runtime.config().type(pet.typeId()), "SPEAK");
-                body.getWorld().playSound(body.getLocation(), sound, 0.3f, (float) (1.05 + mood.intensity() * 0.15));
             }
         }
     }
@@ -309,11 +320,7 @@ final class PetSocial {
     private void growl(Mob body) {
         Pet pet = runtime.byEntity(body);
         if (pet != null) runtime.visual().play(body, runtime.config().type(pet.typeId()), "SPEAK");
-        Sound sound = switch (body.getType()) {
-            case WOLF -> Sound.ENTITY_WOLF_GROWL; case CAT -> Sound.ENTITY_CAT_HISS;
-            case FOX -> Sound.ENTITY_FOX_AGGRO; default -> PetFx.ambientSound(body);
-        };
-        if (sound != null) body.getWorld().playSound(body.getLocation(), sound, 0.45f, 0.9f);
+        runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.PROTEST);
     }
 
     private boolean ownersNearby(Pet a, Mob bodyA, Pet b, Mob bodyB) {

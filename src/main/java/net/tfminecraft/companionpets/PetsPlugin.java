@@ -38,13 +38,16 @@ public class PetsPlugin extends JavaPlugin {
     private static final java.util.Map<String, String> TEST_COMMANDS = java.util.Map.of(
             "testpet", "spawn", "moment", "moment");
     private static final long AUTOSAVE_TICKS = 20L * 300;
+    /** Pending changes reach pets.yml within this time, written off the main thread. */
+    private static final long FLUSH_TICKS = 20L * 5;
 
     private PetStore store;
     private PetActions actions;
     private BukkitTask ticker;
-    private BukkitTask statusTicker;
     private BukkitTask autosave;
+    private BukkitTask flusher;
     private BukkitTask visualTicker;
+    private BukkitTask tailTicker;
     private PetVisual visual;
     private PetRuntime runtime;
     private PetListener petListener;
@@ -95,9 +98,11 @@ public class PetsPlugin extends JavaPlugin {
         new net.tfminecraft.companionpets.listen.FurniturePetHouses(runtime).register();
         PetTicker petTicker = new PetTicker(runtime, actions);
         ticker = Bukkit.getScheduler().runTaskTimer(this, petTicker, 10L, 10L);
-        visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 1L, 1L);
-        statusTicker = Bukkit.getScheduler().runTaskTimer(this, petTicker::lookBars, 1L, 1L);
-        autosave = Bukkit.getScheduler().runTaskTimer(this, store::save, AUTOSAVE_TICKS, AUTOSAVE_TICKS);
+        visualTicker = Bukkit.getScheduler().runTaskTimer(this, new PetVisualTicker(runtime), 1L, PetVisualTicker.PERIOD_TICKS);
+        tailTicker = Bukkit.getScheduler().runTaskTimer(this, visual::animateTails, 1L, 1L);
+        // Needs change every tick without marking the store, so they are queued periodically.
+        autosave = Bukkit.getScheduler().runTaskTimer(this, store::requestSave, AUTOSAVE_TICKS, AUTOSAVE_TICKS);
+        flusher = Bukkit.getScheduler().runTaskTimer(this, store::flush, FLUSH_TICKS, FLUSH_TICKS);
         for (org.bukkit.World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {
                 actions.reattach(entity);
@@ -115,15 +120,14 @@ public class PetsPlugin extends JavaPlugin {
             }
         }
         if (visualTicker != null) visualTicker.cancel();
+        if (tailTicker != null) tailTicker.cancel();
         if (ticker != null) {
             ticker.cancel();
-        }
-        if (statusTicker != null) {
-            statusTicker.cancel();
         }
         if (autosave != null) {
             autosave.cancel();
         }
+        if (flusher != null) flusher.cancel();
         if (actions != null) {
             for (var pet : store.all()) {
                 Entity body = runtime.entity(pet);

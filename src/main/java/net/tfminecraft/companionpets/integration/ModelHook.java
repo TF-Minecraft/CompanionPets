@@ -100,6 +100,15 @@ public final class ModelHook implements PetVisual {
         }
     }
 
+    @Override public void trainingAttention(Entity entity, PetTypeDef type, boolean focused) {
+        if (entity == null || type == null) return;
+        if (focused) apply(entity, type);
+        Session session = sessions.get(entity.getUniqueId());
+        if (session == null) return;
+        try { session.controller.trainingAttention(focused); }
+        catch (RuntimeException ex) { fail(entity, session.type, ex); }
+    }
+
     @Override
     public boolean attached(Entity entity) {
         return entity != null && sessions.containsKey(entity.getUniqueId());
@@ -181,6 +190,16 @@ public final class ModelHook implements PetVisual {
         try { session.attachment.wagTail(hz); }
         catch (RuntimeException ex) {
             if (warnedTail.add(session.type)) logger.log(Level.WARNING, "Pet " + session.type + ": tail gesture unavailable", ex);
+        }
+    }
+
+    @Override public void animateTails() {
+        for (Session session : sessions.values()) {
+            if (!session.attachment.wagging()) continue;
+            try { session.attachment.advanceTail(); }
+            catch (RuntimeException ex) {
+                if (warnedTail.add(session.type)) logger.log(Level.WARNING, "Pet " + session.type + ": tail gesture unavailable", ex);
+            }
         }
     }
 

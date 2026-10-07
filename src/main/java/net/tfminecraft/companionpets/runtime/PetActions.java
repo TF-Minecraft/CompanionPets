@@ -138,7 +138,7 @@ public final class PetActions {
             PetFx.sit(body, false); PetFx.lie(body, false);
             if (body instanceof Mob mob) mob.setAware(true);
         }
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.bar(player, pet.name() + " will follow you again (unless food, rest or health prevents it)");
     }
 
@@ -167,14 +167,14 @@ public final class PetActions {
             roaming.cancelWithPosture(pet);
             clearInteractions(pet);
             if (runtime.entity(pet) instanceof Mob mob && pet.order() == PetOrder.FOLLOW)
-                net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+                PostureNavigationGoal.hold(runtime, pet, mob);
         }
     }
 
     private void pauseRestoredFollowing(Pet pet, Entity entity) {
         if (entity instanceof Mob mob && pet.order() == PetOrder.FOLLOW
                 && !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId())))
-            net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+            PostureNavigationGoal.hold(runtime, pet, mob);
     }
 
     private boolean calmInteraction(Player player, Pet pet) {
@@ -345,7 +345,7 @@ public final class PetActions {
         PetFx.look(entity, player);
         if (!ownerNearby(pet)) {
             PetFx.bar(player, PetTexts.missesOwner(pet.name(), pet.sex()));
-            PetFx.sad(entity);
+            runtime.voice().sad(entity);
             return;
         }
         if (pet.illness() != Illness.NONE) {
@@ -353,21 +353,21 @@ public final class PetActions {
             cheer(pet, now, runtime.config().care().playMoodGain());
             PetFx.bar(player, PetTexts.illnessCheck(pet.name(), pet.sex(), pet.illness(), medicine)
                     + ". A little attention still cheers " + PetTexts.him(pet.sex()) + " up");
-            PetFx.sad(entity);
+            runtime.voice().sad(entity);
             PetFx.hearts(entity, 1);
             return;
         }
         Need need = DominantNeed.select(pet);
         if (need != null) {
             PetFx.bar(player, PetTexts.needCheck(pet.name(), pet.sex(), need, NeedBand.of(pet.need(need)) == NeedBand.CRITICAL));
-            PetFx.sad(entity);
+            runtime.voice().sad(entity);
             return;
         }
         comfort(pet, now);
         cheer(pet, now, PET_MOOD_GAIN);
         if (runtime.sessions().resting(pet.id(), now)) {
             PetFx.bar(player, PetTexts.restingCheck(pet.name(), pet.sex()));
-            PetFx.happy(entity, false);
+            runtime.voice().happy(entity, false);
             PetFx.hearts(entity, 1);
             return;
         }
@@ -381,7 +381,7 @@ public final class PetActions {
         PetFx.bar(player, PetTexts.petted(pet.name(), pet.sex(), pet.typeId(), devoted));
         if (!runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.AFFECTION)) return;
         boolean animatedPet = runtime.visual().play(entity, type, "PET");
-        PetFx.happy(entity, runtime.random().nextInt(3) == 0);
+        runtime.voice().happy(entity, runtime.random().nextInt(3) == 0);
         PetFx.hearts(entity, devoted ? 4 : 2);
         if (!animatedPet && !runtime.visual().holdsMovement(entity)
                 && devoted && runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.AFFECTION_JUMPS)
@@ -573,7 +573,7 @@ public final class PetActions {
 
     private boolean respondToName(Player player, String text, long now) {
         boolean answered = false;
-        for (Pet pet : runtime.store().all()) {
+        for (Pet pet : runtime.store().active()) {
             if (!audible(player, pet)
                     || !SpokenOrder.matches(text, pet.name())) continue;
             Entity entity = runtime.entity(pet);
@@ -583,7 +583,7 @@ public final class PetActions {
                 clearInteractions(pet); releaseFetch(pet, player, true);
                 if (coming) roaming.come(pet, player, now, previous);
                 else roaming.attend(pet, player, now);
-            }
+            } else roaming.listen(pet, player, now);
             PetFx.bar(player, pet.name() + " heard its name. You can say \"" + pet.name() + " <command>\"");
             answered = true;
         }
@@ -610,9 +610,29 @@ public final class PetActions {
             runtime.visual().removeBody(entity);
             return;
         }
-        pet.entityId(entity.getUniqueId());
-        runtime.remember(pet, entity);
         PetTypeDef type = runtime.config().type(pet.typeId());
+        if (type == null) {
+            runtime.remember(pet, entity);
+            if (entity instanceof Mob mob) net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+            runtime.plugin().getLogger().warning("Pet " + pet.id() + " retains its saved body and data, but its type "
+                    + pet.typeId() + " is unavailable; correct its configuration before taking it out");
+            return;
+        }
+        if (!runtime.bodies().compatible(entity, type)) {
+            // Prepare a replacement before removing the old body. Pet identity and saved care never change.
+            Entity replacement = runtime.bodies().spawn(pet, type, entity.getLocation(), Bukkit.getPlayer(pet.ownerId()));
+            if (replacement == null) {
+                runtime.remember(pet, entity);
+                if (entity instanceof Mob mob) net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
+                return;
+            }
+            clearInteractions(pet);
+            runtime.remember(pet, replacement);
+            runtime.visual().removeBody(entity);
+            entity = replacement;
+            runtime.store().requestSave();
+        }
+        runtime.remember(pet, entity);
         runtime.bodies().reattach(entity, pet, type);
         pauseRestoredFollowing(pet, entity);
     }
@@ -633,8 +653,8 @@ public final class PetActions {
         for (Entity candidate : chunk.getEntities()) {
             if (candidate.isValid() && !candidate.isDead() && pet.id().equals(runtime.bodies().readId(candidate))) {
                 reattach(candidate);
-                runtime.store().save();
-                return candidate;
+                runtime.store().requestSave();
+                return runtime.entity(pet);
             }
         }
         Location location = new Location(world, pet.x(), pet.y(), pet.z(), pet.yaw(), 0);
@@ -643,7 +663,7 @@ public final class PetActions {
             pet.clearRuntimeMotion();
             runtime.remember(pet, body);
             pauseRestoredFollowing(pet, body);
-            runtime.store().save();
+            runtime.store().requestSave();
             runtime.plugin().getLogger().info("Restored missing body for pet " + pet.id() + " (" + pet.name() + ")");
         }
         return body;
@@ -761,11 +781,11 @@ public final class PetActions {
                 pet.staying(true);
                 pet.order(PetOrder.STAY);
                 pet.forcedSitUntilMillis(0);
-                if (entity instanceof Mob mob) { net.tfminecraft.companionpets.integration.PetMotion.hold(mob); PetFx.sit(mob, false); PetFx.lie(mob, false); }
+                if (entity instanceof Mob mob) { PostureNavigationGoal.hold(runtime, pet, mob); PetFx.sit(mob, false); PetFx.lie(mob, false); }
             }
             case SPEAK -> {
                 if (entity != null) {
-                    PetFx.ambient(entity);
+                    runtime.voice().ambient(entity);
                 }
             }
             case JUMP -> {
@@ -848,7 +868,7 @@ public final class PetActions {
         if (body != null) {
             markSleep(body, false);
         }
-        runtime.store().save();
+        runtime.store().requestSave();
         Player owner = Bukkit.getPlayer(pet.ownerId());
         if (owner != null && owner.isOnline()) {
             PetFx.tell(owner, pet.name() + " has died");
@@ -885,9 +905,11 @@ public final class PetActions {
             return;
         }
         pet.stored(false);
+        // Time in the Pet House is not an absence that earns a welcome.
+        pet.lastOwnerNearbyMillis(System.currentTimeMillis());
         runtime.remember(pet, entity);
         runtime.resumeFollowing(pet);
-        runtime.store().save();
+        runtime.store().requestSave();
     }
 
     private void releasePet(Player player, Pet pet) {
@@ -910,7 +932,7 @@ public final class PetActions {
             markSleep(entity, false);
             runtime.visual().removeBody(entity);
         }
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.tell(player, pet.name() + " is gone. " + PetTexts.He(pet.sex()) + " is no longer with you");
     }
 
@@ -992,7 +1014,7 @@ public final class PetActions {
         if (!runtime.store().save()) {
             if (runtime.store().remove(pet.id())) {
                 runtime.visual().removeBody(entity);
-                runtime.store().save();
+                runtime.store().requestSave();
             } else {
                 runtime.plugin().getLogger().severe("Could not roll back unsaved pet " + pet.id());
             }
@@ -1027,7 +1049,7 @@ public final class PetActions {
         pet.entityId(null);
         pet.stored(true);
         pet.clearRuntimeMotion();
-        runtime.store().save();
+        runtime.store().requestSave();
     }
 
     private void call(Player player, Pet pet) {
@@ -1056,7 +1078,7 @@ public final class PetActions {
         runtime.resumeFollowing(pet);
         entity.teleport(PetRuntime.beside(player));
         runtime.remember(pet, entity);
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.bar(player, pet.name() + " comes running to your side");
     }
 
@@ -1071,7 +1093,7 @@ public final class PetActions {
         }
         place.setType(runtime.config().kennelBlock());
         runtime.store().kennel(PetStore.kennelKey(place.getWorld().getName(), place.getX(), place.getY(), place.getZ()), player.getUniqueId());
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.bar(player, "Pet House placed. Right-click it to look after your pets");
     }
 

@@ -6,6 +6,9 @@ import net.tfminecraft.companionpets.config.PetAppearance.Clip;
 
 /** One body pose or gesture, plus an optional head-only training gesture. */
 public final class AnimationController {
+    /** Poses ModelEngine plays from its default states; the plugin only adds postures and actions. */
+    public static final java.util.Set<PetAnimation> NATIVE = java.util.EnumSet.of(PetAnimation.IDLE,
+            PetAnimation.WALK, PetAnimation.RUN, PetAnimation.JUMP, PetAnimation.FALL, PetAnimation.FLY, PetAnimation.HOVER);
     private final AnimationPlayer player;
     private final Map<PetAnimation, Clip> clips;
     private PetAnimation pose = PetAnimation.IDLE;
@@ -15,6 +18,7 @@ public final class AnimationController {
     private final java.util.function.LongSupplier clock;
     private long headUntil, actionUntil;
     private boolean customAction;
+    private boolean trainingAttention;
     private PetAnimation belly;
     private long bellyUntil, bellyIdleMillis, stageUntil;
 
@@ -36,7 +40,7 @@ public final class AnimationController {
                 || next == PetAnimation.SWIM || next == PetAnimation.JUMP || next == PetAnimation.FALL)) cancelAction();
         pose = next;
         long now = clock.getAsLong();
-        if (headTilt != null && (now >= headUntil || !player.playing(headTilt.name()))) stopHeadTilt();
+        if (headTilt != null && ((!trainingAttention && now >= headUntil) || !player.playing(headTilt.name()))) stopHeadTilt();
         if (advanceBelly(now)) return;
         if (action != null || customAction) {
             if (now < actionUntil && active != null && player.playing(active.name())) return;
@@ -44,14 +48,20 @@ public final class AnimationController {
             action = null;
             customAction = false;
         }
-        boolean airborne = pose == PetAnimation.JUMP || pose == PetAnimation.FALL;
-        Clip jump = clips.get(PetAnimation.JUMP);
-        Clip wanted = airborne && jump != null && !clips.containsKey(PetAnimation.FALL) ? jump : resolve(pose);
+        if (trainingAttention && headPose()) play(PetAnimation.HEAD_TILT);
+        Clip wanted = nativeLocomotion(pose) ? null : resolve(pose);
         if (wanted == null) { stopActive(); return; }
-        if (wanted != null && (!wanted.equals(active) || !player.playing(wanted.name()))) {
+        if (!wanted.equals(active) || !player.playing(wanted.name())) {
             stopActive();
-            if (airborne && wanted == jump ? player.hold(wanted) : player.play(wanted, true)) active = wanted;
+            if (player.play(wanted, true)) active = wanted;
         }
+    }
+
+    /** ModelEngine's own idle, walk, jump and fly states render these without a plugin clip. */
+    private boolean nativeLocomotion(PetAnimation state) {
+        for (PetAnimation current = state; current != null; current = current.fallback())
+            if (clips.containsKey(current)) return NATIVE.contains(current);
+        return true;
     }
 
     public boolean play(PetAnimation next) {
@@ -61,10 +71,9 @@ public final class AnimationController {
         if (belly != null) return false;
         if ((next == PetAnimation.PET || next == PetAnimation.SHAKE) && (action != null || customAction)) return false;
         if (next == PetAnimation.HEAD_TILT) {
-            if (action != null || customAction || pose == PetAnimation.SLEEP || pose == PetAnimation.LIE
-                    || pose == PetAnimation.SWIM || pose == PetAnimation.JUMP || pose == PetAnimation.FALL) return false;
+            if (action != null || customAction || !headPose()) return false;
             if (headTilt != null && player.playing(headTilt.name())) return false;
-            if (player.length(clip.name()) <= 0 ? !player.hold(clip) : !player.play(clip, false)) return false;
+            if (player.length(clip.name()) <= 0 ? !player.hold(clip) : !player.play(clip, trainingAttention)) return false;
             headTilt = clip;
             headUntil = clock.getAsLong() + duration(clip, 1.2);
             return true;
@@ -88,6 +97,19 @@ public final class AnimationController {
         active = clip;
         actionUntil = clock.getAsLong() + duration(clip, staticSeconds);
         return true;
+    }
+
+    /** Keep the optional head gesture active until the training focus ends. */
+    public void trainingAttention(boolean focused) {
+        if (trainingAttention == focused) return;
+        trainingAttention = focused;
+        stopHeadTilt();
+        if (focused) play(PetAnimation.HEAD_TILT);
+    }
+
+    private boolean headPose() {
+        return pose == PetAnimation.IDLE || pose == PetAnimation.SIT
+                || trainingAttention && pose == PetAnimation.LIE;
     }
 
     private long duration(Clip clip, double staticSeconds) {
@@ -149,10 +171,9 @@ public final class AnimationController {
     private Clip resolve(PetAnimation state) {
         for (PetAnimation current = state; current != null; current = current.fallback()) {
             Clip clip = clips.get(current);
-            if (clip != null) return state == PetAnimation.RUN && current == PetAnimation.WALK
-                    ? new Clip(clip.name(), clip.speed() * 1.5, clip.blend()) : clip;
+            if (clip != null) return clip;
         }
-        return clips.get(PetAnimation.IDLE);
+        return null;
     }
 
     private void stopActive() {

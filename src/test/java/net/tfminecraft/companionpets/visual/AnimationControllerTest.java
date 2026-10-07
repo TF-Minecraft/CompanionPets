@@ -22,10 +22,10 @@ class AnimationControllerTest {
         assertFalse(controller.holdsMovement());
         controller.update(PetAnimation.WALK);
         assertFalse(player.active.contains("shake"));
-        assertEquals("play:walk:true", player.events.getLast());
+        assertTrue(player.active.isEmpty(), "ModelEngine plays the walk itself");
     }
     @Test
-    void currentModelsUseIdleInAirWalkInWaterAndSleepWhenLyingDown() {
+    void airAndWaterWithoutClipsAreLeftToModelEngineAndLyingDownSleeps() {
         Player player = new Player();
         Map<PetAnimation, Clip> clips = new EnumMap<>(PetAnimation.class);
         for (PetAnimation animation : List.of(PetAnimation.IDLE, PetAnimation.WALK, PetAnimation.SIT, PetAnimation.SLEEP, PetAnimation.PAW))
@@ -34,9 +34,9 @@ class AnimationControllerTest {
         AnimationController controller = new AnimationController(player, clips);
         controller.update(PetAnimation.JUMP);
         controller.update(PetAnimation.FALL);
-        assertEquals(List.of("play:idle:true"), player.events);
+        assertEquals(List.of(), player.events);
         controller.update(PetAnimation.SWIM);
-        assertEquals("play:walk:true", player.events.getLast());
+        assertEquals(List.of(), player.events);
         controller.update(PetAnimation.LIE);
         controller.update(PetAnimation.SLEEP);
         assertEquals("play:sleep:true", player.events.getLast());
@@ -55,7 +55,7 @@ class AnimationControllerTest {
         controller.update(PetAnimation.SLEEP);
         assertEquals(List.of("play:sleep:true"), player.events);
         controller.update(PetAnimation.WALK);
-        assertEquals(List.of("play:sleep:true", "stop:sleep", "play:walk:true"), player.events);
+        assertEquals(List.of("play:sleep:true", "stop:sleep"), player.events);
     }
 
     @Test
@@ -69,7 +69,7 @@ class AnimationControllerTest {
         assertEquals("play:paw:false", player.events.getLast());
         player.active.remove("paw");
         controller.update(PetAnimation.WALK);
-        assertEquals("play:walk:true", player.events.getLast());
+        assertTrue(player.active.isEmpty());
         assertFalse(controller.holdsMovement());
     }
 
@@ -83,7 +83,7 @@ class AnimationControllerTest {
         controller.play(PetAnimation.PAW);
         controller.cancelAction();
         controller.update(PetAnimation.IDLE);
-        assertEquals("play:idle:true", player.events.getLast());
+        assertTrue(player.active.isEmpty());
         assertFalse(controller.holdsMovement());
     }
 
@@ -147,7 +147,7 @@ class AnimationControllerTest {
             AnimationController controller = new AnimationController(player, clips);
             controller.update(PetAnimation.IDLE);
             assertFalse(controller.startBelly(5000));
-            assertEquals(List.of("play:idle:true"), player.events);
+            assertEquals(List.of(), player.events);
         }
     }
 
@@ -180,14 +180,12 @@ class AnimationControllerTest {
     }
 
     @Test
-    void jumpDoesNotRepeatWhileFallingAndMissingClipsAreSafe() {
-        Player player = new Player(); var clips = clips(); clips.remove(PetAnimation.FALL);
-        AnimationController controller = new AnimationController(player, clips);
-        controller.update(PetAnimation.JUMP); controller.update(PetAnimation.FALL);
-        controller.update(PetAnimation.FALL);
-        assertEquals(List.of("hold:jump"), player.events);
-        controller.update(PetAnimation.IDLE);
-        assertEquals("play:idle:true", player.events.getLast());
+    void airbornePosesAreLeftToModelEngineAndMissingClipsAreSafe() {
+        Player player = new Player();
+        AnimationController controller = new AnimationController(player, clips());
+        for (PetAnimation pose : List.of(PetAnimation.JUMP, PetAnimation.FALL, PetAnimation.FLY, PetAnimation.HOVER, PetAnimation.RUN))
+            controller.update(pose);
+        assertEquals(List.of(), player.events);
         AnimationController empty = new AnimationController(player, Map.of());
         assertDoesNotThrow(() -> empty.update(PetAnimation.SWIM));
         assertFalse(empty.play(PetAnimation.PET));
@@ -203,7 +201,66 @@ class AnimationControllerTest {
         assertTrue(controller.holdsMovement());
         now.set(2100); controller.update(PetAnimation.IDLE);
         assertFalse(controller.holdsMovement());
-        assertEquals("play:idle:true", player.events.getLast());
+        assertEquals("stop:salute", player.events.getLast()); assertTrue(player.active.isEmpty());
+    }
+
+    @Test void trainingHeadTiltLoopsWithoutRestartingAndEndsWithTheSession() {
+        Player player = new Player();
+        var now = new java.util.concurrent.atomic.AtomicLong();
+        AnimationController controller = new AnimationController(player, clips(), now::get);
+        controller.update(PetAnimation.IDLE);
+        controller.trainingAttention(true);
+        now.set(60_000);
+        controller.trainingAttention(true);
+        controller.update(PetAnimation.IDLE);
+        assertTrue(player.active.contains("head_tilt"));
+        assertEquals(1, player.events.stream().filter("play:head_tilt:true"::equals).count());
+        controller.trainingAttention(false);
+        controller.update(PetAnimation.IDLE);
+        assertFalse(player.active.contains("head_tilt"));
+        assertTrue(player.active.isEmpty());
+    }
+
+    @Test void trainingAttentionYieldsToTricksAndWaterThenResumes() {
+        Player player = new Player();
+        var now = new java.util.concurrent.atomic.AtomicLong();
+        AnimationController controller = new AnimationController(player, clips(), now::get);
+        controller.trainingAttention(true);
+        assertTrue(controller.play(PetAnimation.PAW));
+        controller.update(PetAnimation.SIT);
+        assertFalse(player.active.contains("head_tilt"));
+        now.set(2000);
+        controller.update(PetAnimation.SIT);
+        assertTrue(player.active.contains("head_tilt"));
+        controller.update(PetAnimation.JUMP);
+        assertFalse(player.active.contains("head_tilt"));
+        controller.update(PetAnimation.LIE);
+        assertTrue(player.active.contains("head_tilt"));
+        controller.trainingAttention(false);
+        controller.update(PetAnimation.SWIM);
+        assertFalse(player.active.contains("head_tilt"));
+    }
+
+    @Test void staticTrainingHeadTiltStaysHeldAndMissingClipIsOptional() {
+        Player player = new Player(); player.lengths.put("head_tilt", 0.0);
+        var now = new java.util.concurrent.atomic.AtomicLong();
+        AnimationController controller = new AnimationController(player, clips(), now::get);
+        controller.trainingAttention(true);
+        now.set(60_000); controller.update(PetAnimation.SIT);
+        assertTrue(player.active.contains("head_tilt"));
+        assertEquals(1, player.events.stream().filter("hold:head_tilt"::equals).count());
+        var missing = clips(); missing.remove(PetAnimation.HEAD_TILT);
+        AnimationController optional = new AnimationController(new Player(), missing);
+        assertDoesNotThrow(() -> { optional.trainingAttention(true); optional.update(PetAnimation.IDLE); optional.trainingAttention(false); });
+    }
+
+    @Test void configuredSwimClipOverlaysWaterAndLeavingItHandsBackToModelEngine() {
+        Player player = new Player();
+        AnimationController controller = new AnimationController(player, clips());
+        controller.update(PetAnimation.SWIM);
+        assertEquals(List.of("play:swim:true"), player.events);
+        controller.update(PetAnimation.IDLE);
+        assertEquals(List.of("play:swim:true", "stop:swim"), player.events);
     }
 
     private static final class Player implements AnimationPlayer {

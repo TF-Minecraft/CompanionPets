@@ -197,7 +197,7 @@ final class PetMoments {
     private void askForAffection(Pet pet, Mob body, Player owner) {
         if (!runtime.behaves(pet, PetBehavior.AFFECTION)) return;
         PetFx.look(body, owner);
-        PetFx.sad(body);
+        runtime.voice().sad(body);
         MomentSettings settings = runtime.config().moments();
         PetFx.particle(body, settings.affectionParticle(), settings.affectionParticleCount());
         PetFx.bar(owner, pet.name() + " whimpers and looks at you, asking for a little attention");
@@ -333,16 +333,7 @@ final class PetMoments {
     private void barkAt(Pet pet, Mob body, Player owner, LivingEntity target) {
         runtime.visual().play(body, runtime.config().type(pet.typeId()), "SPEAK");
         PetFx.look(body, target);
-        Sound sound = switch (body.getType()) {
-            case WOLF -> Sound.ENTITY_WOLF_GROWL;
-            case CAT -> Sound.ENTITY_CAT_HISS;
-            case FOX -> Sound.ENTITY_FOX_AGGRO;
-            default -> PetFx.ambientSound(body);
-        };
-        if (sound != null) body.getWorld().playSound(body.getLocation(), sound, 0.8f, 1.0f);
-        if (body.getType() == org.bukkit.entity.EntityType.WOLF) {
-            body.getWorld().playSound(body.getLocation(), Sound.ENTITY_WOLF_AMBIENT, 0.7f, 1.1f);
-        }
+        runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.PROTEST);
         MomentSettings settings = runtime.config().moments();
         PetFx.particle(body, settings.barkParticle(), settings.barkParticleCount());
         PetFx.bar(owner, pet.name() + " suddenly protests at something nearby, then settles down");

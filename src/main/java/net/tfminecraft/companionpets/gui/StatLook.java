@@ -2,17 +2,14 @@ package net.tfminecraft.companionpets.gui;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 
 import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.NeedBand;
-import net.tfminecraft.companionpets.pet.Pet;
 
 public final class StatLook {
     private static final int SEGMENTS = 10;
-    private static final int BAR_SEGMENTS_SHORT = 5;
     private static final String SEGMENT = "■";
     private static final TextColor EMPTY = TextColor.color(0x3A3A3A);
     private static final TextColor GOOD = TextColor.color(0x55FF55);
@@ -83,38 +80,6 @@ public final class StatLook {
             return "Friendly";
         }
         return "Wary";
-    }
-
-    public static Component summary(Pet pet, Component tag) {
-        TextComponent.Builder line = Component.text();
-        if (tag != null) {
-            line.append(tag).append(Component.text("  │  ", NamedTextColor.DARK_GRAY));
-        }
-        boolean first = true;
-        for (Need need : Need.values()) {
-            double value = pet.need(need);
-            if (!first) {
-                line.append(Component.text("   "));
-            }
-            first = false;
-            line.append(Component.text(shortName(need) + " ", NamedTextColor.GRAY));
-            line.append(bar(value, band(value), BAR_SEGMENTS_SHORT));
-        }
-        return line.build();
-    }
-
-    public static Component tag(String text, TextColor color) {
-        return Component.text("● " + text, color);
-    }
-
-    private static String shortName(Need need) {
-        return switch (need) {
-            case HUNGER -> "Food";
-            case MOOD -> "Mood";
-            case ENERGY -> "Energy";
-            case CLEANLINESS -> "Clean";
-            case HEALTH -> "Health";
-        };
     }
 
     private static String pick(NeedBand band, String stable, String low, String critical) {

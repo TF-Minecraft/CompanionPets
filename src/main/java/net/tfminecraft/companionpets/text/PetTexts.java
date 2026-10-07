@@ -61,7 +61,7 @@ public final class PetTexts {
         return switch (need) {
             case HUNGER -> name + "'s stomach is rumbling";
             case MOOD -> name + " is craving some attention";
-            case ENERGY -> name + " is worn out and needs a rest";
+            case ENERGY -> name + " is worn out. Let " + him(sex) + " sit or lie down to rest";
             case CLEANLINESS -> name + " could really use a good brushing";
             case HEALTH -> name + " isn't looking well";
         };
@@ -168,14 +168,14 @@ public final class PetTexts {
     public static String trickDescription(Trick trick) {
         return switch (trick.kind()) {
             case CUSTOM -> "Performs a learned gesture";
-            case SIT -> "Sits down and stops following";
+            case SIT -> "Sits down and rests";
             case FOLLOW -> "Wakes up and follows you again";
-            case COME -> "Comes to you, then resumes its previous posture";
-            case STAY -> "Stands still where it is, until you say follow";
+            case COME -> "Comes to you, then resumes its pose";
+            case STAY -> "Stands still until you say follow";
             case SPEAK -> "Barks, meows or yips on cue";
             case JUMP -> "Leaps up into the air";
             case SPIN -> "Twirls around in a circle";
-            case LAY -> "Lies down awake until you give another order";
+            case LAY -> "Lies down awake and rests";
             case PAW -> "Gives you a paw";
         };
     }

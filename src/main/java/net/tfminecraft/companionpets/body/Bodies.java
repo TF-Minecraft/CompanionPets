@@ -17,6 +17,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import net.kyori.adventure.text.Component;
 
 import net.tfminecraft.companionpets.config.PetTypeDef;
+import net.tfminecraft.companionpets.config.PetBase;
 import net.tfminecraft.companionpets.integration.MythicSpawn;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.visual.PetVisual;
@@ -33,7 +34,7 @@ public final class Bodies {
     }
 
     public Entity spawn(Pet pet, PetTypeDef type, Location location, Player owner) {
-        if (location.getWorld() == null || type == null) {
+        if (location.getWorld() == null || type == null || !PetBase.supported(type.entity())) {
             return null;
         }
         Entity entity;
@@ -47,15 +48,28 @@ public final class Bodies {
         if (entity == null) {
             return null;
         }
+        if (!compatible(entity, type)) {
+            plugin.getLogger().warning("Pet " + type.id() + ": spawned body must be " + type.entity()
+                    + " with native owner-follow AI; found " + entity.getType());
+            entity.remove();
+            return null;
+        }
+        if (type.mythicMob() != null && !Bukkit.getMobGoals().hasGoal((Tameable) entity,
+                com.destroystokyo.paper.entity.ai.VanillaGoal.FOLLOW_OWNER)) {
+            plugin.getLogger().warning("Pet " + type.id() + ": MythicMobs body is missing the native FollowOwner goal");
+            entity.remove();
+            return null;
+        }
         prepare(entity, pet, type, owner);
         visual.play(entity, type, "SPAWN");
         return entity;
     }
 
     public void reattach(Entity entity, Pet pet, PetTypeDef type) {
-        if (!(entity instanceof LivingEntity)) {
+        if (!compatible(entity, type)) {
             return;
         }
+        configure(entity, type);
         tag(entity, pet.id());
         name(entity, pet.name());
         if (entity instanceof Tameable tameable) {
@@ -80,6 +94,7 @@ public final class Bodies {
     }
 
     private void prepare(Entity entity, Pet pet, PetTypeDef type, Player owner) {
+        configure(entity, type);
         tag(entity, pet.id());
         name(entity, pet.name());
         if (entity instanceof Ageable ageable) {
@@ -94,12 +109,22 @@ public final class Bodies {
         if (entity instanceof Mob mob) mob.setAware(aware(pet) || net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob));
     }
 
+    public boolean compatible(Entity entity, PetTypeDef type) {
+        return entity instanceof Mob && entity instanceof Tameable && type != null
+                && PetBase.supported(type.entity()) && entity.getType() == type.entity();
+    }
+
+    public void configure(Entity entity, PetTypeDef type) {
+        entity.setSilent(!type.sounds().nativeSounds());
+        if (entity instanceof Mob mob) NativeCombatGuard.configure(plugin, mob, type.nativeCombat());
+    }
+
     private static boolean aware(Pet pet) {
         var mode = net.tfminecraft.companionpets.behavior.Locomotion.choose(pet.illness(), pet.need(net.tfminecraft.companionpets.pet.Need.HEALTH),
                 pet.need(net.tfminecraft.companionpets.pet.Need.ENERGY), pet.need(net.tfminecraft.companionpets.pet.Need.HUNGER), pet.activity(),
                 pet.fetch() != null, System.currentTimeMillis() < pet.forcedSitUntilMillis(), pet.order(), pet.staying());
-        return (mode == net.tfminecraft.companionpets.behavior.Locomotion.Mode.FOLLOW
-                || mode == net.tfminecraft.companionpets.behavior.Locomotion.Mode.PLAY || mode == net.tfminecraft.companionpets.behavior.Locomotion.Mode.FETCH);
+        // A staying body waits frozen until the ticker gives it the posture goal, so it cannot wander first.
+        return mode != net.tfminecraft.companionpets.behavior.Locomotion.Mode.STAY;
     }
 
     private static void keepPersistent(Entity entity) {

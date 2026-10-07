@@ -1,8 +1,6 @@
 package net.tfminecraft.companionpets.runtime;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -12,7 +10,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 
-import net.tfminecraft.companionpets.config.RoamSettings;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.pet.Activity;
 import net.tfminecraft.companionpets.pet.Pet;
@@ -20,13 +17,13 @@ import net.tfminecraft.companionpets.pet.PetOrder;
 import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.visual.PetAnimation;
 
-/** Small trips and changing attention around an owner who is standing still. */
+/** Explicit calls and fetch returns; idle movement belongs to native AI. */
 final class PetRoaming {
     private final PetRuntime runtime;
     private final java.util.function.BiConsumer<Entity, Boolean> sleep;
     private final Map<UUID, OwnerMotion> owners = new HashMap<>();
-    private final Map<UUID, Plan> plans = new HashMap<>();
     private final Map<UUID, Attention> attention = new HashMap<>();
+    private final Map<UUID, UUID> listeners = new HashMap<>();
 
     PetRoaming(PetRuntime runtime, java.util.function.BiConsumer<Entity, Boolean> sleep) { this.runtime = runtime; this.sleep = sleep; }
 
@@ -53,6 +50,25 @@ final class PetRoaming {
 
     void attend(Pet pet, Player owner, long now) {
         attend(pet, owner, now, null);
+    }
+
+    /** A pet that does not come when called still turns to whoever said its name, whatever its pose. */
+    void listen(Pet pet, Player player, long now) {
+        listeners.put(pet.id(), player.getUniqueId());
+        pet.listeningUntilMillis(now + Math.round(runtime.config().roaming().nameAttentionSeconds() * 1000.0));
+        if (runtime.entity(pet) instanceof Mob body) PetFx.look(body, player);
+    }
+
+    void tickListening(Pet pet, Mob body, long now) {
+        UUID listener = listeners.get(pet.id());
+        if (listener == null) return;
+        Player player = Bukkit.getPlayer(listener);
+        if (now >= pet.listeningUntilMillis() || player == null || !player.getWorld().equals(body.getWorld())) {
+            listeners.remove(pet.id());
+            pet.listeningUntilMillis(0);
+            return;
+        }
+        PetFx.look(body, player);
     }
 
     PetOrder returnOrder(Pet pet) {
@@ -96,7 +112,6 @@ final class PetRoaming {
     }
 
     private void attend(Pet pet, Player owner, long now, PetOrder returnOrder) {
-        plans.remove(pet.id());
         if (runtime.entity(pet) instanceof Mob body) {
             net.tfminecraft.companionpets.integration.PetMotion.stop(body);
             body.setAware(true);
@@ -129,14 +144,15 @@ final class PetRoaming {
             if (job.returnOrder != null) {
                 attention.remove(pet.id());
                 restorePosture(pet, body, job.returnOrder);
-                PetFx.happy(body, false);
+                runtime.voice().happy(body, false);
                 return true;
             }
             if (job.waitUntil == 0) job.waitUntil = now + Math.round(runtime.config().roaming().nameAttentionSeconds() * 1000.0);
-            net.tfminecraft.companionpets.integration.PetMotion.hold(body);
+            // The call goal owns MOVE, so the pet waits with native AI awake and its head on the owner.
+            PetMotion.stop(body);
             PetFx.look(body, owner);
             if (!job.greeted) {
-                PetFx.happy(body, false);
+                runtime.voice().happy(body, false);
                 PetFx.hearts(body, 2);
                 job.greeted = true;
             }
@@ -151,124 +167,20 @@ final class PetRoaming {
         if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT);
         sleep.accept(body, false);
         if (order == PetOrder.FOLLOW) { PetMotion.stop(body); body.setAware(true); }
-        else if (order == PetOrder.SIT || order == PetOrder.LAY) PostureNavigationGoal.hold(runtime, pet, body);
-        else PetMotion.hold(body);
+        else PostureNavigationGoal.hold(runtime, pet, body);
         var type = runtime.config().type(pet.typeId());
         if (type != null) runtime.visual().update(body, type,
                 order == PetOrder.LAY ? PetAnimation.LIE : order == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE);
-        runtime.store().save();
+        runtime.store().requestSave();
     }
 
-    boolean step(Pet pet, Mob body, Player owner, double speed, long now) {
-        RoamSettings settings = runtime.config().roaming();
-        if (!runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.ROAM)
-                || !settings.enabled() || owner == null || !owner.isOnline() || !owner.getWorld().equals(body.getWorld())
-                || body.getTarget() != null || pet.activity() != Activity.NONE
-                || body.getLocation().distanceSquared(owner.getLocation()) > square(settings.radius() + 2)) {
-            plans.remove(pet.id());
-            return false;
-        }
-        if (!ownerStationary(owner, now)) {
-            plans.remove(pet.id());
-            return false;
-        }
-        Plan plan = plans.get(pet.id());
-        if (plan == null || now >= plan.until || plan.targetId != null && Bukkit.getEntity(plan.targetId) == null) {
-            plan = choose(pet, body, owner, now, settings);
-            plans.put(pet.id(), plan);
-        }
-        Entity targetEntity = plan.targetId == null ? null : Bukkit.getEntity(plan.targetId);
-        Location target = plan.point;
-        if (target == null || !target.getWorld().equals(body.getWorld())
-                || targetEntity != null && !targetEntity.getWorld().equals(body.getWorld())) {
-            plans.remove(pet.id());
-            return false;
-        }
-        double stopDistance = targetEntity == null ? 0.8 : 2.0;
-        if (body.getLocation().distanceSquared(target) > square(stopDistance)) {
-            plan.arrived = false;
-            if (now >= plan.nextMoveAt) {
-                body.getPathfinder().moveTo(target, speed * 0.9);
-                plan.nextMoveAt = now + 1_500L;
-            }
-        } else {
-            if (!plan.arrived) {
-                body.getPathfinder().stopPathfinding();
-                plan.arrived = true;
-            }
-            if (targetEntity != null && body.getLocation().distanceSquared(targetEntity.getLocation()) <= 16.0) {
-                PetFx.look(body, targetEntity);
-                if (!plan.greeted && targetEntity instanceof Player) {
-                    PetFx.happy(body, false);
-                    PetFx.particle(body, org.bukkit.Particle.HAPPY_VILLAGER, 2);
-                    plan.greeted = true;
-                }
-            } else if (runtime.random().nextInt(5) == 0) {
-                PetFx.look(body, owner);
-            }
-        }
-        return true;
-    }
-
-    private Plan choose(Pet pet, Mob body, Player owner, long now, RoamSettings settings) {
-        List<Entity> pets = new ArrayList<>();
-        List<Entity> players = new ArrayList<>();
-        for (Entity entity : body.getNearbyEntities(Math.max(settings.petRadius(), settings.playerRadius()), 3,
-                Math.max(settings.petRadius(), settings.playerRadius()))) {
-            if (entity.getWorld() != owner.getWorld() || entity == body) continue;
-            if (entity instanceof Player player && player != owner
-                    && body.getLocation().distanceSquared(player.getLocation()) <= square(settings.playerRadius())
-                    && owner.getLocation().distanceSquared(player.getLocation()) <= square(settings.radius())) {
-                players.add(entity);
-            } else if (runtime.byEntity(entity) instanceof Pet other && other != pet
-                    && !other.stored() && !other.dead()
-                    && body.getLocation().distanceSquared(entity.getLocation()) <= square(settings.petRadius())
-                    && owner.getLocation().distanceSquared(entity.getLocation()) <= square(settings.radius())) {
-                pets.add(entity);
-            }
-        }
-        double choice = runtime.random().nextDouble();
-        Entity target = choice < 0.45 && !pets.isEmpty() ? familiarChoice(pet, pets)
-                : choice < 0.75 && !players.isEmpty() ? familiarChoice(pet, players)
-                : null;
-        if (target == null && !pets.isEmpty() && runtime.random().nextBoolean()) {
-            target = familiarChoice(pet, pets);
-        }
-        double angle = runtime.random().nextDouble() * Math.PI * 2;
-        double radius = 1.5 + runtime.random().nextDouble() * Math.max(0.5, settings.radius() - 1.5);
-        Location point = owner.getLocation().clone().add(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
-        double low = Math.min(settings.choiceMinSeconds(), settings.choiceMaxSeconds());
-        double high = Math.max(settings.choiceMinSeconds(), settings.choiceMaxSeconds());
-        long until = now + Math.round((low + runtime.random().nextDouble() * (high - low)) * 1000.0);
-        return new Plan(target == null ? null : target.getUniqueId(),
-                target == null ? point : target.getLocation(), until);
-    }
-
-    private Entity familiarChoice(Pet pet, List<Entity> candidates) {
-        double[] weights = new double[candidates.size()];
-        double total = 0;
-        for (int i = 0; i < candidates.size(); i++) {
-            Entity entity = candidates.get(i); Pet other = runtime.byEntity(entity);
-            double trust = other != null && runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.PET_FRIENDSHIPS)
-                    ? pet.friends().trust(other.id()) : entity instanceof Player
-                            && runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.RECOGNIZE_CARERS)
-                                    ? pet.carers().trust(entity.getUniqueId()) : 0;
-            weights[i] = 1 + trust / 20; total += weights[i];
-        }
-        double roll = runtime.random().nextDouble() * total;
-        for (int i = 0; i < weights.length; i++) if ((roll -= weights[i]) < 0) return candidates.get(i);
-        return candidates.getLast();
-    }
-
-    void cancel(Pet pet) { plans.remove(pet.id()); cancelAttention(pet); }
+    void cancel(Pet pet) { cancelAttention(pet); }
     void cancelWithPosture(Pet pet) {
         Attention job = attention.get(pet.id());
         cancel(pet);
         if (job != null && job.returnOrder != null && runtime.entity(pet) instanceof Mob body)
             restorePosture(pet, body, job.returnOrder);
     }
-    void cancelPlan(Pet pet) { plans.remove(pet.id()); }
-    boolean exploring(Pet pet) { return plans.containsKey(pet.id()); }
 
     private void cancelAttention(Pet pet) {
         attention.remove(pet.id());
@@ -282,7 +194,11 @@ final class PetRoaming {
                 restorePosture(pet, body, entry.getValue().returnOrder);
             else if (pet != null && pet.activity() == Activity.ATTENDING) pet.activity(Activity.NONE);
         }
-        plans.clear(); attention.clear(); owners.clear();
+        for (UUID id : listeners.keySet()) {
+            var pet = runtime.store().get(id);
+            if (pet != null) pet.listeningUntilMillis(0);
+        }
+        attention.clear(); owners.clear(); listeners.clear();
     }
 
     private static double horizontalSpeed(Player player) {
@@ -290,24 +206,11 @@ final class PetRoaming {
                 + player.getVelocity().getZ() * player.getVelocity().getZ();
     }
 
-    private static double square(double value) { return value * value; }
 
     private static final class OwnerMotion {
         private Location location;
         private long lastMovedAt;
         private OwnerMotion(Location location, long now) { this.location = location; this.lastMovedAt = now; }
-    }
-
-    private static final class Plan {
-        private final UUID targetId;
-        private final Location point;
-        private final long until;
-        private boolean greeted;
-        private boolean arrived;
-        private long nextMoveAt;
-        private Plan(UUID targetId, Location point, long until) {
-            this.targetId = targetId; this.point = point; this.until = until;
-        }
     }
 
     private static final class Attention {

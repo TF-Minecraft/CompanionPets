@@ -178,6 +178,7 @@ final class PetTraining {
 
     public void endTraining(Player player, Pet pet, String reason) {
         runtime.sessions().clearTraining(player.getUniqueId());
+        if (pet != null) runtime.visual().trainingAttention(runtime.entity(pet), runtime.config().type(pet.typeId()), false);
         if (!player.isOnline()) {
             return;
         }
@@ -213,7 +214,6 @@ final class PetTraining {
 
     void beginTraining(Player player, Pet pet, Entity entity) {
         if (!pet.ownerId().equals(player.getUniqueId()) || pet.stored()) return;
-        runtime.visual().cancelAction(entity);
         PetTypeDef trainingType = runtime.config().type(pet.typeId());
         if (trainingType == null || trainingType.tricks().stream().noneMatch(t -> allowsTrick(pet, t))) {
             PetFx.bar(player, pet.name() + " has no available tricks to learn");
@@ -221,6 +221,8 @@ final class PetTraining {
         }
         TrainingSession existing = runtime.sessions().training(player.getUniqueId());
         if (existing != null && existing.petId().equals(pet.id())) {
+            if (entity instanceof Mob mob) TrainingNavigationGoal.begin(runtime, pet, mob, player);
+            runtime.visual().trainingAttention(entity, trainingType, entity instanceof Mob mob && runtime.trainingFocused(pet, mob));
             PetFx.bar(player, PetTexts.trainingPrompt(pet));
             return;
         }
@@ -233,11 +235,13 @@ final class PetTraining {
         if (existing != null) {
             endTraining(player, runtime.store().get(existing.petId()), "you started training another pet");
         }
+        runtime.visual().cancelAction(entity);
         runtime.sessions().training(player.getUniqueId(), new TrainingSession(pet.id()));
         PetFx.look(entity, player);
         if (entity instanceof Mob mob) {
-            mob.getPathfinder().stopPathfinding();
+            TrainingNavigationGoal.begin(runtime, pet, mob, player);
         }
+        runtime.visual().trainingAttention(entity, trainingType, entity instanceof Mob mob && runtime.trainingFocused(pet, mob));
         PetFx.bar(player, PetTexts.trainingPrompt(pet));
         PetFx.tell(player, "Training " + pet.name() + ". Look at " + PetTexts.him(pet.sex()) + " and say a command in chat."
                 + practiceList(pet));
@@ -294,7 +298,7 @@ final class PetTraining {
         session.clearReward();
         Entity entity = runtime.entity(pet);
         if (entity != null) {
-            PetFx.eat(entity);
+            runtime.voice().eat(entity);
             runtime.visual().play(entity, runtime.config().type(pet.typeId()), "EAT");
             if (success) {
                 PetFx.hearts(entity, 3);

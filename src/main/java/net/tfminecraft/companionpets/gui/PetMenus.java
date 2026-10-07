@@ -106,24 +106,32 @@ public final class PetMenus {
                 line(PetTexts.age(pet.bornAt(), System.currentTimeMillis()), NamedTextColor.GRAY)));
 
         Component treat = itemList(type == null ? List.of() : type.treats(), "treats");
-        inventory.setItem(20, needIcon(food, pet, Need.HUNGER, line("Feed ", NamedTextColor.DARK_GRAY).append(foods(type))));
-        inventory.setItem(21, needIcon(Material.SUNFLOWER, pet, Need.MOOD,
-                line("Throw a toy, or pet " + PetTexts.him(pet.sex()) + " with an empty hand. Treats: ", NamedTextColor.DARK_GRAY).append(treat)));
-        inventory.setItem(22, needIcon(Material.BLAZE_POWDER, pet, Need.ENERGY,
-                line("Teach " + PetTexts.him(pet.sex()) + " to rest, or " + PetTexts.he(pet.sex()) + " lies down when exhausted", NamedTextColor.DARK_GRAY)));
+        // Lore lines stay short; Minecraft widens the whole tooltip to its longest line.
+        inventory.setItem(20, needIcon(food, pet, Need.HUNGER, List.of(
+                line("Feed " + PetTexts.him(pet.sex()) + ":", NamedTextColor.DARK_GRAY),
+                line(" ", NamedTextColor.DARK_GRAY).append(foods(type)))));
+        inventory.setItem(21, needIcon(new ItemStack(Material.SUNFLOWER), pet, Need.MOOD, List.of(
+                line("Throw a toy, or pet " + PetTexts.him(pet.sex()) + " by hand", NamedTextColor.DARK_GRAY),
+                line("Treats: ", NamedTextColor.DARK_GRAY).append(treat))));
+        inventory.setItem(22, needIcon(new ItemStack(Material.BLAZE_POWDER), pet, Need.ENERGY, List.of(
+                line("Rests while sitting or lying down", NamedTextColor.DARK_GRAY),
+                line(PetTexts.He(pet.sex()) + " lies down when exhausted", NamedTextColor.DARK_GRAY))));
         List<ItemRef> brushes = type == null ? List.of() : type.brushes();
         ItemRef brush = brushes.isEmpty() ? null : brushes.getFirst();
-        inventory.setItem(23, needIcon(brush == null ? new ItemStack(Material.BRUSH) : brush.icon(Material.BRUSH), pet, Need.CLEANLINESS,
-                line("Use ", NamedTextColor.DARK_GRAY).append(itemList(brushes, "a cleaning item"))
-                        .append(line(" on " + PetTexts.him(pet.sex()), NamedTextColor.DARK_GRAY))));
+        inventory.setItem(23, needIcon(brush == null ? new ItemStack(Material.BRUSH) : brush.icon(Material.BRUSH), pet, Need.CLEANLINESS, List.of(
+                line("Brush " + PetTexts.him(pet.sex()) + " with:", NamedTextColor.DARK_GRAY),
+                line(" ", NamedTextColor.DARK_GRAY).append(itemList(brushes, "a cleaning item")))));
         List<ItemRef> medicines = type == null ? List.of() : type.medicines();
         ItemRef medicine = medicines.isEmpty() ? ItemRef.vanilla(Material.HONEY_BOTTLE) : medicines.getFirst();
         inventory.setItem(24, needIcon(sick ? medicine.icon(Material.HONEY_BOTTLE) : new ItemStack(Material.GOLDEN_APPLE), pet, Need.HEALTH,
                 sick
-                        ? line("Medicine gives a health boost: ", NamedTextColor.DARK_GRAY).append(itemList(medicines, "medicine"))
-                        : line("Food, brushing and rest restore health", NamedTextColor.DARK_GRAY),
-                line("Food and cleanliness >= 25 to recover", NamedTextColor.DARK_GRAY),
-                line("Energy >= 25 or rest; low mood is OK", NamedTextColor.DARK_GRAY),
+                        ? List.of(line("Medicine gives a health boost:", NamedTextColor.DARK_GRAY),
+                                line(" ", NamedTextColor.DARK_GRAY).append(itemList(medicines, "medicine")))
+                        : List.of(line("Food and brushing restore health", NamedTextColor.DARK_GRAY)),
+                line("Recovers over time while:", NamedTextColor.DARK_GRAY),
+                line(" Food and cleanliness >= 25", NamedTextColor.DARK_GRAY),
+                line(" Energy >= 25, or resting", NamedTextColor.DARK_GRAY),
+                line(" (low mood is OK)", NamedTextColor.DARK_GRAY),
                 sick ? line(PetTexts.illness(pet.name(), pet.sex(), pet.illness()), NamedTextColor.RED) : null));
 
         if (back) MenuNavigation.back(inventory, management ? "Return to the Pet House list" : "Return to this player's pets");
@@ -382,11 +390,7 @@ public final class PetMenus {
 
     private static void frame(Inventory inventory) { MenuBackground.fill(inventory); }
 
-    private static ItemStack needIcon(Material material, Pet pet, Need need, Component hint, Component... extra) {
-        return needIcon(new ItemStack(material), pet, need, hint, extra);
-    }
-
-    private static ItemStack needIcon(ItemStack material, Pet pet, Need need, Component hint, Component... extra) {
+    private static ItemStack needIcon(ItemStack material, Pet pet, Need need, List<Component> hint, Component... extra) {
         double value = pet.need(need);
         List<Component> lore = new ArrayList<>();
         lore.add(StatLook.bar(value));
@@ -397,7 +401,7 @@ public final class PetMenus {
             }
         }
         lore.add(Component.empty());
-        lore.add(hint);
+        lore.addAll(hint);
         return named(material, PetTexts.needName(need), NamedTextColor.WHITE, lore.toArray(new Component[0]));
     }
 

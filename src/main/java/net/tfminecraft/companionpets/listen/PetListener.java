@@ -197,6 +197,7 @@ public final class PetListener implements Listener {
             event.setDroppedExp(0);
             return;
         }
+        if (event.getEntity().isSilent()) runtime.voice().play(event.getEntity(), net.tfminecraft.companionpets.config.PetSounds.Event.DEATH);
         actions.lostBody(pet);
     }
 
@@ -205,6 +206,7 @@ public final class PetListener implements Listener {
         if (event.getFinalDamage() <= 0) return;
         Pet victim = runtime.byEntity(event.getEntity());
         if (victim != null) {
+            if (event.getEntity().isSilent()) runtime.voice().hurt(event.getEntity());
             runtime.visual().cancelAction(event.getEntity());
             runtime.visual().play(event.getEntity(), runtime.config().type(victim.typeId()), "HURT");
         }
@@ -224,7 +226,7 @@ public final class PetListener implements Listener {
                 event.getBlock().getX(),
                 event.getBlock().getY(),
                 event.getBlock().getZ()))) {
-            runtime.store().save();
+            runtime.store().requestSave();
         }
     }
 

@@ -65,7 +65,7 @@ public final class FurniturePetHouses implements Listener {
         Entity entity = petHouse(event);
         if (entity == null || !(event instanceof PlayerEvent placement) || placement.getPlayer() == null) return;
         runtime.store().kennel(key(entity), placement.getPlayer().getUniqueId());
-        runtime.store().save();
+        runtime.store().requestSave();
         PetFx.bar(placement.getPlayer(), "Pet House placed. Right-click it to look after your pets");
     }
 
@@ -91,7 +91,7 @@ public final class FurniturePetHouses implements Listener {
 
     void broken(Event event) {
         Entity entity = petHouse(event);
-        if (entity != null && runtime.store().removeKennel(key(entity))) runtime.store().save();
+        if (entity != null && runtime.store().removeKennel(key(entity))) runtime.store().requestSave();
     }
 
     private Entity petHouse(Event event) {
