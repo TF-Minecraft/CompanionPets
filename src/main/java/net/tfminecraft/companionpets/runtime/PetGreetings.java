@@ -7,7 +7,6 @@ import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Sound;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
@@ -273,7 +272,7 @@ final class PetGreetings {
         if (greeting.phase == Phase.BOUNCE && ownerDistance < 2.6) {
             body.getPathfinder().stopPathfinding();
             PetFx.look(body, greeting.owner.getEyeLocation());
-            if (body.getType() != EntityType.FROG && runtime.behaves(pet, PetBehavior.GREETING_JUMPS) && mood(pet, greeting).jumps()
+            if (runtime.behaves(pet, PetBehavior.GREETING_JUMPS) && mood(pet, greeting).jumps()
                     && runtime.config().greeting().jumpEnabled() && now >= greeting.nextJumpAt
                     && body.isOnGround() && Math.abs(body.getLocation().getY() - front.getY()) < 1
                     && body.getLocation().clone().add(0, 1, 0).getBlock().isPassable()
@@ -300,17 +299,6 @@ final class PetGreetings {
                 : runtime.config().greeting().speed() * (0.65 + 0.35 * mood(pet, greeting).intensity());
         if (!runtime.behaves(pet, PetBehavior.GREETING_TAIL_WAG)) speed = Math.min(1, speed);
         if (path != null && path.canReachFinalPoint()) body.getPathfinder().moveTo(path, speed);
-        if (body.getType() == EntityType.FROG && runtime.behaves(pet, PetBehavior.GREETING_JUMPS)
-                && runtime.config().greeting().jumpEnabled() && pet.need(Need.ENERGY) >= 40 && pet.need(Need.HEALTH) >= 70
-                && now >= greeting.nextJumpAt && greeting.frogHops < 2 && body.isOnGround()
-                && horizontalDistance(body.getLocation(), front) > 0.85 && path != null && path.canReachFinalPoint()) {
-            Vector step = front.toVector().subtract(body.getLocation().toVector()).setY(0).normalize().multiply(0.8);
-            Location landing = safeGround(body.getLocation().clone().add(step));
-            if (landing != null && free(pet, greeting, landing) && safeHop(body.getLocation(), landing)) {
-                body.getPathfinder().stopPathfinding(); body.setVelocity(step.multiply(0.15).setY(0.32));
-                greeting.nextJumpAt = now + 1600; greeting.frogHops++;
-            }
-        }
         PetFx.look(body, greeting.owner.getEyeLocation());
     }
 
@@ -396,7 +384,6 @@ final class PetGreetings {
         long nextJumpAt;
         int circleSteps;
         int meows;
-        int frogHops;
         long pauseUntil;
 
         Greeting(Mob body, Player owner, Pet pet, long until, double angle, int direction, boolean mobile, boolean reunion, int slot) {

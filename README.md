@@ -83,7 +83,9 @@ override any inherited field. Mappings merge by key; ordinary lists replace
 the corresponding list. Templates have one layer; a species does not inherit
 another species. Unknown species are warned about and skipped.
 
-Only **WOLF and CAT** supply supported native following. A model of a fox, frog
+The body supplies navigation and native AI/mechanics; `behaviors` chooses the
+plugin's optional actions independently of WOLF/CAT, and `voice` chooses its
+sound identity. Only **WOLF and CAT** supply supported native following. A model of a fox, frog
 or another animal must use one of those bodies and select its own voice. Saved
 pets with unsupported or missing type definitions remain stored. For MythicMobs,
 declare `entity: WOLF` or `CAT` and retain its native FollowOwner goal. Active
@@ -127,6 +129,13 @@ Optional behavior IDs:
 
 `roam` is an accepted obsolete ID: idle movement now comes from native AI.
 Automatic care and responding to the pet's name remain independent of these sets.
+`toy-jumps` enables both waiting hops and favorite-toy reaction hops on either
+supported body. `toy-tail-wag` controls the tail gesture and the eager whole-body
+shuffle in front of a held toy; removing it disables both. `cat-play` controls
+the gentler favorite-toy side steps (and cat-style fetch investigation), even on
+a WOLF body. Default dog/cat templates retain their existing movement patterns.
+Native wolf water shakes, anger handling, cat crouching/sitting and navigation
+still depend on the physical body.
 
 ### Models and animations
 
@@ -170,8 +179,16 @@ after regenerating blueprints that were already loaded.
 
 Omit `voice` and `sounds` to retain native audio and interaction sounds from the
 base `entity`. `voice: frog` selects a profile and silences the base body's audio.
-Available presets: `wolf`, `cat`, `fox`, `frog`, `parrot`, `none`. `voice: false`
-silences the pet. A mapping can change just the inherited global pitch:
+Enhanced presets: `wolf`, `cat`, `fox`, `frog`, `parrot`; `none` starts empty.
+Any other vanilla entity ID, such as `voice: rabbit` or `voice: pig`, generates a
+voice from its registered Minecraft sounds. Ambient, greeting, toy, happy,
+happy-quiet, social, sad and protest use `minecraft:entity.<entity>.ambient`;
+hurt/death use `.hurt`/`.death`, and eat uses `minecraft:entity.generic.eat`.
+Each automatic sound is checked against the server registry. Missing sounds fall
+back to a valid ambient sound, or the event is disabled with a warning. An unknown
+entity or an entity without any valid entity sounds warns and stays silent.
+The enhanced presets retain their purr/whine/hiss and other specialized cues.
+`voice: false` silences the pet. A mapping can change just the inherited global pitch:
 
 ```yaml
 voice:
@@ -191,7 +208,9 @@ Events: `ambient`, `happy`, `happy-quiet`, `sad`, `hurt`, `death`, `greeting`,
 `toy`, `social`, `protest`, `eat`. Each accepts a sound name, a list, `false`/`[]`,
 or `{sounds: [...], volume: 0.8, pitch: 1.0, min-interval-seconds: 0}`. Volume
 ranges from 0–4, and intervals from 0–3600 seconds. Use Bukkit sound names or
-namespaced resource-pack keys. Omitted events inherit the selected preset.
+namespaced resource-pack keys. Minecraft keys must exist in the server registry;
+explicit custom resource-pack namespaces may be client-only and keep their
+existing syntax. Omitted events inherit the selected or generated voice.
 The existing `sounds` syntax supports the same settings and remains valid;
 explicit `sounds` fields override `voice` fields in the same definition.
 
@@ -231,7 +250,7 @@ weights are positive chances, and `[]` disables loot.
 ### Inspecting the result
 
 Use `/companionpets inspect beagle` from chat or the console. It shows the resolved
-species, body, egg, voice and event pitches, configured and active behaviors,
+species, body, egg, voice (preset/generated/none) and event pitches, configured and active behaviors,
 reasons for automatic disabling, allowed/default tricks, unavailable custom tricks,
 and model clips found, missing or explicitly disabled. It uses the same capability
 resolution as gameplay and requires `companionpets.admin.list`. Tab completes

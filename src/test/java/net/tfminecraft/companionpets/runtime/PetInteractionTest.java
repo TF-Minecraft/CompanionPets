@@ -694,6 +694,68 @@ class PetInteractionTest {
         assertEquals(0, body.getVelocity().getY(), "A tired dog can watch without jumping");
     }
 
+    @Test void catBodyWithToyJumpsHopsWhileWaitingForAnOrdinaryToy() {
+        testConfig.set("species.hopper.entity", "CAT");
+        testConfig.set("species.hopper.behaviors.add", java.util.List.of("toy-jumps"));
+        testConfig.set("pets.wolf.entity", null);
+        testConfig.set("pets.wolf.species", "hopper");
+        greetingSpecies = org.bukkit.entity.EntityType.CAT;
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("BONE");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        long now = System.currentTimeMillis();
+        actions.anticipation().tick(now);
+        body.teleport(PetSpacing.toyFront(runtime, pet, player));
+        actions.anticipation().advance(pet, now + 250);
+        actions.anticipation().advance(pet, now + 3000);
+        assertTrue(body.getVelocity().getY() >= .30, "toy-jumps enables waiting hops regardless of the CAT body");
+        assertEquals(99.8, pet.need(Need.ENERGY), .001);
+    }
+
+    @Test void dogWithToyJumpsRemovedNeverHopsForOrdinaryOrFavoriteToys() {
+        testConfig.set("pets.wolf.species", "dog");
+        testConfig.set("pets.wolf.behaviors.remove", java.util.List.of("toy-jumps"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; body.setOnGround(true);
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        for (boolean favorite : new boolean[]{false, true}) {
+            actions.anticipation().clear();
+            pet.favoriteToy(favorite ? "STICK" : "BONE");
+            body.setVelocity(new org.bukkit.util.Vector());
+            long now = System.currentTimeMillis();
+            actions.anticipation().tick(now);
+            body.teleport(PetSpacing.toyFront(runtime, pet, player));
+            for (int i = 1; i <= 14; i++) actions.anticipation().advance(pet, now + i * 1000);
+            assertEquals(0, body.getVelocity().getY());
+            assertEquals(100, pet.need(Need.ENERGY));
+        }
+    }
+
+    @Test void toyTailWagControlsWholeBodyShuffleOnCatBodiesAndCanBeRemovedFromDogs() {
+        greetingSpecies(org.bukkit.entity.EntityType.CAT);
+        testConfig.set("pets.wolf.behaviors.add", java.util.List.of("toy-tail-wag"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("BONE");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        long now = System.currentTimeMillis();
+        actions.anticipation().tick(now);
+        body.teleport(PetSpacing.toyFront(runtime, pet, player));
+        actions.anticipation().advance(pet, now + 250);
+        Location first = navigationTarget;
+        actions.anticipation().advance(pet, now + 1250);
+        assertTrue(first.distance(navigationTarget) > 1, "CAT body can perform the configured eager shuffle");
+        actions.anticipation().clear();
+        testConfig.set("pets.wolf.behaviors", null);
+        testConfig.set("pets.wolf.behaviors.remove", java.util.List.of("toy-tail-wag"));
+        greetingSpecies(org.bukkit.entity.EntityType.WOLF);
+        pet.favoriteToy("STICK");
+        body.teleport(PetSpacing.toyFront(runtime, pet, player));
+        int requests = navigationRequests;
+        actions.anticipation().tick(now + 2000);
+        actions.anticipation().advance(pet, now + 3250);
+        assertEquals(requests, navigationRequests, "Removing toy-tail-wag also removes whole-body fidgeting");
+    }
+
     @Test void dogTailStaysFastForEntireToyWaitAndRespectsBehaviorSettingAndRelease() {
         testConfig.set("pets.wolf.appearance.type", "modelengine"); testConfig.set("pets.wolf.appearance.model", "beagle");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig)); eagerGreeting(); greetingGround = true;

@@ -83,8 +83,8 @@ final class PetToyAnticipation {
         focus.favorite = favorite;
         if (!favorite) { focus.reactionPending = false; focus.reactionUntil = 0; }
         boolean approaching = followToy(pet, focus, owner, now);
-        boolean dog = body.getType() == org.bukkit.entity.EntityType.WOLF;
-        if (dog && !approaching && focus.nextWaitingJumpAt == 0)
+        boolean jumps = runtime.behaves(pet, PetBehavior.TOY_JUMPS);
+        if (jumps && !approaching && focus.nextWaitingJumpAt == 0)
             focus.nextWaitingJumpAt = now + (favorite ? 8000 : 1500) + runtime.random().nextInt(1000);
         if (favorite && focus.reactionPending && !approaching) {
             focus.reactionPending = false;
@@ -108,10 +108,10 @@ final class PetToyAnticipation {
             nextOwnerVoice.put(pet.ownerId(), now + 2800);
         }
         boolean reactionHop = reacting && focus.jumps < 2 && now >= focus.nextJumpAt;
-        boolean waitingHop = dog && focus.nextWaitingJumpAt > 0 && now >= focus.nextWaitingJumpAt;
-        if (!approaching && runtime.behaves(pet, PetBehavior.TOY_JUMPS) && (reactionHop || waitingHop)
+        boolean waitingHop = focus.nextWaitingJumpAt > 0 && now >= focus.nextWaitingJumpAt;
+        if (!approaching && jumps && (reactionHop || waitingHop)
                 && pet.need(Need.ENERGY) >= 50 && pet.need(Need.HEALTH) >= 70 && safeJump(body)) {
-            body.setVelocity(body.getVelocity().setY(dog ? 0.30 + 0.06 * feeling.intensity() : 0.24 + 0.05 * feeling.intensity()));
+            body.setVelocity(body.getVelocity().setY(0.30 + 0.06 * feeling.intensity()));
             pet.need(Need.ENERGY, pet.need(Need.ENERGY) - 0.2);
             if (reactionHop) focus.jumps++;
             focus.nextJumpAt = now + 2300;
@@ -132,20 +132,22 @@ final class PetToyAnticipation {
         boolean approachingOwner = front == null || horizontalDistance(body.getLocation(), front) > 1
                 || Math.abs(body.getLocation().getY() - front.getY()) > 1;
         Location target = front;
-        boolean dog = body.getType() == org.bukkit.entity.EntityType.WOLF;
-        if (dog && front != null && !approachingOwner && !focus.ownerMoving && now >= focus.nextWiggleAt) {
+        // toy-tail-wag also controls the eager whole-body shuffle in front of a held toy.
+        boolean wag = runtime.behaves(pet, PetBehavior.TOY_TAIL_WAG);
+        boolean catPlay = runtime.behaves(pet, PetBehavior.CAT_PLAY);
+        if (wag && front != null && !approachingOwner && !focus.ownerMoving && now >= focus.nextWiggleAt) {
             focus.wiggleStartedAt = now;
             focus.wiggleUntil = now + 2600;
             focus.nextWiggleAt = now + (focus.favorite ? 6500 : 9500) + runtime.random().nextInt(2000);
             focus.wiggleSide = runtime.random().nextBoolean() ? 1 : -1;
         }
-        boolean playful = !focus.ownerMoving && (dog ? now < focus.wiggleUntil : focus.favorite && now < focus.reactionUntil);
+        boolean playful = !focus.ownerMoving && (wag ? now < focus.wiggleUntil : catPlay && focus.favorite && now < focus.reactionUntil);
         if (playful && front != null) {
-            int step = (int) ((now - (dog ? focus.wiggleStartedAt : focus.reactionUntil - 6000)) / (dog ? 850 : 1500));
-            double offset = dog
+            int step = (int) ((now - (wag ? focus.wiggleStartedAt : focus.reactionUntil - 6000)) / (wag ? 850 : 1500));
+            double offset = wag
                     ? (step == 0 ? 0.85 : step == 1 ? -0.75 : 0.15) * focus.wiggleSide * (focus.favorite ? 1 : 0.7)
                     : switch (step) { case 0 -> 0.65; case 1 -> -0.5; case 2 -> 0.3; default -> 0; };
-            double approach = dog && step == 1 ? -0.45 : 0;
+            double approach = wag && step == 1 ? -0.45 : 0;
             double yaw = Math.toRadians(ownerAt.getYaw());
             Location fidget = PetGreetings.safeGround(front.clone().add(
                     Math.cos(yaw) * offset - Math.sin(yaw) * approach, 0,
