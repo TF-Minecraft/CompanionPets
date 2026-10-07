@@ -68,8 +68,9 @@ class TfDevConfigurationTest {
             var foxBehaviors = new java.util.HashSet<>(PetBehavior.read(original.getConfigurationSection("pets.fox"),
                     EntityType.FOX, java.util.logging.Logger.getAnonymousLogger()));
             foxBehaviors.remove(PetBehavior.ROAM);
-            foxBehaviors.addAll(Set.of(PetBehavior.SOCIAL_GREETING, PetBehavior.SOCIAL_VOCALIZING));
-            assertEquals(foxBehaviors, fox.behaviors(), "Keep the captured fox behaviors plus base social reactions");
+            foxBehaviors.addAll(Set.of(PetBehavior.SOCIAL_GREETING, PetBehavior.SOCIAL_VOCALIZING, PetBehavior.CAT_PLAY));
+            assertEquals(foxBehaviors, fox.behaviors(), "Keep captured fox actions, social reactions and favorite-toy side steps");
+            assertFalse(fox.behaves(PetBehavior.TOY_WIGGLE));
             assertEquals(fox.behaviors(), foxCustom.behaviors());
             assertEquals(fox.appearance(), foxCustom.appearance());
             assertEquals(fox.sounds(), foxCustom.sounds());
@@ -84,6 +85,7 @@ class TfDevConfigurationTest {
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_TAIL_WAG));
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_JUMPS));
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_VOCALIZING));
+            assertTrue(config.type("beagle").behaves(PetBehavior.TOY_WIGGLE));
             assertEquals(1f, config.type("chihuahua").sounds().pitch());
             assertTrue(config.type("chihuahua").behaves(PetBehavior.DIG_GIFTS));
         } finally { MockBukkit.unmock(); }

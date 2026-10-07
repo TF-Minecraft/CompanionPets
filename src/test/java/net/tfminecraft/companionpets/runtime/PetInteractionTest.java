@@ -46,6 +46,7 @@ class PetInteractionTest {
     private org.bukkit.entity.EntityType greetingSpecies = org.bukkit.entity.EntityType.WOLF;
     private double navigationSpeed;
     private double tailHz;
+    private boolean modelHasTail = true;
     private final java.util.List<org.bukkit.Sound> greetingSounds = new java.util.ArrayList<>();
     private final java.util.List<Float> greetingPitches = new java.util.ArrayList<>();
     private final java.util.List<String> customSounds = new java.util.ArrayList<>();
@@ -164,7 +165,7 @@ class PetInteractionTest {
                 """);
         var visual = new PetVisual() {
             @Override public boolean modelAvailable(net.tfminecraft.companionpets.config.PetTypeDef type) { return true; }
-            @Override public boolean hasTail(net.tfminecraft.companionpets.config.PetTypeDef type) { return true; }
+            @Override public boolean hasTail(net.tfminecraft.companionpets.config.PetTypeDef type) { return modelHasTail; }
             @Override public java.util.Set<String> clips(net.tfminecraft.companionpets.config.PetTypeDef type) {
                 return java.util.Set.of("lie_back", "belly_up", "get_up");
             }
@@ -692,6 +693,110 @@ class PetInteractionTest {
         pet.need(Need.ENERGY, 30); body.setVelocity(new org.bukkit.util.Vector());
         actions.anticipation().advance(pet, now + 30000);
         assertEquals(0, body.getVelocity().getY(), "A tired dog can watch without jumping");
+    }
+
+    @Test void catBodyWithToyJumpsHopsWhileWaitingForAnOrdinaryToy() {
+        testConfig.set("species.hopper.entity", "CAT");
+        testConfig.set("species.hopper.behaviors.add", java.util.List.of("toy-jumps"));
+        testConfig.set("pets.wolf.entity", null);
+        testConfig.set("pets.wolf.species", "hopper");
+        greetingSpecies = org.bukkit.entity.EntityType.CAT;
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("BONE");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        long now = System.currentTimeMillis();
+        actions.anticipation().tick(now);
+        body.teleport(PetSpacing.toyFront(runtime, pet, player));
+        actions.anticipation().advance(pet, now + 250);
+        actions.anticipation().advance(pet, now + 3000);
+        assertTrue(body.getVelocity().getY() >= .30, "toy-jumps enables waiting hops regardless of the CAT body");
+        assertEquals(99.8, pet.need(Need.ENERGY), .001);
+    }
+
+    @Test void dogWithToyJumpsRemovedNeverHopsForOrdinaryOrFavoriteToys() {
+        testConfig.set("pets.wolf.species", "dog");
+        testConfig.set("pets.wolf.behaviors.remove", java.util.List.of("toy-jumps"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; body.setOnGround(true);
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        for (boolean favorite : new boolean[]{false, true}) {
+            actions.anticipation().clear();
+            pet.favoriteToy(favorite ? "STICK" : "BONE");
+            body.setVelocity(new org.bukkit.util.Vector());
+            long now = System.currentTimeMillis();
+            actions.anticipation().tick(now);
+            body.teleport(PetSpacing.toyFront(runtime, pet, player));
+            for (int i = 1; i <= 14; i++) actions.anticipation().advance(pet, now + i * 1000);
+            assertEquals(0, body.getVelocity().getY());
+            assertEquals(100, pet.need(Need.ENERGY));
+        }
+    }
+
+    @Test void toyWiggleControlsWholeBodyShuffleOnCatBodiesAndCanBeRemovedFromDogs() {
+        greetingSpecies(org.bukkit.entity.EntityType.CAT);
+        testConfig.set("pets.wolf.behaviors.add", java.util.List.of("toy-wiggle"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("BONE");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        long now = System.currentTimeMillis();
+        actions.anticipation().tick(now);
+        body.teleport(PetSpacing.toyFront(runtime, pet, player));
+        actions.anticipation().advance(pet, now + 250);
+        Location first = navigationTarget;
+        actions.anticipation().advance(pet, now + 1250);
+        assertTrue(first.distance(navigationTarget) > 1, "CAT body can perform the configured eager shuffle");
+        actions.anticipation().clear();
+        testConfig.set("pets.wolf.behaviors", null);
+        testConfig.set("pets.wolf.behaviors.remove", java.util.List.of("toy-wiggle"));
+        greetingSpecies(org.bukkit.entity.EntityType.WOLF);
+        pet.favoriteToy("STICK");
+        body.teleport(PetSpacing.toyFront(runtime, pet, player));
+        int requests = navigationRequests;
+        actions.anticipation().tick(now + 2000);
+        actions.anticipation().advance(pet, now + 3250);
+        assertEquals(requests, navigationRequests, "Removing toy-wiggle removes whole-body fidgeting");
+    }
+
+    @Test void modeledDogWithoutTailBoneStillWigglesWithoutTailGestures() {
+        testConfig.set("pets.wolf.species", "dog");
+        testConfig.set("pets.wolf.model", "tailless_dog");
+        modelHasTail = false;
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        var type = runtime.config().type(pet.typeId());
+        assertTrue(runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.TOY_WIGGLE));
+        assertFalse(runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.TOY_TAIL_WAG));
+        assertEquals("no tail bone", runtime.capabilities(type).disabledBehaviors()
+                .get(net.tfminecraft.companionpets.config.PetBehavior.TOY_TAIL_WAG));
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("BONE");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        long now = System.currentTimeMillis();
+        actions.anticipation().tick(now);
+        body.teleport(PetSpacing.toyFront(runtime, pet, player));
+        actions.anticipation().advance(pet, now + 250);
+        Location first = navigationTarget;
+        actions.anticipation().advance(pet, now + 1250);
+        assertTrue(first.distance(navigationTarget) > 1, "No tail bone must not disable body shuffling");
+        new net.tfminecraft.companionpets.visual.PetVisualTicker(runtime).run();
+        assertEquals(0, tailHz);
+    }
+
+    @Test void modeledDogWithWiggleRemovedKeepsItsTailGestureWithoutBodyShuffle() {
+        testConfig.set("pets.wolf.species", "dog");
+        testConfig.set("pets.wolf.model", "beagle");
+        testConfig.set("pets.wolf.behaviors.remove", java.util.List.of("toy-wiggle"));
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        assertFalse(runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.TOY_WIGGLE));
+        assertTrue(runtime.behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.TOY_TAIL_WAG));
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("STICK");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        body.teleport(PetSpacing.toyFront(runtime, pet, player));
+        int requests = navigationRequests;
+        long now = System.currentTimeMillis();
+        actions.anticipation().tick(now);
+        actions.anticipation().advance(pet, now + 1250);
+        assertEquals(requests, navigationRequests, "A tail gesture must not cause body shuffling");
+        new net.tfminecraft.companionpets.visual.PetVisualTicker(runtime).run();
+        assertTrue(tailHz > 0, "Removing toy-wiggle must preserve the independent tail gesture");
     }
 
     @Test void dogTailStaysFastForEntireToyWaitAndRespectsBehaviorSettingAndRelease() {

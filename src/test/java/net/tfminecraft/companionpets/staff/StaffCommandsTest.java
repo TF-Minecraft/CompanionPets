@@ -356,6 +356,7 @@ class StaffCommandsTest {
         String report = String.join("\n", messages);
         assertTrue(report.contains("Species: dog"));
         assertTrue(report.contains("Voice: frog | Pitch multiplier: 1.3"));
+        assertTrue(report.contains("Profile: preset"));
         assertTrue(report.contains("Behaviors active:"));
         assertFalse(report.contains("dig-gifts"));
         assertTrue(report.contains("Disabled toy-tail-wag: model unavailable"));
@@ -367,6 +368,22 @@ class StaffCommandsTest {
         assertEquals(pets, runtime.store().all().size());
         assertEquals(entities, owner.getWorld().getEntities().size());
         assertTrue(pet.stored());
+    }
+
+    @Test void inspectIdentifiesAGeneratedVoiceAndItsResolvedEventSounds() throws Exception {
+        var yaml = new YamlConfiguration(); yaml.loadFromString("""
+                pets:
+                  wolf: {species: dog, voice: rabbit, egg: WOLF_SPAWN_EGG}
+                """);
+        runtime.config(CompanionConfig.load(plugin, yaml));
+        command("inspect", "wolf");
+        var messages = new ArrayList<String>();
+        String message;
+        while ((message = staff.nextMessage()) != null) messages.add(message);
+        String report = String.join("\n", messages);
+        assertTrue(report.contains("Voice: rabbit"));
+        assertTrue(report.contains("Profile: generated"));
+        assertTrue(report.contains("minecraft:entity.rabbit.ambient"));
     }
 
 

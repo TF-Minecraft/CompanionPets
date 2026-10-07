@@ -56,6 +56,7 @@ class PetCapabilitiesTest {
             assertEquals("no tail bone", report.disabledBehaviors().get(behavior));
         assertTrue(report.disabledBehaviors().get(PetBehavior.BELLY_RUB).contains("get_up"));
         assertTrue(report.behaviors(dog).contains(PetBehavior.TOY_JUMPS), "A jump can use body movement without a model clip");
+        assertTrue(report.behaviors(dog).contains(PetBehavior.TOY_WIGGLE), "Body shuffling does not need a tail bone");
         assertTrue(report.behaviors(dog).contains(PetBehavior.FETCH));
         assertEquals("sleep", report.animations().get(PetAnimation.LIE).name());
         assertFalse(report.missingAnimations(dog).containsKey("lie"));

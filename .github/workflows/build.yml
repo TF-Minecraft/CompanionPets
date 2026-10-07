@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, 'feat/pet-items-foundation', 'feat/pet-models-behavior']
+    branches: [main, 'feat/pet-items-foundation', 'feat/pet-models-behavior', 'feat/pet-species']
 
 permissions:
   contents: read

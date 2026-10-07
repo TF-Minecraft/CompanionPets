@@ -82,4 +82,65 @@ class PetSoundsTest {
         assertEquals(java.util.Set.of("dog", "cat"), config.types().keySet());
         assertFalse(config.type("dog").nativeCombat());
     }
+
+    @Test void rabbitAndPigVoicesGenerateOnlyRegisteredVanillaSounds() throws Exception {
+        var yaml = new YamlConfiguration(); yaml.loadFromString("""
+                pets:
+                  rabbit: {species: dog, voice: rabbit, egg: RABBIT_SPAWN_EGG}
+                  pig: {species: cat, voice: pig, egg: PIG_SPAWN_EGG}
+                """);
+        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        for (String entity : List.of("rabbit", "pig")) {
+            var voice = config.type(entity).sounds();
+            assertEquals(PetSounds.Origin.GENERATED, voice.origin());
+            assertFalse(voice.nativeSounds());
+            assertEquals(25, voice.ambientIntervalSeconds());
+            for (Event event : Event.values()) {
+                String expected = switch (event) {
+                    case HURT -> "minecraft:entity." + entity + ".hurt";
+                    case DEATH -> "minecraft:entity." + entity + ".death";
+                    case EAT -> "minecraft:entity.generic.eat";
+                    default -> "minecraft:entity." + entity + ".ambient";
+                };
+                assertEquals(List.of(expected), voice.cue(event).sounds());
+                assertNotNull(org.bukkit.Registry.SOUNDS.get(org.bukkit.NamespacedKey.fromString(expected)));
+            }
+        }
+        var cat = read("sounds: {preset: cat}");
+        assertEquals(PetSounds.Origin.PRESET, cat.origin());
+        assertEquals(List.of("minecraft:entity.cat.purr"), cat.cue(Event.HAPPY_QUIET).sounds());
+        assertEquals(PetSounds.Origin.NONE, read("sounds: false").origin());
+    }
+
+    @Test void missingGeneratedSoundsFallBackToAmbientOrDisableTheVoiceWithWarnings() throws Exception {
+        var warnings = new java.util.ArrayList<String>();
+        var capture = Logger.getAnonymousLogger(); capture.setUseParentHandlers(false);
+        capture.addHandler(new java.util.logging.Handler() {
+            public void publish(java.util.logging.LogRecord record) { warnings.add(record.getMessage()); }
+            public void flush() { }
+            public void close() { }
+        });
+        var fallback = PetSounds.defaults("pig", capture, key ->
+                !key.endsWith(".hurt") && org.bukkit.Registry.SOUNDS.get(org.bukkit.NamespacedKey.fromString(key)) != null);
+        assertEquals(List.of("minecraft:entity.pig.ambient"), fallback.get(Event.HURT).sounds());
+        assertTrue(warnings.stream().anyMatch(message -> message.contains("pig.hurt") && message.contains("using")));
+        warnings.clear();
+        var noAmbient = PetSounds.defaults("pig", capture, key ->
+                !key.endsWith(".ambient") && org.bukkit.Registry.SOUNDS.get(org.bukkit.NamespacedKey.fromString(key)) != null);
+        assertFalse(noAmbient.containsKey(Event.GREETING));
+        assertTrue(noAmbient.containsKey(Event.HURT));
+        assertTrue(warnings.stream().anyMatch(message -> message.contains("disabling affected events")));
+        warnings.clear();
+        assertTrue(PetSounds.defaults("pig", capture, key -> key.equals("minecraft:entity.generic.eat")).isEmpty());
+        assertTrue(warnings.stream().anyMatch(message -> message.contains("no valid entity sounds")));
+        warnings.clear();
+        var silentEntity = new YamlConfiguration(); silentEntity.loadFromString("sounds: {preset: armor_stand}");
+        assertTrue(PetSounds.read(silentEntity, EntityType.WOLF, capture).cues().isEmpty());
+        assertTrue(warnings.stream().anyMatch(message -> message.contains("no valid entity sounds")));
+        warnings.clear();
+        var yaml = new YamlConfiguration(); yaml.loadFromString("sounds: {preset: not_an_entity}");
+        assertTrue(PetSounds.read(yaml, EntityType.WOLF, capture).cues().isEmpty());
+        assertTrue(warnings.stream().anyMatch(message -> message.contains("Unknown vanilla entity")));
+        assertTrue(read("sounds: {preset: none, greeting: 'minecraft:entity.not_an_entity.ambient'}").cues().isEmpty());
+    }
 }

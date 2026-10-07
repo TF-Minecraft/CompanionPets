@@ -37,9 +37,13 @@ public final class PetVoice {
         if (cue == null || cue.volume() == 0 || cue.sounds().isEmpty()) return false;
         Map<Event, Long> played = lastPlayed.computeIfAbsent(pet.id(), id -> new EnumMap<>(Event.class));
         if (now - played.getOrDefault(event, Long.MIN_VALUE / 2) < cue.minIntervalSeconds() * 1000) return false;
-        played.put(event, now);
         String key = cue.sounds().get(runtime.random().nextInt(cue.sounds().size()));
-        Sound sound = Registry.SOUNDS.get(NamespacedKey.fromString(key));
+        NamespacedKey soundKey = NamespacedKey.fromString(key);
+        if (soundKey == null) return false;
+        Sound sound = Registry.SOUNDS.get(soundKey);
+        // Explicit resource-pack namespaces can be client-only; vanilla keys must exist on the server.
+        if (sound == null && soundKey.getNamespace().equals("minecraft")) return false;
+        played.put(event, now);
         float volume = Math.min(4, cue.volume() * volumeScale);
         float pitch = Math.max(.1f, Math.min(2, cue.pitch() * pitchScale));
         if (sound != null) body.getWorld().playSound(body.getLocation(), sound, volume, pitch);

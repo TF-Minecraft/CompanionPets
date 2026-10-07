@@ -7,12 +7,18 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.Sound;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.EntityType;
 
 /** Sound identity is independent of the entity supplying navigation and the visible model. */
 public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boolean nativeSounds, String preset, float pitch) {
+    private static final java.util.Set<String> PRESETS = java.util.Set.of("wolf", "cat", "parrot", "fox", "frog");
+    public enum Origin { PRESET, GENERATED, NONE }
+    public Origin origin() {
+        return preset.equals("none") ? Origin.NONE : PRESETS.contains(preset) ? Origin.PRESET : Origin.GENERATED;
+    }
     public enum Event { AMBIENT, HAPPY, HAPPY_QUIET, SAD, HURT, DEATH, GREETING, TOY, SOCIAL, PROTEST, EAT }
     public record Cue(List<String> sounds, float volume, float pitch, double minIntervalSeconds) {
         public Cue { sounds = List.copyOf(sounds); }
@@ -64,11 +70,19 @@ public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boo
         if (token.isEmpty()) return null;
         // Enum-style names must actually exist; namespaced resource-pack keys are allowed.
         if (!token.contains(":")) {
-            try { return Sound.valueOf(token.toUpperCase(Locale.ROOT)).getKey().toString(); }
+            try {
+                String key = Sound.valueOf(token.toUpperCase(Locale.ROOT)).getKey().toString();
+                return registered(key) ? key : null;
+            }
             catch (IllegalArgumentException ex) { return null; }
         }
         NamespacedKey key = NamespacedKey.fromString(token);
-        return key == null ? null : key.toString();
+        return key == null || key.getNamespace().equals("minecraft") && !registered(key.toString()) ? null : key.toString();
+    }
+
+    private static boolean registered(String sound) {
+        NamespacedKey key = NamespacedKey.fromString(sound);
+        return key != null && Registry.SOUNDS.get(key) != null;
     }
 
     private static double number(ConfigurationSection section, String key, double fallback,
@@ -82,13 +96,26 @@ public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boo
     }
 
     private static Map<Event, Cue> defaults(String preset, Logger logger) {
+        return defaults(preset, logger, PetSounds::registered);
+    }
+
+    /** The predicate models the running server's registry, including gaps in vanilla entity sound names. */
+    static Map<Event, Cue> defaults(String preset, Logger logger, java.util.function.Predicate<String> knownSound) {
         Map<Event, Cue> result = new EnumMap<>(Event.class);
         if (preset.equals("none")) return result;
-        if (!List.of("wolf", "cat", "parrot", "fox", "frog").contains(preset)) {
-            logger.warning("Unknown pet sounds preset " + preset + "; configure individual sounds or use none");
-            return result;
+        String entity = preset;
+        if (!PRESETS.contains(preset)) {
+            EntityType type = java.util.Arrays.stream(EntityType.values())
+                    .filter(value -> value != EntityType.UNKNOWN)
+                    .filter(value -> value.name().equalsIgnoreCase(preset) || value.getKey().getKey().equals(preset))
+                    .findFirst().orElse(null);
+            if (type == null) {
+                logger.warning("Unknown vanilla entity for pet voice " + preset + "; no voice sounds generated");
+                return result;
+            }
+            entity = type.getKey().getKey();
         }
-        String ambient = "minecraft:entity." + preset + ".ambient";
+        String ambient = "minecraft:entity." + entity + ".ambient";
         put(result, Event.AMBIENT, ambient, .6f, 1);
         put(result, Event.GREETING, ambient, preset.equals("cat") ? .8f : .9f, preset.equals("cat") ? 1 : 1.1f);
         put(result, Event.TOY, ambient, .4f, 1.05f);
@@ -115,9 +142,24 @@ public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boo
         put(result, Event.SAD, sad, .8f, .9f);
         put(result, Event.SOCIAL, preset.equals("wolf") ? sad : ambient, .3f, 1.1f);
         put(result, Event.PROTEST, protest, .45f, .9f);
-        put(result, Event.HURT, "minecraft:entity." + preset + ".hurt", 1, 1);
-        put(result, Event.DEATH, "minecraft:entity." + preset + ".death", 1, 1);
+        put(result, Event.HURT, "minecraft:entity." + entity + ".hurt", 1, 1);
+        put(result, Event.DEATH, "minecraft:entity." + entity + ".death", 1, 1);
         put(result, Event.EAT, "minecraft:entity.generic.eat", .8f, 1);
+        var warned = new java.util.HashSet<String>();
+        for (Event event : Event.values()) {
+            Cue cue = result.get(event);
+            String sound = cue.sounds().getFirst();
+            if (knownSound.test(sound)) continue;
+            boolean fallback = knownSound.test(ambient);
+            if (warned.add(sound)) logger.warning("Pet voice " + preset + ": sound " + sound + " is absent from the registry; "
+                    + (fallback ? "using " + ambient : "disabling affected events"));
+            if (fallback) result.put(event, new Cue(List.of(ambient), cue.volume(), cue.pitch(), cue.minIntervalSeconds()));
+            else result.remove(event);
+        }
+        if (result.keySet().stream().noneMatch(event -> event != Event.EAT)) {
+            logger.warning("Pet voice " + preset + " has no valid entity sounds; disabling voice");
+            result.clear();
+        }
         return result;
     }
 

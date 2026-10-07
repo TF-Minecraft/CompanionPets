@@ -25,6 +25,7 @@ final class TypeInspection {
                 + " | Native combat: " + type.nativeCombat());
         sender.sendMessage("Voice: " + type.sounds().preset() + " | Pitch multiplier: " + type.sounds().pitch()
                 + " | Native sounds: " + type.sounds().nativeSounds()
+                + " | Profile: " + type.sounds().origin().name().toLowerCase(Locale.ROOT)
                 + " | Ambient interval: " + type.sounds().ambientIntervalSeconds() + "s");
         for (PetSounds.Event event : PetSounds.Event.values()) {
             var cue = type.sounds().cue(event);
