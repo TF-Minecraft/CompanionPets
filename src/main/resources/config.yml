@@ -170,7 +170,7 @@ items:
 species: {}
 
 # Example pet: {species: dog, model: beagle, egg: 'mmoitems:PETS:PET_BEAGLE_EGG'}
-# Optional pet adjustment: behaviors: {add: [cat-play], remove: [dig-gifts]}
+# Optional character: behavior: dog | cat | basic (defaults to the body).
 pets:
   wolf:
     species: dog

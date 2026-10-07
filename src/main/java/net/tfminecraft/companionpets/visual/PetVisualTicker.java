@@ -55,7 +55,9 @@ public final class PetVisualTicker implements Runnable {
                     || body instanceof Fox fox && fox.isSitting();
             PetAnimation pose = VisualPose.select(mode, sitting, body.isInWater());
             if (body instanceof Cat && body.isSneaking() && pose == PetAnimation.IDLE) pose = PetAnimation.CROUCH;
-            if (fetching) runtime.visual().cancelAction(body);
+            if (fetching && pet.fetch().stalking(pet.id()))
+                pose = runtime.capabilities(type).animations().containsKey(PetAnimation.CROUCH) ? PetAnimation.CROUCH : PetAnimation.IDLE;
+            if (fetching && !pet.fetch().pouncing(pet.id())) runtime.visual().cancelAction(body);
             runtime.visual().trainingAttention(body, type, trainingFocus);
             runtime.visual().update(body, type, pose);
             // Let the lying/sitting pose blend to standing before capturing the tail's base transform.

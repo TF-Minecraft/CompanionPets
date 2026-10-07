@@ -10,8 +10,18 @@ public final class FetchJob {
     private final UUID throwerId;
     private final Set<UUID> favorites = new HashSet<>();
     private final java.util.Map<UUID, Double> speeds = new java.util.HashMap<>();
-    private final java.util.Map<UUID, Long> inspectUntil = new java.util.HashMap<>();
-    public long inspectUntil(UUID petId, long now) { return inspectUntil.computeIfAbsent(petId, ignored -> now + 500); }
+    private final java.util.Map<UUID, Stalk> stalks = new java.util.HashMap<>();
+    public static final class Stalk {
+        public final long until;
+        public long pounceAt = -1;
+        public boolean finished;
+        private Stalk(long now) { until = now + 1500; }
+    }
+    public Stalk stalk(UUID petId, long now) { return stalks.computeIfAbsent(petId, ignored -> new Stalk(now)); }
+    public boolean stalkFinished(UUID petId) { return stalks.containsKey(petId) && stalks.get(petId).finished; }
+    public boolean stalking(UUID petId) { return stalks.containsKey(petId) && !stalks.get(petId).finished && stalks.get(petId).pounceAt < 0; }
+    public boolean pouncing(UUID petId) { return stalks.containsKey(petId) && !stalks.get(petId).finished && stalks.get(petId).pounceAt >= 0; }
+    public void stopStalk(UUID petId, long now) { stalk(petId, now).finished = true; }
     private UUID carrierId;
     private FetchPhase phase;
     private UUID projectileId;

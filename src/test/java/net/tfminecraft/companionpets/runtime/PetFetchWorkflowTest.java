@@ -112,7 +112,10 @@ class PetFetchWorkflowTest {
     @AfterEach void teardown() { MockBukkit.unmock(); }
 
     private Pet outsidePet(UUID ownerId, String name, double x) {
-        Pet result = new Pet(UUID.randomUUID(), ownerId, "wolf", name, PetSex.MALE);
+        return outsidePet(ownerId, name, x, "wolf");
+    }
+    private Pet outsidePet(UUID ownerId, String name, double x, String type) {
+        Pet result = new Pet(UUID.randomUUID(), ownerId, type, name, PetSex.MALE);
         runtime.store().add(result);
         var body = new FetchWolf(server, UUID.randomUUID(), navigationTargets, navigationSpeeds);
         server.registerEntity(body);
@@ -258,18 +261,58 @@ class PetFetchWorkflowTest {
         assertEquals(10 + runtime.config().care().playMoodGain() * runtime.config().care().favoriteMoodMultiplier(), other.need(Need.MOOD));
     }
 
-    @Test void configurableCatPlayInspectsBeforeCollectingRatherThanChangingSpeed() {
+    @Test void loneCatProfileStalksForOneAndAHalfSecondsThenPouncesAndCollects() {
         var yaml = new YamlConfiguration();
         yaml.set("items.toys", java.util.List.of("STICK")); yaml.set("pets.wolf.entity", "WOLF");
-        yaml.set("pets.wolf.egg", "WOLF_SPAWN_EGG"); yaml.set("pets.wolf.behaviors", java.util.List.of("fetch", "cat-play"));
+        yaml.set("pets.wolf.egg", "WOLF_SPAWN_EGG"); yaml.set("pets.wolf.behavior", "cat");
         runtime.config(CompanionConfig.load(runtime.plugin(), yaml));
         Snowball ball = throwToy(); double speed = navigationSpeeds.get(pet.entityId()); land(ball);
-        var body = (org.bukkit.entity.Mob) runtime.entity(pet); body.teleport(items().getFirst().getLocation());
+        var body = (org.bukkit.entity.Mob) runtime.entity(pet); body.teleport(items().getFirst().getLocation().add(1.9, 0, 0));
         var job = pet.fetch(); actions.fetchActions().step(pet, body, 1000);
         assertEquals(FetchPhase.GROUND, job.phase()); assertNull(navigationTargets.get(pet.entityId()));
-        actions.fetchActions().step(pet, body, 1499); assertEquals(FetchPhase.GROUND, job.phase());
-        actions.fetchActions().step(pet, body, 1500); assertEquals(FetchPhase.CARRY, job.phase());
+        assertTrue(job.stalking(pet.id())); assertFalse(actions.fetchActions().claim(pet));
+        actions.fetchActions().step(pet, body, 2499); assertEquals(FetchPhase.GROUND, job.phase());
+        actions.fetchActions().step(pet, body, 2500); assertEquals(FetchPhase.GROUND, job.phase());
+        assertTrue(job.pouncing(pet.id())); assertEquals(.3, body.getVelocity().getY()); assertTrue(body.getVelocity().getX() < 0);
+        body.teleport(items().getFirst().getLocation());
+        actions.fetchActions().step(pet, body, 2800); assertEquals(FetchPhase.CARRY, job.phase());
         assertEquals(speed, actions.fetchActions().movementSpeed(pet));
+    }
+
+    private void catProfile(Pet cat) {
+        var yaml = new YamlConfiguration();
+        yaml.set("items.toys", java.util.List.of("STICK"));
+        yaml.set("pets.wolf.entity", "WOLF"); yaml.set("pets.wolf.egg", "WOLF_SPAWN_EGG");
+        yaml.set("pets.cat.entity", "WOLF"); yaml.set("pets.cat.egg", "CAT_SPAWN_EGG"); yaml.set("pets.cat.behavior", "cat");
+        runtime.config(CompanionConfig.load(runtime.plugin(), yaml));
+    }
+
+    @Test void catProfileRunsDirectlyWhenADogCompetesNearTheToy() {
+        var cat = outsidePet(owner.getUniqueId(), "Cat", 2, "cat"); catProfile(cat);
+        land(throwToy()); var job = cat.fetch(); var toyAt = items().getFirst().getLocation();
+        var body = (org.bukkit.entity.Mob) runtime.entity(cat); body.teleport(toyAt.clone().add(1.9, 0, 0));
+        runtime.entity(pet).teleport(toyAt.clone().add(3, 0, 0));
+        actions.fetchActions().step(cat, body, 1000);
+        assertFalse(job.stalking(cat.id())); assertFalse(job.pouncing(cat.id()));
+        assertEquals(toyAt, navigationTargets.get(cat.entityId()));
+        body.teleport(toyAt); actions.fetchActions().step(cat, body, 1050);
+        assertEquals(FetchPhase.CARRY, job.phase()); assertEquals(cat.id(), job.carrierId());
+    }
+
+    @Test void approachingCompetitorInterruptsTheStalkAndDoesNotRestartIt() {
+        var cat = outsidePet(owner.getUniqueId(), "Cat", 2, "cat"); catProfile(cat);
+        land(throwToy()); var job = cat.fetch(); var toyAt = items().getFirst().getLocation();
+        var body = (org.bukkit.entity.Mob) runtime.entity(cat); body.teleport(toyAt.clone().add(1.9, 0, 0));
+        runtime.entity(pet).teleport(toyAt.clone().add(6, 0, 0));
+        actions.fetchActions().step(cat, body, 1000); assertTrue(job.stalking(cat.id()));
+        runtime.entity(pet).teleport(toyAt.clone().add(3, 0, 0));
+        actions.fetchActions().step(cat, body, 1200);
+        assertFalse(job.stalking(cat.id())); assertFalse(job.pouncing(cat.id()));
+        assertEquals(toyAt, navigationTargets.get(cat.entityId()));
+        runtime.entity(pet).teleport(toyAt.clone().add(6, 0, 0));
+        actions.fetchActions().step(cat, body, 1300); assertFalse(job.stalking(cat.id()));
+        body.teleport(toyAt); actions.fetchActions().step(cat, body, 1350);
+        assertEquals(FetchPhase.CARRY, job.phase());
     }
 
     @Test void throwSucceedsWithOnlyASickPetAndLandsAsOnePickableToy() {

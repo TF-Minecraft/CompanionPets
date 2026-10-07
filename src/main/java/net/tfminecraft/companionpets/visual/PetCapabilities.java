@@ -38,7 +38,6 @@ public record PetCapabilities(boolean modelAvailable, boolean tail, Set<String> 
             missing.sort(String::compareTo);
             if (!missing.isEmpty()) disabled.put(PetBehavior.BELLY_RUB, "missing animations: " + String.join(", ", missing));
         }
-        if (type.behaves(PetBehavior.ROAM)) disabled.put(PetBehavior.ROAM, "obsolete; idle movement uses native AI");
         return new PetCapabilities(available, tail, clips, animations, disabled);
     }
 
