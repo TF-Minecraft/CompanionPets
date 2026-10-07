@@ -30,6 +30,7 @@ class TestPetSpawnTest {
     private PetActions actions;
     private PlayerMock player;
     private boolean retargetSpawn;
+    private net.tfminecraft.companionpets.listen.PetListener teleportGuard;
     private Entity lastSpawned;
 
     @BeforeEach void setup() throws Exception {
@@ -42,6 +43,11 @@ class TestPetSpawnTest {
                     body = new WolfMock(server, java.util.UUID.randomUUID()) {
                         @Override public void setRemoveWhenFarAway(boolean remove) { }
                         @Override public boolean teleport(Location to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
+                            if (teleportGuard != null) {
+                                var event = new org.bukkit.event.entity.EntityTeleportEvent(this, getLocation(), to);
+                                teleportGuard.onTeleport(event);
+                                if (event.isCancelled()) return false;
+                            }
                             return super.teleport(retargetSpawn ? to.clone().subtract(0, 1, 0) : to, cause);
                         }
                     };
@@ -126,13 +132,25 @@ class TestPetSpawnTest {
         assertEquals(before, player.getWorld().getEntities().size());
     }
 
-    @Test void lateRetargetIntoSolidBlocksRejectsTheSpawnWithoutSavingOrProtectingTheBody() {
+    @Test void lateRetargetIntoSolidBlocksRejectsTheSpawnWithoutSavingTheBody() {
         retargetSpawn = true;
         assertFalse(actions.spawnTestPet(player, "wolf", "Blocked"));
         assertTrue(runtime.store().all().isEmpty());
         assertNotNull(lastSpawned);
         assertFalse(lastSpawned.isValid(), "The unsafe new body is removed");
-        assertFalse(runtime.bodies().protectedFromSuffocation(lastSpawned));
+    }
+
+    @Test void aBodyThatDoesNotFitIsPlacedOnFreeGroundBeforeItAppears() {
+        Pet pet = new Pet(java.util.UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", net.tfminecraft.companionpets.pet.PetSex.MALE);
+        pet.order(net.tfminecraft.companionpets.pet.PetOrder.SIT);
+        runtime.store().add(pet);
+        teleportGuard = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
+        Entity body = runtime.bodies().spawn(pet, runtime.config().type("wolf"), new Location(player.getWorld(), .5, 63, .5), player);
+        assertNotNull(body, "The posture guard does not block the first placement");
+        assertEquals(64, body.getLocation().getY(), 1e-9);
+        assertTrue(net.tfminecraft.companionpets.body.PetPlacement.safe(body.getLocation(), net.tfminecraft.companionpets.body.PetPlacement.bounds(body)));
+        assertFalse(runtime.bodies().recovering(body));
+        assertFalse(body.teleport(player.getLocation()), "After it appears, a sitting pet keeps rejecting ordinary teleports");
     }
 
     @Test void changingConfiguredBaseReplacesBodyAndPreservesPetIdentityAndCare() {

@@ -615,7 +615,7 @@ class ModelEngineBridgeTest {
         hook.close(); assertNull(owner()); assertFalse(hook.attached(body));
     }
 
-    @Test void hookSynchronizesShakeToTheNativeClockWithoutRestartingEverySample() throws Exception {
+    @Test void hookPlaysShakeAtConfiguredClipSpeedUntilItEndsWithoutRestartingEverySample() throws Exception {
         PetVisual hook = provider.hook(); var type = type();
         assertTrue(hook.shake(body, type, 0.1));
         assertTrue(hook.attached(body)); assertEquals(1, created().size());
@@ -624,18 +624,25 @@ class ModelEngineBridgeTest {
         assertNotNull(firstShake);
         assertEquals("ONCE", field(firstShake, "loop").toString());
         assertEquals("OVERRIDE", field(firstShake, "override").toString());
-        assertEquals(1.25 / 1.9, (double) field(handler, "speed"), 0.00001);
-        assertEquals(0.0, field(handler, "blendIn")); assertEquals(0.0, field(handler, "blendOut"));
+        Clip shakeClip = type.appearance().animations().get(PetAnimation.SHAKE);
+        assertEquals(shakeClip.speed(), (double) field(handler, "speed"), 0.00001);
+        assertEquals(shakeClip.blend(), field(handler, "blendIn"));
+        assertEquals(shakeClip.blend(), field(handler, "blendOut"));
 
         hook.update(body, type, PetAnimation.WALK);
         assertTrue(hook.shake(body, type, 0.8));
         assertSame(firstShake, map(handler, "playing").get("shake"));
         assertSame(renderer, model());
+        assertTrue(hook.shake(body, type, 0));
+        assertSame(firstShake, map(handler, "playing").get("shake"));
+        map(handler, "playing").remove("shake");
         assertFalse(hook.shake(body, type, 0));
         assertFalse(map(handler, "playing").containsKey("shake"));
         assertTrue(hook.shake(body, type, 0.2));
         assertNotSame(firstShake, map(handler, "playing").get("shake"));
-        assertEquals(1.25 / 1.8, (double) field(handler, "speed"), 0.00001);
+        assertEquals(shakeClip.speed(), (double) field(handler, "speed"), 0.00001);
+        assertEquals(shakeClip.blend(), field(handler, "blendIn"));
+        assertEquals(shakeClip.blend(), field(handler, "blendOut"));
 
         hook.close();
         assertNull(owner()); assertFalse(hook.attached(body));

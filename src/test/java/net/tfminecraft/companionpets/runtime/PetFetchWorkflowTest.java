@@ -30,7 +30,7 @@ import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.visual.IdleVisual;
 
 class PetFetchWorkflowTest {
-    @Test void modeledWaterDropsStopWithTheNativeShakeAndDoNotRestartAfterGreeting() throws Exception {
+    @Test void modeledWaterDropsLastAsLongAsTheShakeClipAndDoNotRestartAfterGreeting() throws Exception {
         var yaml = new YamlConfiguration();
         yaml.loadFromString("pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, model: beagle}}\n");
         var player = new net.tfminecraft.companionpets.visual.AnimationPlayer() {
@@ -40,9 +40,10 @@ class PetFetchWorkflowTest {
             public boolean playing(String clip) { return active; }
             public double length(String clip) { return 1.08; }
         };
+        var now = new java.util.concurrent.atomic.AtomicLong();
         var controller = new net.tfminecraft.companionpets.visual.AnimationController(player,
                 java.util.Map.of(net.tfminecraft.companionpets.visual.PetAnimation.SHAKE,
-                        new net.tfminecraft.companionpets.config.PetAppearance.Clip("shake", 1, 0)));
+                        new net.tfminecraft.companionpets.config.PetAppearance.Clip("shake", 1, 0)), now::get);
         var visual = new net.tfminecraft.companionpets.visual.PetVisual() {
             public void apply(org.bukkit.entity.Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type) { }
             public void update(org.bukkit.entity.Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, net.tfminecraft.companionpets.visual.PetAnimation pose) { controller.update(pose); }
@@ -55,7 +56,8 @@ class PetFetchWorkflowTest {
         var body = (FetchWolf) runtime.entity(pet);
         body.clock.progress = .05f; body.clock.isWet = true; ticker.run();
         assertEquals(1, splashes);
-        body.clock.progress = 1.7f; ticker.run(); assertEquals(2, splashes);
+        now.set(1000); body.clock.progress = 1.1f; ticker.run(); assertEquals(2, splashes);
+        now.set(1100); body.clock.progress = 1.2f; ticker.run(); assertEquals(2, splashes, "The drops end with the 1.08 s clip");
         body.clock.progress = 0; body.clock.isWet = false; ticker.run(); assertEquals(2, splashes);
         pet.activity(Activity.GREETING); body.clock.isWet = true; ticker.run();
         pet.activity(Activity.NONE); ticker.run();
