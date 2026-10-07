@@ -89,7 +89,9 @@ public final class AnimationController {
         return true;
     }
 
-    /** Start only on the first native tick. Busy/late models skip this cycle instead of restarting halfway. */
+    /** The visual ticker samples every few ticks, so a shake may start within its first sample window;
+     * the clip speed covers the native time left. Busy/late models skip this cycle instead of restarting halfway. */
+    static final double SHAKE_START_WINDOW = .25;
     public boolean shake(double progress) {
         if (progress <= 0 || progress >= 2 || pose == PetAnimation.SWIM || pose == PetAnimation.SLEEP || pose == PetAnimation.LIE) {
             if (action == PetAnimation.SHAKE) cancelAction();
@@ -100,7 +102,7 @@ public final class AnimationController {
         if (shakeAttempted) return false;
         shakeAttempted = true;
         Clip clip = clips.get(PetAnimation.SHAKE);
-        if (progress > .051 || clip == null || action != null || customAction || belly != null) return false;
+        if (progress > SHAKE_START_WINDOW || clip == null || action != null || customAction || belly != null) return false;
         double length = player.length(clip.name());
         if (length <= 0) return false;
         Clip synchronizedClip = new Clip(clip.name(), length / (2 - progress), 0);

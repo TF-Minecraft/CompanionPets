@@ -28,6 +28,14 @@ class AnimationControllerTest {
         assertFalse(controller.shake(.05)); controller.cancelAction();
         assertFalse(controller.shake(.5), "Finishing another action must not restart the shake");
     }
+    @Test void firstSampleWithinTheTickerWindowStartsTheShakeForTheRemainingTime() {
+        Player player = new Player(); player.lengths.put("shake", 1.04);
+        AnimationController controller = new AnimationController(player, clips());
+        assertTrue(controller.shake(.2), "One 4-tick visual sample after the native start");
+        assertEquals(1.8, player.length("shake") / player.lastClip.speed(), .00001);
+        controller.shake(0);
+        assertFalse(controller.shake(.3), "Later than one sample window skips the cycle");
+    }
     @Test void waterAndRestStopShakeWithoutReplayingTheSameCycle() {
         for (PetAnimation pose : List.of(PetAnimation.SWIM, PetAnimation.LIE, PetAnimation.SLEEP)) {
             Player player = new Player(); AnimationController controller = new AnimationController(player, clips());

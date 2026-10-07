@@ -23,7 +23,7 @@ import net.tfminecraft.companionpets.runtime.PetRuntime;
  * jump and fly on its own, so this runs a few times a second without sampling motion.
  */
 public final class PetVisualTicker implements Runnable {
-    public static final long PERIOD_TICKS = 1L;
+    public static final long PERIOD_TICKS = 4L;
     private final PetRuntime runtime;
     private final Map<UUID, Boolean> shaking = new HashMap<>();
 
@@ -71,7 +71,7 @@ public final class PetVisualTicker implements Runnable {
             if (!fetching && runtime.visual().holdsMovement(body)) net.tfminecraft.companionpets.integration.PetMotion.stop(body);
             double progress = body instanceof Wolf wolf ? net.tfminecraft.companionpets.integration.WolfShake.progress(wolf) : 0;
             boolean shakes = runtime.visual().shake(body, type, progress);
-            if (shakes && runtime.visual().attached(body) && body.getTicksLived() % 4 == 0) {
+            if (shakes && runtime.visual().attached(body)) {
                 // The hidden vanilla wolf cannot render its client-side water droplets.
                 body.getWorld().spawnParticle(org.bukkit.Particle.SPLASH,
                         body.getLocation().add(0, body.getHeight() * 0.55, 0), 24,
