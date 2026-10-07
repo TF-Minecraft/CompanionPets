@@ -37,6 +37,8 @@ class PetBehaviorTest {
         var cat = PetBehavior.defaults(EntityType.CAT);
         var frog = PetBehavior.defaults(EntityType.FROG);
         assertTrue(dog.contains(PetBehavior.DIG_GIFTS)); assertTrue(dog.contains(PetBehavior.GREETING_TAIL_WAG));
+        assertTrue(dog.contains(PetBehavior.TOY_WIGGLE)); assertFalse(cat.contains(PetBehavior.TOY_WIGGLE));
+        assertFalse(frog.contains(PetBehavior.TOY_WIGGLE));
         assertFalse(cat.contains(PetBehavior.DIG_GIFTS)); assertFalse(cat.contains(PetBehavior.GREETING_JUMPS));
         assertTrue(cat.contains(PetBehavior.CAT_PLAY)); assertTrue(cat.contains(PetBehavior.GREETING_MEOWS));
         assertTrue(frog.contains(PetBehavior.FETCH)); assertTrue(frog.contains(PetBehavior.GREETING_JUMPS));

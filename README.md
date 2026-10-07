@@ -122,7 +122,7 @@ Optional behavior IDs:
 
 - Greeting: `greeting`, `greeting-approach`, `greeting-circles`, `greeting-jumps`,
   `greeting-tail-wag`, `greeting-meows`.
-- Play: `toy-anticipation`, `toy-vocalizing`, `toy-jumps`, `toy-tail-wag`, `fetch`, `cat-play`.
+- Play: `toy-anticipation`, `toy-vocalizing`, `toy-jumps`, `toy-tail-wag`, `toy-wiggle`, `fetch`, `cat-play`.
 - Social: `social-greeting`, `social-tail-wag`, `social-jumps`, `social-vocalizing`,
   `social-sniff`, `social-chase`, `social-protest`, `recognize-carers`, `pet-friendships`.
 - Moments: `affection`, `affection-jumps`, `belly-rub`, `mischief`, `dig-gifts`.
@@ -130,10 +130,12 @@ Optional behavior IDs:
 `roam` is an accepted obsolete ID: idle movement now comes from native AI.
 Automatic care and responding to the pet's name remain independent of these sets.
 `toy-jumps` enables both waiting hops and favorite-toy reaction hops on either
-supported body. `toy-tail-wag` controls the tail gesture and the eager whole-body
-shuffle in front of a held toy; removing it disables both. `cat-play` controls
-the gentler favorite-toy side steps (and cat-style fetch investigation), even on
-a WOLF body. Default dog/cat templates retain their existing movement patterns.
+supported body. `toy-tail-wag` controls only the tail gesture. `toy-wiggle`
+controls the eager whole-body shuffle in front of a held toy, independently of
+tail bones; it is included in the default dog behaviors. Without `toy-wiggle`,
+`cat-play` enables the gentler favorite-toy side steps (and cat-style fetch
+investigation), even on a WOLF body. Default dog/cat templates retain their
+existing movement patterns.
 Native wolf water shakes, anger handling, cat crouching/sitting and navigation
 still depend on the physical body.
 
@@ -168,7 +170,7 @@ not action hooks; `pet: pet2` can select a model clip with that name.
 
 The plugin automatically disables `belly-rub` if any mapped `lie_back`, `belly_up`
 or `get_up` clip is absent or disabled. Modeled pets without a `tail`, `tail_…`
-or `tail1…` bone disable all three tail-wag behaviors. It keeps jumps, fetching
+or `tail1…` bone disable all three tail-wag behaviors. It keeps `toy-wiggle`, jumps, fetching
 and other actions that can still work through movement, sounds or fallbacks.
 Unavailable models are checked again on the next capability query, so initial
 blueprint registration needs no CompanionPets reload. Once a model is available,
