@@ -42,6 +42,7 @@ class PetInteractionTest {
     private Location partialFollowEnd;
     private boolean lookingAtPet;
     private boolean blockedHop;
+    private boolean blockedPlacement;
     private boolean blockedSocialSight;
     private org.bukkit.entity.EntityType greetingSpecies = org.bukkit.entity.EntityType.WOLF;
     private double navigationSpeed;
@@ -130,6 +131,9 @@ class PetInteractionTest {
                 return type.cast(wolf);
             }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
+                if (blockedPlacement && y == 64) return new BlockMock(Material.STONE, new Location(this, x, y, z)) {
+                    @Override public boolean isPassable() { return false; }
+                };
                 if (blockedHop && y == 65) return new BlockMock(Material.STONE, new Location(this, x, y, z)) {
                     @Override public boolean isPassable() { return false; }
                 };
@@ -273,6 +277,7 @@ class PetInteractionTest {
     /** Routes teleports through the listener and honours cancellation, as the server does. */
     static final class GuardedWolf extends WolfMock {
         net.tfminecraft.companionpets.listen.PetListener listener;
+        java.util.function.Consumer<org.bukkit.event.entity.EntityTeleportEvent> beforeGuard, afterGuard;
         GuardedWolf(org.mockbukkit.mockbukkit.ServerMock server) { super(server, UUID.randomUUID()); }
         @Override public boolean teleport(Location to) {
             return teleport(to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN);
@@ -280,12 +285,74 @@ class PetInteractionTest {
         @Override public boolean teleport(Location to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
             if (listener != null) {
                 var event = new org.bukkit.event.entity.EntityTeleportEvent(this, getLocation(), to);
+                if (beforeGuard != null) beforeGuard.accept(event);
                 listener.onTeleport(event);
+                if (afterGuard != null) afterGuard.accept(event);
                 if (event.isCancelled()) return false;
                 to = event.getTo();
             }
             return super.teleport(to, cause);
         }
+    }
+
+    @Test void redirectedRecoveryDoesNotBypassTheSittingTeleportGuard() {
+        var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
+        var guardedBody = new GuardedWolf(MockBukkit.getMock());
+        MockBukkit.getMock().registerEntity(guardedBody);
+        guardedBody.teleport(body.getLocation().add(0, -1, 0));
+        runtime.remember(pet, guardedBody);
+        pet.order(PetOrder.SIT);
+        guardedBody.listener = listener;
+        guardedBody.beforeGuard = event -> event.setTo(player.getLocation());
+        var before = guardedBody.getLocation();
+        runtime.bodies().protect(guardedBody);
+        runtime.bodies().recover(guardedBody);
+        assertEquals(before, guardedBody.getLocation(), "A retargeted recovery remains subject to posture restrictions");
+        assertFalse(runtime.bodies().recovering(guardedBody));
+    }
+
+    @Test void recoveryDoesNotAuthorizeNestedTeleportsEvenToTheSameDestination() {
+        var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
+        var guardedBody = new GuardedWolf(MockBukkit.getMock());
+        MockBukkit.getMock().registerEntity(guardedBody);
+        guardedBody.teleport(body.getLocation().add(0, -1, 0));
+        runtime.remember(pet, guardedBody);
+        pet.order(PetOrder.SIT);
+        guardedBody.listener = listener;
+        guardedBody.beforeGuard = event -> {
+            var nested = new org.bukkit.event.entity.EntityTeleportEvent(guardedBody, event.getFrom(), player.getLocation());
+            listener.onTeleport(nested);
+            assertTrue(nested.isCancelled(), "A nested teleport to another destination is guarded");
+        };
+        guardedBody.afterGuard = event -> {
+            assertFalse(event.isCancelled(), "The intended recovery is allowed");
+            var nested = new org.bukkit.event.entity.EntityTeleportEvent(guardedBody, event.getFrom(), event.getTo());
+            listener.onTeleport(nested);
+            assertTrue(nested.isCancelled(), "The recovery exception can only be consumed once");
+        };
+        runtime.bodies().protect(guardedBody);
+        runtime.bodies().recover(guardedBody);
+        assertTrue(net.tfminecraft.companionpets.body.PetPlacement.clear(guardedBody.getLocation(),
+                net.tfminecraft.companionpets.body.PetPlacement.bounds(guardedBody)));
+        assertFalse(runtime.bodies().recovering(guardedBody));
+    }
+
+    @Test void recoveryRechecksCollisionSafetyAfterOtherListenersRun() {
+        var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
+        var guardedBody = new GuardedWolf(MockBukkit.getMock());
+        MockBukkit.getMock().registerEntity(guardedBody);
+        guardedBody.teleport(body.getLocation().add(0, -1, 0));
+        runtime.remember(pet, guardedBody);
+        pet.order(PetOrder.SIT);
+        guardedBody.listener = listener;
+        var intended = new Location[1];
+        guardedBody.beforeGuard = event -> { intended[0] = event.getTo().clone(); blockedPlacement = true; };
+        runtime.bodies().protect(guardedBody);
+        runtime.bodies().recover(guardedBody);
+        assertNotEquals(intended[0], guardedBody.getLocation(), "A newly obstructed recovery destination is replaced");
+        assertTrue(net.tfminecraft.companionpets.body.PetPlacement.safe(guardedBody.getLocation(),
+                net.tfminecraft.companionpets.body.PetPlacement.bounds(guardedBody)), "The replacement is collision-free and supported");
+        assertFalse(runtime.bodies().recovering(guardedBody));
     }
 
     @Test void trainingStartsWithAvailableHeadTiltWithoutCancellingItOnRepeatedTreatClicks() {

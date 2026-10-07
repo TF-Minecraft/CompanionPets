@@ -27,7 +27,13 @@ public final class Bodies {
     private final NamespacedKey petKey;
     private final PetVisual visual;
     private final java.util.Map<UUID, Long> spawnProtection = new java.util.HashMap<>();
-    private final java.util.Set<UUID> recovering = new java.util.HashSet<>();
+    private final java.util.Map<UUID, Recovery> recovering = new java.util.HashMap<>();
+
+    private static final class Recovery {
+        final Location destination;
+        boolean claimed;
+        Recovery(Location destination) { this.destination = destination.clone(); }
+    }
 
     public Bodies(JavaPlugin plugin, NamespacedKey petKey, PetVisual visual) {
         this.plugin = plugin;
@@ -83,13 +89,21 @@ public final class Bodies {
         Location safe = PetPlacement.nearest(entity.getLocation(), PetPlacement.bounds(entity), null);
         if (safe == null) return;
         // Sitting or staying pets block ordinary teleports; this destination is already verified.
-        recovering.add(entity.getUniqueId());
+        recovering.put(entity.getUniqueId(), new Recovery(safe));
         try { entity.teleport(safe); }
         finally { recovering.remove(entity.getUniqueId()); }
     }
 
     /** True only while recover() moves the body to a verified clear space. */
-    public boolean recovering(Entity entity) { return recovering.contains(entity.getUniqueId()); }
+    public boolean recovering(Entity entity) { return recovering.containsKey(entity.getUniqueId()); }
+
+    /** Only one event targeting the verified destination may bypass posture restrictions. */
+    public boolean claimRecoveryTeleport(Entity entity, Location destination) {
+        Recovery recovery = recovering.get(entity.getUniqueId());
+        if (recovery == null || recovery.claimed || !recovery.destination.equals(destination)) return false;
+        recovery.claimed = true;
+        return true;
+    }
 
     public void reattach(Entity entity, Pet pet, PetTypeDef type) {
         if (!compatible(entity, type)) {
