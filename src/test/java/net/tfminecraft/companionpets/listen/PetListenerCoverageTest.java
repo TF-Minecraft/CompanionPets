@@ -186,6 +186,14 @@ class PetListenerCoverageTest {
         assertNoPlacement();
     }
 
+    @Test void denyingOnlyBlockUsePreventsKennelPlacement() {
+        var event = kennelEvent();
+        event.setUseInteractedBlock(Event.Result.DENY);
+        assertEquals(Event.Result.DEFAULT, event.useItemInHand());
+        fire(event);
+        assertNoPlacement();
+    }
+
     @Test void allowedBlockClickPlacesOneOwnedKennel() {
         var event = fire(kennelEvent());
         assertTrue(event.isCancelled(), "Consume the interaction after custom placement");
@@ -194,14 +202,48 @@ class PetListenerCoverageTest {
         assertEquals(owner.getUniqueId(), runtime.store().kennelOwner(PetStore.kennelKey(world.getName(), 3, 64, 0)));
     }
 
-    @Test void preCancelledAirClickStillThrowsConfiguredToy() {
+    @Test void airClickWithOnlyBlockUseDeniedStillThrowsConfiguredToy() {
         var event = use(Action.RIGHT_CLICK_AIR, hold(Material.STICK, 2), null, EquipmentSlot.HAND);
-        event.setCancelled(true);
+        assertEquals(Event.Result.DENY, event.useInteractedBlock(), "Paper denies block use when no block was clicked");
+        assertEquals(Event.Result.DEFAULT, event.useItemInHand());
         fire(event);
         var balls = world.getEntities().stream().filter(Snowball.class::isInstance).toList();
         assertEquals(1, balls.size());
         assertTrue(balls.getFirst().getPersistentDataContainer().has(runtime.toyKey(), PersistentDataType.STRING));
         assertEquals(1, owner.getInventory().getItemInMainHand().getAmount());
+    }
+
+    @Test void airClickWithOnlyBlockUseDeniedStillStartsHatching() {
+        var event = use(Action.RIGHT_CLICK_AIR, hold(Material.WOLF_SPAWN_EGG, 2), null, EquipmentSlot.HAND);
+        assertEquals(Event.Result.DENY, event.useInteractedBlock());
+        assertEquals(Event.Result.DEFAULT, event.useItemInHand());
+        fire(event);
+        assertNotNull(runtime.sessions().hatch(owner.getUniqueId()));
+        assertEquals(2, owner.getInventory().getItemInMainHand().getAmount(), "Starting the conversation does not consume the egg");
+    }
+
+    @Test void highPriorityItemDenialPreventsThrowingToyInAir() {
+        atHigh(PlayerInteractEvent.class, event -> event.setUseItemInHand(Event.Result.DENY));
+        fire(use(Action.RIGHT_CLICK_AIR, hold(Material.STICK, 2), null, EquipmentSlot.HAND));
+        assertTrue(world.getEntities().stream().noneMatch(Snowball.class::isInstance));
+        assertEquals(2, owner.getInventory().getItemInMainHand().getAmount());
+    }
+
+    @Test void highPriorityItemDenialPreventsHatchingEggInAir() {
+        var before = new HashSet<>(runtime.store().all());
+        atHigh(PlayerInteractEvent.class, event -> event.setUseItemInHand(Event.Result.DENY));
+        fire(use(Action.RIGHT_CLICK_AIR, hold(Material.WOLF_SPAWN_EGG, 2), null, EquipmentSlot.HAND));
+        assertNull(runtime.sessions().hatch(owner.getUniqueId()), "Denied egg use must not start a hatching conversation");
+        assertEquals(before, new HashSet<>(runtime.store().all()));
+        assertEquals(2, owner.getInventory().getItemInMainHand().getAmount());
+    }
+
+    @Test void cancelledAirClickCannotThrowConfiguredToy() {
+        var event = use(Action.RIGHT_CLICK_AIR, hold(Material.STICK, 2), null, EquipmentSlot.HAND);
+        event.setCancelled(true);
+        fire(event);
+        assertTrue(world.getEntities().stream().noneMatch(Snowball.class::isInstance));
+        assertEquals(2, owner.getInventory().getItemInMainHand().getAmount());
     }
 
     @Test void highPriorityDamageCancellationPreservesMoodAndAnimations() {

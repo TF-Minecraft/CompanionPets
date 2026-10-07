@@ -32,9 +32,13 @@ import java.nio.file.StandardCopyOption;
 import java.util.EnumSet;
 import java.util.UUID;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import net.tfminecraft.companionpets.pet.Illness;
 import net.tfminecraft.companionpets.pet.Need;
@@ -764,6 +768,66 @@ class PetStoreTest {
         field.set(store, executor);
     }
 
+
+    @ParameterizedTest(name = "malformed kennel {0}, background={1}")
+    @MethodSource("malformedCoordinates")
+    void malformedCoordinatesDoNotBlockSaveOrBackgroundFlush(String malformed, boolean background) throws Exception {
+        List<LogRecord> warnings = new ArrayList<>();
+        Logger logger = quietLogger();
+        logger.addHandler(new Handler() {
+            @Override public void publish(LogRecord record) { warnings.add(record); }
+            @Override public void flush() { }
+            @Override public void close() { }
+        });
+        var current = new PetStore(directory.resolve("pets.yml").toFile(), logger);
+        assertTrue(current.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Before", PetSex.FEMALE);
+        current.add(pet);
+        String valid = PetStore.kennelKey("world,chapter,two", Integer.MIN_VALUE, 65, Integer.MAX_VALUE);
+        current.kennel(valid, pet.ownerId());
+        assertTrue(current.save());
+        current.kennel(malformed, UUID.randomUUID());
+        String laterValid = PetStore.kennelKey("later,world", 7, 70, -3);
+        current.kennel(laterValid, pet.ownerId());
+        pet.name("Preserved");
+        current.requestSave();
+        try {
+            if (background) {
+                current.flush();
+                current.awaitWrites();
+            } else {
+                assertTrue(current.save());
+            }
+            assertFalse(current.pending(), "valid changes must reach disk despite the malformed row");
+            assertEquals(1, warnings.size(), "report the skipped row once for this snapshot");
+            assertEquals(java.util.logging.Level.WARNING, warnings.getFirst().getLevel());
+            assertTrue(warnings.getFirst().getMessage().contains(malformed));
+            assertEquals(2, YamlConfiguration.loadConfiguration(directory.resolve("pets.yml").toFile())
+                    .getMapList("kennels").size());
+            var restored = store();
+            assertTrue(restored.load());
+            assertEquals("Preserved", restored.get(pet.id()).name());
+            assertEquals(pet.ownerId(), restored.kennelOwner(valid));
+            assertEquals(pet.ownerId(), restored.kennelOwner(laterValid));
+            assertNull(restored.kennelOwner(malformed));
+            assertTrue(restored.close());
+        } finally {
+            current.removeKennel(malformed);
+            current.close();
+        }
+    }
+
+    private static Stream<Arguments> malformedCoordinates() {
+        List<String> keys = new ArrayList<>(List.of("a,b,c,d"));
+        for (int coordinate = 0; coordinate < 3; coordinate++) {
+            for (String invalid : List.of("not-a-number", "2147483648", "-2147483649", "")) {
+                String[] coordinates = {"1", "64", "-3"};
+                coordinates[coordinate] = invalid;
+                keys.add("houses," + String.join(",", coordinates));
+            }
+        }
+        return keys.stream().flatMap(key -> Stream.of(Arguments.of(key, false), Arguments.of(key, true)));
+    }
 
     @Test void malformedPublicKennelKeyDoesNotPreventValidDataFromPersisting() {
         var current = store();

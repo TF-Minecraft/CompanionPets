@@ -239,9 +239,14 @@ public final class PetStore {
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("world", String.join(",", Arrays.copyOf(parts, coordinates)));
-            row.put("x", Integer.parseInt(parts[coordinates]));
-            row.put("y", Integer.parseInt(parts[coordinates + 1]));
-            row.put("z", Integer.parseInt(parts[coordinates + 2]));
+            try {
+                row.put("x", Integer.parseInt(parts[coordinates]));
+                row.put("y", Integer.parseInt(parts[coordinates + 1]));
+                row.put("z", Integer.parseInt(parts[coordinates + 2]));
+            } catch (NumberFormatException ex) {
+                logger.warning("Skipping kennel with invalid coordinates: " + entry.getKey());
+                continue;
+            }
             row.put("owner", entry.getValue().toString());
             kennelRows.add(row);
         }

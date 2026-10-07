@@ -120,10 +120,9 @@ public final class PetListener implements Listener {
             return;
         }
         boolean air = action == Action.RIGHT_CLICK_AIR;
-        // Air clicks can be pre-cancelled because vanilla has no use for the item.
-        // Block interactions must respect both independent protection results.
-        if (!air && (event.useInteractedBlock() == Event.Result.DENY
-                || event.useItemInHand() == Event.Result.DENY)) return;
+        // Paper denies block use for air clicks, but explicit item denial still applies.
+        if (event.useItemInHand() == Event.Result.DENY) return;
+        if (!air && event.useInteractedBlock() == Event.Result.DENY) return;
         if (!actions.handledWorld(event.getPlayer(), event.getItem(), event.getClickedBlock(), event.getBlockFace(), event.getPlayer().isSneaking(), air)) {
             return;
         }
