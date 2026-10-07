@@ -39,8 +39,8 @@ Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/
 
 Keep each `pets` key stable: it is the type ID in saved pets. Species templates
 and model changes do not rename that ID or require a save migration. The built-in
-`dog` and `cat` species supply WOLF and CAT bodies, their native voices, all
-compatible tricks, and their current default behaviors. Omit repeated lists so
+`dog` and `cat` species supply WOLF and CAT bodies, their native voices, the eight
+built-in tricks, and their current default behaviors. Omit repeated lists so
 new default behaviors are inherited when the plugin is updated. The following
 syntax example illustrates optional overrides; it is not the TF Dev configuration.
 
@@ -117,6 +117,12 @@ rest handles sleeping. `come` resumes the previous sit/lay/stay posture on arriv
 text supports `{pet}` and `{owner}`. `duration` defaults to two seconds for text
 and zero-length poses; normal clips use their own length. A custom trick without
 a usable animation or fallback text is unavailable for that pet.
+
+**Custom tricks are opt-in.** Defining a trick under `custom-tricks` registers it;
+it does not add it to every pet. Omitted `tricks` inherit only the eight built-ins
+unless the species explicitly grants custom tricks. Include a custom ID in a
+species or pet `tricks` list, or use `tricks: {add: [salute]}`. A custom ID in
+`default-tricks` also remains allowed and is granted as fully learned.
 
 Optional behavior IDs:
 
@@ -258,6 +264,15 @@ and model clips found, missing or explicitly disabled. It uses the same capabili
 resolution as gameplay and requires `companionpets.admin.list`. Tab completes
 configured type IDs. `/companionpets reload` refreshes configuration, active models
 and cached capabilities.
+
+### Compatibility notes
+
+Configs that previously relied on omitted `tricks` granting every registered
+custom trick must now list those IDs explicitly in the species or pet, for
+example `tricks: {add: [salute]}`. The same rule applies to legacy pets without
+`species`. Existing explicit lists and `default-tricks` grants keep working.
+Saved trick progress and words are preserved when a trick is no longer allowed;
+adding it back makes that saved learning available again.
 
 ## Tests
 

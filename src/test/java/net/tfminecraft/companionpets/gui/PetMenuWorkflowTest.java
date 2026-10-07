@@ -46,7 +46,13 @@ class PetMenuWorkflowTest {
                   wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}
                   none: {entity: CAT, egg: CAT_SPAWN_EGG, tricks: [], default-tricks: []}
                 """);
-        for (int i = 0; i < 92; i++) yaml.set("custom-tricks.custom" + i + ".fallback-text", "A custom trick");
+        var customIds = new java.util.ArrayList<String>();
+        for (int i = 0; i < 92; i++) {
+            String id = "custom" + i;
+            yaml.set("custom-tricks." + id + ".fallback-text", "A custom trick");
+            customIds.add(id);
+        }
+        yaml.set("pets.wolf.tricks.add", customIds);
         var config = CompanionConfig.load(plugin, yaml);
         var visual = new IdleVisual(); var key = new NamespacedKey(plugin, "pet");
         runtime = new PetRuntime(plugin, config, new PetStore(plugin), new Sessions(),

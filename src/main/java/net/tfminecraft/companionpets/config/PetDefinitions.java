@@ -16,14 +16,13 @@ import net.tfminecraft.companionpets.pet.Trick;
 final class PetDefinitions {
     record Resolved(ConfigurationSection section, String species, Set<PetBehavior> behaviors, Set<Trick> tricks) { }
     private final Map<String, ConfigurationSection> species = new LinkedHashMap<>();
-    private final Set<Trick> allTricks = new LinkedHashSet<>(List.of(Trick.values()));
+    private final Set<Trick> builtinTricks = new LinkedHashSet<>(List.of(Trick.values()));
     private final Map<Trick, CustomTrick> custom;
     private final Logger logger;
 
     PetDefinitions(ConfigurationSection definitions, Map<Trick, CustomTrick> custom, Logger logger) {
         this.custom = custom;
         this.logger = logger;
-        allTricks.addAll(custom.keySet());
         builtin("dog", EntityType.WOLF);
         builtin("cat", EntityType.CAT);
         if (definitions != null) for (String id : definitions.getKeys(false)) {
@@ -68,7 +67,7 @@ final class PetDefinitions {
         EntityType speciesEntity = template == null ? entity : entity(template, entity.name());
         Set<PetBehavior> behaviors = template == null ? PetBehavior.defaults(entity)
                 : PetBehavior.read(template, speciesEntity, logger);
-        Set<Trick> tricks = template == null ? allTricks : tricks(template, allTricks);
+        Set<Trick> tricks = template == null ? builtinTricks : tricks(template, builtinTricks);
         return new Resolved(effective, id, PetBehavior.read(pet, behaviors, logger), tricks(pet, tricks));
     }
 

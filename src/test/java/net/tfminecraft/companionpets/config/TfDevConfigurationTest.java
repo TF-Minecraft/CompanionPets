@@ -56,7 +56,7 @@ class TfDevConfigurationTest {
                 if (pet.behaves(PetBehavior.TOY_TAIL_WAG)) assertTrue(tail, pet.id() + " tail");
                 for (Trick trick : pet.tricks()) {
                     var custom = config.customTrick(trick);
-                    if (custom != null && pet.id().equals("frog"))
+                    if (custom != null)
                         assertTrue(!custom.fallbackText().isBlank() || clips.contains(custom.animation()), pet.id() + ": " + trick.name());
                 }
             }

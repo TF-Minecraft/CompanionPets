@@ -40,6 +40,82 @@ class SpeciesConfigTest {
         assertEquals("cat", config.type("cat").sounds().preset());
     }
 
+    @Test void omittedTricksOnlyGrantBuiltinsEvenWithCustomDefinitions() throws Exception {
+        var config = load("""
+                custom-tricks:
+                  salute: {fallback-text: Hello}
+                species:
+                  rabbit: {entity: CAT}
+                pets:
+                  legacy: {entity: WOLF, egg: EGG}
+                  dog: {species: dog, egg: WOLF_SPAWN_EGG}
+                  cat: {species: cat, egg: CAT_SPAWN_EGG}
+                  rabbit: {species: rabbit, egg: RABBIT_SPAWN_EGG}
+                """);
+        assertEquals(4, config.types().size());
+        for (var pet : config.types().values())
+            assertEquals(Set.of(Trick.values()), pet.tricks(), pet.id());
+        assertNotNull(config.customTrick(Trick.valueOf("salute")), "Opt-in does not remove the definition");
+    }
+
+    @Test void petAdditionsOptIntoCustomTricksWithOrWithoutSpecies() throws Exception {
+        var config = load("""
+                custom-tricks:
+                  salute: {fallback-text: Hello}
+                pets:
+                  legacy: {entity: WOLF, egg: EGG, tricks: {add: [salute]}}
+                  dog: {species: dog, egg: WOLF_SPAWN_EGG, tricks: {add: [salute]}}
+                """);
+        assertEquals(2, config.types().size());
+        var expected = new java.util.HashSet<>(Set.of(Trick.values()));
+        expected.add(Trick.valueOf("salute"));
+        for (var pet : config.types().values()) assertEquals(expected, pet.tricks(), pet.id());
+    }
+
+    @Test void speciesExplicitCustomTricksAreInheritedByPets() throws Exception {
+        var config = load("""
+                custom-tricks:
+                  salute: {fallback-text: Hello}
+                species:
+                  greeter: {entity: CAT, tricks: [sit, salute]}
+                  dog: {tricks: {add: [salute]}}
+                pets:
+                  greeter: {species: greeter, egg: EGG}
+                  dog: {species: dog, egg: WOLF_SPAWN_EGG}
+                  plain: {species: cat, egg: CAT_SPAWN_EGG}
+                  explicit: {entity: WOLF, egg: BONE, tricks: [salute]}
+                """);
+        var salute = Trick.valueOf("salute");
+        assertEquals(Set.of(Trick.FOLLOW, Trick.SIT, salute), config.type("greeter").tricks());
+        assertTrue(config.type("dog").allowsTrick(salute));
+        assertFalse(config.type("plain").allowsTrick(salute));
+        assertEquals(Set.of(Trick.FOLLOW, salute), config.type("explicit").tricks());
+    }
+
+    @Test void customDefaultTricksRemainAllowedEvenWhenRemovedOrNotListed() throws Exception {
+        var config = load("""
+                custom-tricks:
+                  salute: {fallback-text: Hello}
+                training:
+                  default-tricks: [salute]
+                species:
+                  greeter: {entity: CAT, default-tricks: [salute], tricks: []}
+                pets:
+                  legacy: {entity: WOLF, egg: EGG}
+                  dog: {species: dog, egg: WOLF_SPAWN_EGG, tricks: {remove: [salute]}}
+                  greeter: {species: greeter, egg: CAT_SPAWN_EGG}
+                  explicit: {entity: WOLF, egg: BONE, tricks: [], default-tricks: [salute]}
+                """);
+        assertEquals(4, config.types().size());
+        var salute = Trick.valueOf("salute");
+        for (var pet : config.types().values()) {
+            assertTrue(pet.allowsTrick(salute), pet.id());
+            assertEquals(List.of(salute), pet.defaultTricks(), pet.id());
+        }
+        assertEquals(Set.of(salute), config.type("greeter").tricks());
+        assertEquals(Set.of(salute), config.type("explicit").tricks());
+    }
+
     @Test void customSpeciesShareBodyVoiceTricksAnimationsAndKeepPetIds() throws Exception {
         var config = load("""
                 custom-tricks:
