@@ -36,17 +36,15 @@ public record PetAppearance(String model, double scale,
 
     public static PetAppearance read(ConfigurationSection pet, String id, Logger logger) {
         ConfigurationSection section = pet.getConfigurationSection("appearance");
-        if (section == null) {
-            String legacy = pet.getString("model");
-            if (legacy == null || legacy.isBlank()) return VANILLA;
-            logger.warning("Pet " + id + ": move model to appearance.type: modelengine and appearance.model");
-            return model(legacy.trim(), 1, null);
-        }
-        String type = section.getString("type", "vanilla").trim().toLowerCase(Locale.ROOT);
+        String shortcut = pet.getString("model", "").trim();
+        if (section == null && shortcut.isEmpty()) return VANILLA;
+        String type = section == null ? "modelengine"
+                : section.getString("type", shortcut.isEmpty() ? "vanilla" : "modelengine").trim().toLowerCase(Locale.ROOT);
         if (type.equals("vanilla")) return VANILLA;
         if (!type.equals("modelengine")) throw new IllegalArgumentException("unknown appearance.type " + type);
-        String model = section.getString("model", "").trim();
+        String model = section == null ? shortcut : section.getString("model", shortcut).trim();
         if (model.isEmpty()) throw new IllegalArgumentException("appearance.model is required for modelengine");
+        if (section == null) return model(model, 1, pet.getConfigurationSection("animations"));
         return model(model, positive(section, "scale", 1), section.getConfigurationSection("animations"));
     }
 

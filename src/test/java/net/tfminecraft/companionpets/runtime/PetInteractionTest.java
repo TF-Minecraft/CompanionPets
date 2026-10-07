@@ -163,6 +163,11 @@ class PetInteractionTest {
                 social: {search-interval-seconds: 2, encounter-chance: 100}
                 """);
         var visual = new PetVisual() {
+            @Override public boolean modelAvailable(net.tfminecraft.companionpets.config.PetTypeDef type) { return true; }
+            @Override public boolean hasTail(net.tfminecraft.companionpets.config.PetTypeDef type) { return true; }
+            @Override public java.util.Set<String> clips(net.tfminecraft.companionpets.config.PetTypeDef type) {
+                return java.util.Set.of("lie_back", "belly_up", "get_up");
+            }
             @Override public void trainingAttention(Entity entity, net.tfminecraft.companionpets.config.PetTypeDef type, boolean focused) {
                 if (focused && !trainingAttention && headTiltAvailable) headTiltPlays++;
                 trainingAttention = focused;
@@ -463,6 +468,8 @@ class PetInteractionTest {
     }
 
     @Test void BellyRollKeepsBodyFixedAndHeadBoundedUntilTheWholeMomentEnds() {
+        testConfig.set("pets.wolf.model", "beagle");
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
         bellyAvailable = true; body.setOnGround(true); body.setBodyYaw(0);
         assertTrue(actions.moments().triggerBelly(pet, body, player));
         var hold = org.bukkit.Bukkit.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
@@ -511,6 +518,7 @@ class PetInteractionTest {
 
     @Test void ordinaryHeldToyTakesPriorityOverGreetingsBellyAndExplorationUntilPutAway() {
         testConfig.set("items.toys", java.util.List.of("STICK", "BONE"));
+        testConfig.set("pets.wolf.model", "beagle");
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
         long now = System.currentTimeMillis(); greetingGround = true; bellyAvailable = true; body.setOnGround(true);
         pet.favoriteToy("BONE");

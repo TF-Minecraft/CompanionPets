@@ -7,7 +7,7 @@ description: Pets you hatch, care for, and train.
 commands:
   companionpets:
     description: Staff pet management
-    usage: /companionpets <reload|moment|testpet|list|find|create|egg>
+    usage: /companionpets <reload|moment|testpet|list|find|create|egg|inspect>
 
 permissions:
   companionpets.staff:
@@ -37,7 +37,7 @@ permissions:
     description: Reload config
     default: op
   companionpets.admin.list:
-    description: Browse players and their pets
+    description: Browse players and their pets, and inspect pet type configuration
     default: op
   companionpets.admin.create:
     description: Create a replacement pet with chosen learning and stats

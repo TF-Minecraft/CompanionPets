@@ -15,7 +15,7 @@ import net.tfminecraft.companionpets.runtime.PetRuntime;
 
 /** Staff commands select owners and pets by name; inventories retain identity internally. */
 public final class StaffCommands {
-    public static final List<String> ACTIONS = List.of("reload", "list", "find", "create", "egg");
+    public static final List<String> ACTIONS = List.of("reload", "list", "find", "create", "egg", "inspect");
     private final PetRuntime runtime;
     private final StaffAudit audit;
     private final PetDiagnostics diagnostics;
@@ -50,6 +50,7 @@ public final class StaffCommands {
                 case "find" -> find(sender, args);
                 case "create" -> create(sender, args);
                 case "egg" -> giveEgg(sender, args);
+                case "inspect" -> TypeInspection.show(runtime, sender, args);
             }
         } catch (IllegalArgumentException ex) {
             sender.sendMessage(ex.getMessage() == null ? "Invalid command arguments." : ex.getMessage());
@@ -195,7 +196,8 @@ public final class StaffCommands {
         if (action.equals("create") && args.length >= 3) return PetCreation.complete(runtime, args);
         List<String> choices = new ArrayList<>();
         if (args.length == 2) {
-            if (action.equals("egg")) { choices.add("all"); choices.addAll(runtime.config().types().keySet()); }
+            if (action.equals("inspect")) choices.addAll(runtime.config().types().keySet());
+            else if (action.equals("egg")) { choices.add("all"); choices.addAll(runtime.config().types().keySet()); }
             else if (List.of("list", "find", "create").contains(action)) {
                 owners().forEach(id -> { if (!ownerName(id).equals("Unknown player")) choices.add(ownerName(id)); });
                 if (action.equals("create")) {

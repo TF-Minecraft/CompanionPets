@@ -201,7 +201,7 @@ public final class CompanionConfig {
         boolean mythic = plugin.getServer().getPluginManager().isPluginEnabled("MythicMobs");
         Map<Trick, CustomTrick> custom = CustomTrick.read(config.getConfigurationSection("custom-tricks"), logger);
         List<Trick> defaultTricks = readDefaultTricks(config, "training.default-tricks", List.of(Trick.FOLLOW), custom);
-        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), mythic, plugin.getLogger(), custom, interactionItems, defaultTricks);
+        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), config.getConfigurationSection("species"), mythic, plugin.getLogger(), custom, interactionItems, defaultTricks);
         return new CompanionConfig(
                 careSettings,
                 playSettings,
@@ -238,14 +238,23 @@ public final class CompanionConfig {
         return List.copyOf(result);
     }
 
-    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom, PetItems globalItems, List<Trick> globalDefaults) {
+    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, ConfigurationSection species, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom, PetItems globalItems, List<Trick> globalDefaults) {
         Map<String, PetTypeDef> types = new LinkedHashMap<>();
         if (pets == null) {
             return types;
         }
+        PetDefinitions definitions = new PetDefinitions(species, custom, logger);
         for (String id : pets.getKeys(false)) {
             ConfigurationSection section = pets.getConfigurationSection(id);
             if (section == null) {
+                continue;
+            }
+            PetDefinitions.Resolved resolved;
+            try {
+                resolved = definitions.resolve(section);
+                section = resolved.section();
+            } catch (IllegalArgumentException ex) {
+                logger.warning("Skipping pet type " + id + ": " + ex.getMessage());
                 continue;
             }
             String mythicMob = section.getString("mythic-mob");
@@ -292,25 +301,7 @@ public final class CompanionConfig {
                 eggCustomModelData = section.getInt("egg-custom-model-data");
             }
             SexMode sexMode = "choose".equalsIgnoreCase(section.getString("sex", "random")) ? SexMode.CHOOSE : SexMode.RANDOM;
-            Set<Trick> tricks = new java.util.LinkedHashSet<>(List.of(Trick.values()));
-            tricks.addAll(custom.keySet());
-            if (section.contains("tricks")) {
-                if (!section.isList("tricks")) {
-                    logger.warning("Pet " + id + ": tricks must be a list; disabling its tricks");
-                }
-                tricks = new java.util.LinkedHashSet<>();
-                for (Object value : section.getList("tricks", List.of())) {
-                    try {
-                        if (!(value instanceof String)) throw new IllegalArgumentException();
-                        Trick parsed = Trick.valueOf(((String) value).trim());
-                        if (parsed.equals(Trick.SPIN)) throw new IllegalArgumentException();
-                        if (parsed.kind() == Trick.Kind.CUSTOM && !custom.containsKey(parsed)) throw new IllegalArgumentException();
-                        tricks.add(parsed);
-                    } catch (IllegalArgumentException ex) {
-                        logger.warning("Pet " + id + ": skipping invalid trick " + value);
-                    }
-                }
-            }
+            Set<Trick> tricks = new java.util.LinkedHashSet<>(resolved.tricks());
             List<Trick> defaults = readDefaultTricks(section, "default-tricks", globalDefaults, custom);
             tricks.addAll(defaults);
             PetAppearance appearance;
@@ -343,8 +334,8 @@ public final class CompanionConfig {
                     eggCustomModelData,
                     sexMode,
                     appearance,
-                    petItems, tricks, defaults, PetBehavior.read(section, entity, logger),
-                    PetSounds.read(section, entity, logger), section.getBoolean("native-combat", false)));
+                    petItems, tricks, defaults, resolved.behaviors(),
+                    PetSounds.read(section, entity, logger), section.getBoolean("native-combat", false), resolved.species()));
         }
         return Collections.unmodifiableMap(types);
     }

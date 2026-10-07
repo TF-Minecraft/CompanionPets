@@ -37,6 +37,7 @@ public final class ModelHook implements PetVisual {
 
     @Override public Set<String> clips(PetTypeDef type) { return bridge.clips(type.appearance()); }
     @Override public boolean modelAvailable(PetTypeDef type) { return bridge.modelAvailable(type.appearance()); }
+    @Override public boolean hasTail(PetTypeDef type) { return bridge.bones(type.appearance()).stream().anyMatch(TailWag::tail); }
 
     public void registerInteractions(JavaPlugin plugin, BiConsumer<Player, Entity> interaction) {
         bridge.registerInteractions(plugin, interaction);

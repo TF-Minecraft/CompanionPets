@@ -21,6 +21,7 @@ public interface PetVisual {
     default boolean hasClip(Entity entity, PetTypeDef type, String clip) { return false; }
     default Set<String> clips(PetTypeDef type) { return Set.of(); }
     default boolean modelAvailable(PetTypeDef type) { return !type.appearance().modeled(); }
+    default boolean hasTail(PetTypeDef type) { return false; }
     default boolean playClip(Entity entity, PetTypeDef type, String clip, double duration) { return false; }
     default boolean belly(Entity entity) { return false; }
     default boolean startBelly(Entity entity, PetTypeDef type, long idleMillis) { return false; }

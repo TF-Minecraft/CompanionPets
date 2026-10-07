@@ -12,7 +12,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.EntityType;
 
 /** Sound identity is independent of the entity supplying navigation and the visible model. */
-public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boolean nativeSounds) {
+public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boolean nativeSounds, String preset, float pitch) {
     public enum Event { AMBIENT, HAPPY, HAPPY_QUIET, SAD, HURT, DEATH, GREETING, TOY, SOCIAL, PROTEST, EAT }
     public record Cue(List<String> sounds, float volume, float pitch, double minIntervalSeconds) {
         public Cue { sounds = List.copyOf(sounds); }
@@ -22,11 +22,11 @@ public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boo
     public Cue cue(Event event) { return cues.get(event); }
 
     public static PetSounds read(ConfigurationSection pet, EntityType identity, Logger logger) {
-        if (Boolean.FALSE.equals(pet.get("sounds"))) return new PetSounds(Map.of(), 0, false);
+        if (Boolean.FALSE.equals(pet.get("sounds"))) return new PetSounds(Map.of(), 0, false, "none", 1);
         ConfigurationSection section = pet.getConfigurationSection("sounds");
         if (section == null && pet.contains("sounds")) {
             logger.warning("Pet " + pet.getName() + ": sounds must be a mapping or false; disabling sounds");
-            return new PetSounds(Map.of(), 0, false);
+            return new PetSounds(Map.of(), 0, false, "none", 1);
         }
         String preset = section == null ? identity.name().toLowerCase(Locale.ROOT)
                 : section.getString("preset", identity.name()).trim().toLowerCase(Locale.ROOT);
@@ -53,7 +53,10 @@ public record PetSounds(Map<Event, Cue> cues, double ambientIntervalSeconds, boo
                     (float) number(entry, "pitch", previous == null ? 1 : previous.pitch(), .1, 2, logger),
                     number(entry, "min-interval-seconds", 0, 0, 3600, logger)));
         }
-        return new PetSounds(cues, interval, section == null);
+        float pitch = (float) number(section, "pitch", 1, .1, 2, logger);
+        if (pitch != 1) cues.replaceAll((event, cue) -> new Cue(cue.sounds(), cue.volume(),
+                Math.max(.1f, Math.min(2, cue.pitch() * pitch)), cue.minIntervalSeconds()));
+        return new PetSounds(cues, interval, section == null, preset, pitch);
     }
 
     private static String soundKey(String value) {

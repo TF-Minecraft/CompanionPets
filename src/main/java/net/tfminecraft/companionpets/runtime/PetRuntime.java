@@ -30,6 +30,7 @@ public final class PetRuntime {
     private final NamespacedKey toyKey;
     private final Random random = new Random();
     private final PetVoice voice = new PetVoice(this);
+    private final java.util.Map<String, net.tfminecraft.companionpets.visual.PetCapabilities> capabilities = new java.util.HashMap<>();
     private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
 
     public PetRuntime(
@@ -65,6 +66,7 @@ public final class PetRuntime {
     public void config(CompanionConfig config) {
         this.config = java.util.Objects.requireNonNull(config);
         voice.clear();
+        capabilities.clear();
         for (Pet pet : store.all()) {
             Entity entity = entity(pet);
             var type = config.type(pet.typeId());
@@ -117,7 +119,16 @@ public final class PetRuntime {
 
     public boolean behaves(Pet pet, net.tfminecraft.companionpets.config.PetBehavior behavior) {
         var type = config.type(pet.typeId());
-        return type != null && type.behaves(behavior);
+        return type != null && type.behaves(behavior) && !capabilities(type).disabledBehaviors().containsKey(behavior);
+    }
+
+    public net.tfminecraft.companionpets.visual.PetCapabilities capabilities(net.tfminecraft.companionpets.config.PetTypeDef type) {
+        var cached = capabilities.get(type.id());
+        if (cached != null) return cached;
+        var result = net.tfminecraft.companionpets.visual.PetCapabilities.inspect(type, visual);
+        // ModelEngine registers blueprints asynchronously; retry unavailable models on the next query.
+        if (!type.appearance().modeled() || result.modelAvailable()) capabilities.put(type.id(), result);
+        return result;
     }
 
     public void recordCare(Player player, Pet pet, double gain, long now) {
