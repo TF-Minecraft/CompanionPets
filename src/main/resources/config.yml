@@ -231,26 +231,32 @@ items:
   # set kennel to "itemsadder:tfmc:pet_house"
   # and uncomment the matching ID. ItemsAdder handles placement and drops.
   # kennel-furniture: "tfmc:pet_house"
-  # Both treats work for ALL species. Hold either to train; rewards consume one.
+  # All treats work for ALL species. Hold any accepted treat to train; rewards consume one.
   # Switching between accepted treats keeps the training session active.
   # As before, a hungry pet can eat a treat for 30 hunger points and a mood bonus.
   treats:
-    - "mmoitems:PETS:MEAT_TREAT"
-    - "mmoitems:PETS:FISH_TREAT"
+    - "mmoitems:PETS:FISH_SNACK"
+    - "mmoitems:PETS:BISCUIT_TREAT"
   # Food consumes one item. hunger = restored points (finite, nonnegative).
+  # MEAT_TREAT and FISH_TREAT are the Meat Meal and Fish Meal; IDs kept for saved items.
   foods:
-    - {item: "mmoitems:PETS:UNIVERSAL_FEED", hunger: 35}
-  # Either medicine treats sickness; consumes one and uses care.medicine-health-bump.
-  # These concoctions now heal rather than granting MCPets experience.
+    - {item: "mmoitems:PETS:MEAT_TREAT", hunger: 35}
+    - {item: "mmoitems:PETS:FISH_TREAT", hunger: 35}
+  # Pet Medicine treats sickness; consumes one and uses care.medicine-health-bump.
+  # Crafted at Medicine Station by a Physician.
   medicines:
-    - "mmoitems:PETS:GREEN_CONCOCTION"
-    - "mmoitems:PETS:RED_CONCOCTION"
+    - "mmoitems:PETS:PET_MEDICINE"
   # Cleans the pet without consuming the item.
   brushes:
-    - "mmoitems:PETS:CARING_ITEM"
-  # Only a vanilla stick for now. Returned toys keep their full item data.
+    - "mmoitems:PETS:PET_BRUSH"
+  # A vanilla stick and five custom toys. Returned toys keep their full item data.
   toys:
     - STICK
+    - "mmoitems:PETS:PET_BALL"
+    - "mmoitems:PETS:PET_CHEW_BONE"
+    - "mmoitems:PETS:PET_TUG_ROPE"
+    - "mmoitems:PETS:PET_MOUSE_PLUSH"
+    - "mmoitems:PETS:PET_TEDDY_PLUSH"
 
 pets:
   # HOW TO ADD A PET
@@ -329,11 +335,11 @@ pets:
   # and toys. Remove a category to inherit it again; [] disables that category.
   # Example inside a pet definition (same indentation as entity/egg):
   #   items:
-  #     treats: ["mmoitems:PETS:FISH_TREAT"]  # ONLY fish; meat is not accepted
+  #     treats: ["mmoitems:PETS:FISH_SNACK"]  # ONLY fish snack; biscuit is not accepted
   #     foods:
-  #       - {item: SALMON, hunger: 55}        # ONLY salmon; no Universal Feed
+  #       - {item: SALMON, hunger: 55}        # ONLY salmon; no Meat/Fish Meal
   #     medicines: []                       # No medicine for this type
-  #     brushes: [BRUSH]                     # Vanilla brush instead of Glove
+  #     brushes: [BRUSH]                     # Vanilla brush instead of Pet Brush
   #     toys: [STICK, "itemsadder:tfmc:ball"] # Example custom ID to register first
   # Any omitted categories still use the global lists. items: {} inherits all.
   # Legacy care.foods / care.favorite / care.medicine and root toys still load

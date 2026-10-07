@@ -96,9 +96,17 @@ class ItemConfigTest {
         var yaml = YamlConfiguration.loadConfiguration(new InputStreamReader(
                 getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
         var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
-        assertEquals(2, config.items().treats().size());
-        assertEquals(2, config.items().medicines().size());
-        assertEquals(java.util.List.of(ItemRef.parse("mmoitems:PETS:CARING_ITEM")), config.items().brushes());
+        assertEquals(java.util.List.of(ItemRef.parse("mmoitems:PETS:FISH_SNACK"),
+                ItemRef.parse("mmoitems:PETS:BISCUIT_TREAT")),
+                config.items().treats());
+        assertEquals(Map.of(ItemRef.parse("mmoitems:PETS:MEAT_TREAT"), 35.0,
+                ItemRef.parse("mmoitems:PETS:FISH_TREAT"), 35.0), config.items().foods());
+        assertEquals(java.util.List.of(ItemRef.parse("STICK"), ItemRef.parse("mmoitems:PETS:PET_BALL"),
+                ItemRef.parse("mmoitems:PETS:PET_CHEW_BONE"), ItemRef.parse("mmoitems:PETS:PET_TUG_ROPE"),
+                ItemRef.parse("mmoitems:PETS:PET_MOUSE_PLUSH"), ItemRef.parse("mmoitems:PETS:PET_TEDDY_PLUSH")),
+                config.items().toys());
+        assertEquals(java.util.List.of(ItemRef.parse("mmoitems:PETS:PET_MEDICINE")), config.items().medicines());
+        assertEquals(java.util.List.of(ItemRef.parse("mmoitems:PETS:PET_BRUSH")), config.items().brushes());
         for (String pet : yaml.getConfigurationSection("pets").getKeys(false)) {
             var type = yaml.getConfigurationSection("pets." + pet);
             assertNotNull(CompanionConfig.parseItem(type.getString("egg"), logger));
