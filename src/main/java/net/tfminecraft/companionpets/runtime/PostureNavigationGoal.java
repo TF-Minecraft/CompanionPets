@@ -68,7 +68,7 @@ final class PostureNavigationGoal implements Goal<Mob> {
     @Override public boolean shouldStayActive() { return shouldActivate(); }
     @Override public void tick() {
         if (!shouldActivate()) return;
-        PetMotion.stop(body);
+        PetMotion.settle(body);
         body.setTarget(null);
     }
     @Override public GoalKey<Mob> getKey() { return key; }

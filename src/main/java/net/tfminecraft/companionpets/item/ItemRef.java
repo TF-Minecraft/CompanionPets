@@ -86,12 +86,16 @@ public record ItemRef(Kind kind, String id, String type) {
         };
     }
 
-    public boolean matches(ItemStack item) {
-        return item != null && !item.getType().isAir() && item.getAmount() > 0
-                && matches(ItemBridge.identity(item));
+    /** One provider lookup for a stack; null for empty stacks, which never match a configured item. */
+    public static ItemIdentity identify(ItemStack item) {
+        return item == null || item.getType().isAir() || item.getAmount() <= 0 ? null : ItemBridge.identity(item);
     }
 
-    boolean matches(ItemBridge.Identity item) {
+    public boolean matches(ItemStack item) {
+        return matches(identify(item));
+    }
+
+    public boolean matches(ItemIdentity item) {
         if (item == null || !item.known()) return false;
         return switch (kind) {
             case VANILLA -> item.material() == material() && item.mmoType() == null && item.itemsAdderId() == null;
@@ -100,22 +104,23 @@ public record ItemRef(Kind kind, String id, String type) {
         };
     }
 
+    /** A display copy for menus and particles; real items handed to players come from {@link #create()}. */
     public ItemStack icon(Material fallback) {
-        ItemStack item = create();
+        ItemStack item = ItemBridge.display(this);
         return item == null ? new ItemStack(fallback) : item;
     }
 
     public ItemStack create() { return ItemBridge.create(this); }
 
     public Component displayName() {
-        ItemStack item = ItemBridge.create(this);
+        ItemStack item = ItemBridge.display(this);
         if (item == null) return Component.text(id.replace('_', ' ').toLowerCase(Locale.ROOT));
         var meta = item.getItemMeta();
         return meta != null && meta.hasDisplayName() ? meta.displayName() : Component.translatable(item.getType().translationKey());
     }
 
     public String name() {
-        ItemStack item = ItemBridge.create(this);
+        ItemStack item = ItemBridge.display(this);
         if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName())
             return PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().displayName());
         return id.replace('_', ' ').toLowerCase(Locale.ROOT);

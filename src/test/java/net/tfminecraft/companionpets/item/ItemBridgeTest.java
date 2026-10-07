@@ -264,6 +264,27 @@ class ItemBridgeTest {
         assertTrue(bridge.matches("m.toy.bone", item), "Provider recovery resumes matching");
     }
 
+    @Test void menuIconsReuseProviderItemsUntilTheProviderChanges() throws Exception {
+        var mmo = provider("MMOItems");
+        mmo.set("item", mmoItem(Material.BONE, "TOY", "BONE"));
+        ItemStack first = bridge.icon("m.toy.bone");
+        assertEquals("BONE", mmo.get("requestedId"));
+        mmo.set("requestedId", null);
+        ItemStack second = bridge.icon("m.toy.bone");
+        assertNull(mmo.get("requestedId"), "a recent icon is not rebuilt by the provider");
+        assertEquals(first, second);
+        assertNotSame(first, second, "callers receive their own copy");
+        assertNotNull(bridge.create("m.toy.bone"));
+        assertEquals("BONE", mmo.get("requestedId"), "items given to players are always built by the provider");
+        mmo.active(false);
+        var replacement = provider("MMOItems");
+        replacement.set("item", mmoItem(Material.STICK, "TOY", "BONE"));
+        assertEquals(Material.STICK, bridge.icon("m.toy.bone").getType(), "a replaced provider rebuilds its icons");
+        replacement.set("item", null);
+        replacement.active(false);
+        assertEquals(Material.BONE, bridge.icon("m.toy.bone").getType(), "an unavailable item falls back to the default icon");
+    }
+
     @Test void creationExceptionsAreLoggedOncePerItemAndRecoverOnLaterRequests() throws Exception {
         var mmo = provider("MMOItems"); var ia = provider("ItemsAdder");
         mmo.set("createFails", true); ia.set("createFails", true);
@@ -413,6 +434,9 @@ class ItemBridgeTest {
         }
         ItemStack create(String token) throws Exception {
             return (ItemStack) ref.getMethod("create").invoke(ref.getMethod("parse", String.class).invoke(null, token));
+        }
+        ItemStack icon(String token) throws Exception {
+            return (ItemStack) ref.getMethod("icon", Material.class).invoke(ref.getMethod("parse", String.class).invoke(null, token), Material.BONE);
         }
         boolean matches(String token, ItemStack item) throws Exception {
             return (boolean) ref.getMethod("matches", ItemStack.class)

@@ -64,6 +64,7 @@ public final class PetTicker implements Runnable {
         runtime.voice().tick(now);
         previousModes.keySet().removeIf(id -> runtime.store().get(id) == null || runtime.entity(runtime.store().get(id)) == null);
         watchTraining(now);
+        runtime.forgetBodies();
     }
 
     private void care(long now, long elapsed) {
@@ -271,7 +272,7 @@ public final class PetTicker implements Runnable {
             boolean held = mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.STAY
                     || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP;
             if (!held && runtime.visual().holdsMovement(mob)) {
-                net.tfminecraft.companionpets.integration.PetMotion.stop(mob);
+                net.tfminecraft.companionpets.integration.PetMotion.settle(mob);
                 continue;
             }
             if (held && mob.isAware()) actions.clearInteractions(pet);
@@ -386,7 +387,8 @@ public final class PetTicker implements Runnable {
             PetTypeDef type = pet == null ? null : runtime.config().type(pet.typeId());
             java.util.List<ItemRef> treats = type == null ? java.util.List.of() : type.treats();
             Entity body = pet == null ? null : runtime.entity(pet);
-            boolean holding = treats.stream().anyMatch(treat -> treat.matches(player.getInventory().getItemInMainHand()));
+            var held = ItemRef.identify(player.getInventory().getItemInMainHand());
+            boolean holding = treats.stream().anyMatch(treat -> treat.matches(held));
             boolean close = body != null
                     && body.getWorld().equals(player.getWorld())
                     && body.getLocation().distance(player.getLocation()) <= runtime.config().training().sessionDistance();

@@ -73,16 +73,20 @@ final class PetFetchActions {
         }
         register(job, ball);
         actions.anticipation().ownerThrew(player);
+        // Identify the toy once; nearby, able pets are compared with it, not every pet on the server.
+        var identity = ItemRef.identify(thrown);
+        double radius = runtime.config().ownerNearRadius();
         for (Pet pet : runtime.store().active()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             Entity body = runtime.entity(pet);
-            if (type == null || !type.acceptsToy(thrown) || !(body instanceof Mob mob)
+            if (type == null || !(body instanceof Mob mob)
                     || !body.getWorld().equals(player.getWorld())
-                    || body.getLocation().distance(player.getLocation()) > runtime.config().ownerNearRadius()
+                    || body.getLocation().distanceSquared(player.getLocation()) > radius * radius
                     || !canChase(pet)) continue;
+            ItemRef toy = type.toy(identity);
+            if (toy == null) continue;
             FetchJob previous = pet.fetch();
-            ItemRef toy = type.toy(thrown);
-            boolean favorite = toy != null && toy.key().equals(pet.favoriteToy());
+            boolean favorite = toy.key().equals(pet.favoriteToy());
             double switchChance = favorite ? 0.65 : previous != null && previous.favorite(pet.id()) ? 0.1 : 0.35;
             if (previous != null && (pet.id().equals(previous.carrierId()) || runtime.random().nextDouble() >= switchChance)) continue;
             // Leaving a race never returns or removes the toy that other pets chase.
@@ -91,6 +95,7 @@ final class PetFetchActions {
             runtime.visual().cancelAction(body);
             job.favorite(pet.id(), favorite);
             pet.fetch(job);
+            job.join(pet.id());
             pet.activity(Activity.PLAYING);
             pet.playUntilMillis(0L);
             navigate(pet, mob);
@@ -328,8 +333,8 @@ final class PetFetchActions {
         if (forward.lengthSquared() < 0.001) forward = new Vector(0, 0, 1);
         forward.normalize();
         int slot = 0;
-        for (Pet other : runtime.store().active())
-            if (other.fetch() == job && !other.id().equals(job.carrierId()) && other.id().compareTo(pet.id()) < 0) slot++;
+        for (Pet other : chasers(job))
+            if (!other.id().equals(job.carrierId()) && other.id().compareTo(pet.id()) < 0) slot++;
         double side = (slot % 2 == 0 ? -1 : 1) * (0.65 + 0.6 * (slot / 4));
         return at.clone().add(forward.clone().multiply(-1.5 - 0.8 * (slot / 2)))
                 .add(new Vector(-forward.getZ(), 0, forward.getX()).multiply(side));
@@ -407,7 +412,12 @@ final class PetFetchActions {
     }
 
     private List<Pet> chasers(FetchJob job) {
-        return runtime.store().active().stream().filter(pet -> pet.fetch() == job).toList();
+        List<Pet> result = new java.util.ArrayList<>();
+        for (UUID id : job.chasers()) {
+            Pet pet = runtime.store().get(id);
+            if (pet != null && !pet.stored() && !pet.dead() && pet.fetch() == job) result.add(pet);
+        }
+        return result;
     }
 
     private void detach(Pet pet) {

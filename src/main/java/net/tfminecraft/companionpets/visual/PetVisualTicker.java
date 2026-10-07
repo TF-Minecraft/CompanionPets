@@ -69,7 +69,7 @@ public final class PetVisualTicker implements Runnable {
                     ? net.tfminecraft.companionpets.config.PetBehavior.TOY_TAIL_WAG
                     : greeting ? net.tfminecraft.companionpets.config.PetBehavior.GREETING_TAIL_WAG
                     : net.tfminecraft.companionpets.config.PetBehavior.SOCIAL_TAIL_WAG) ? tailHz : 0);
-            if (!fetching && runtime.visual().holdsMovement(body)) net.tfminecraft.companionpets.integration.PetMotion.stop(body);
+            if (!fetching && runtime.visual().holdsMovement(body)) net.tfminecraft.companionpets.integration.PetMotion.settle(body);
             double progress = body instanceof Wolf wolf ? net.tfminecraft.companionpets.integration.WolfShake.progress(wolf) : 0;
             boolean shakes = runtime.visual().shake(body, type, progress);
             if (shakes && runtime.visual().attached(body)) {

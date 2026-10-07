@@ -120,6 +120,8 @@ class PetVisualTickerTest {
     }
     @Test void aMovementHoldingOverlayStopsTheNativePath() {
         hold=true; var ticker=new PetVisualTicker(runtime); ticker.run();
+        verify(body.path,never()).stopPathfinding(); // A still body is left alone; no motion update is sent.
+        when(body.path.hasPath()).thenReturn(true); ticker.run();
         verify(body.path).stopPathfinding(); assertEquals(0,body.getVelocity().lengthSquared());
         assertTrue(animations.played.isEmpty());
     }

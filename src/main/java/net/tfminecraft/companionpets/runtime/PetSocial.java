@@ -31,6 +31,12 @@ final class PetSocial {
     private final Map<Pair, Visit> visits = new HashMap<>();
     private final Map<Pair, ArrayDeque<Gain>> gains = new HashMap<>();
     private long nextSearchAt;
+    /** The behavior ticker runs every ten ticks. */
+    private static final long PASS_MILLIS = 500;
+    /** Small servers search every pet in the first pass, as before. */
+    private static final int MIN_SEARCH_BATCH = 32;
+    private final ArrayDeque<UUID> searchQueue = new ArrayDeque<>();
+    private int searchBatch = MIN_SEARCH_BATCH;
 
     PetSocial(PetRuntime runtime, PetRoaming roaming) { this.runtime = runtime; this.roaming = roaming; }
 
@@ -43,11 +49,19 @@ final class PetSocial {
         refreshVisits(now);
         for (var entry : List.copyOf(active.entrySet()))
             if (active.get(entry.getKey()) == entry.getValue()) advance(entry.getKey(), entry.getValue(), now);
-        // Meetings in progress advance every behavior tick; looking for new ones is rarer.
-        if (now < nextSearchAt) return;
-        nextSearchAt = now + Math.round(settings.searchIntervalSeconds() * 1000);
-        for (Pet pet : runtime.store().active()) {
-            if (!available(pet) || engaged(pet)) continue;
+        // Meetings in progress advance every behavior tick; looking for new ones is rarer. Each search
+        // queries nearby entities, so a large server spreads one round over the passes of an interval.
+        if (searchQueue.isEmpty()) {
+            if (now < nextSearchAt) return;
+            long interval = Math.round(settings.searchIntervalSeconds() * 1000);
+            nextSearchAt = now + interval;
+            for (Pet pet : runtime.store().active()) searchQueue.add(pet.id());
+            long passes = Math.max(1, interval / PASS_MILLIS);
+            searchBatch = (int) Math.max(MIN_SEARCH_BATCH, (searchQueue.size() + passes - 1) / passes);
+        }
+        for (int searched = 0; searched < searchBatch && !searchQueue.isEmpty(); searched++) {
+            Pet pet = runtime.store().get(searchQueue.poll());
+            if (pet == null || !available(pet) || engaged(pet)) continue;
             Mob body = body(pet);
             if (body == null) continue;
             for (Entity entity : body.getNearbyEntities(settings.encounterRadius(), 3, settings.encounterRadius())) {
@@ -114,7 +128,7 @@ final class PetSocial {
     }
     void clear() {
         for (Pair pair : List.copyOf(active.keySet())) end(pair, System.currentTimeMillis(), 0);
-        meetingByPet.clear(); nextAllowed.clear(); visits.clear(); gains.clear(); nextSearchAt = 0;
+        meetingByPet.clear(); nextAllowed.clear(); visits.clear(); gains.clear(); searchQueue.clear(); nextSearchAt = 0;
     }
 
     boolean trigger(Player owner, Pet pet, String kind) { return trigger(owner, pet, kind, System.currentTimeMillis()); }
@@ -220,7 +234,7 @@ final class PetSocial {
             space = Math.max(space, (a.getWidth() + b.getWidth()) * 0.5 + 0.25);
             if (distance <= square(space + 0.5)) {
                 if (e.closeSince == 0) e.closeSince = now;
-                PetMotion.stop(a); PetMotion.stop(b);
+                PetMotion.settle(a); PetMotion.settle(b);
                 if (e.phase == Phase.GREET && age >= 500) {
                     if (!e.hoppedA) e.hoppedA = hop(e.a, a, e.moodA);
                     if (!e.hoppedB) e.hoppedB = hop(e.b, b, e.moodB);

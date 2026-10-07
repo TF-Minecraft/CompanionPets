@@ -149,7 +149,7 @@ final class PetRoaming {
             }
             if (job.waitUntil == 0) job.waitUntil = now + Math.round(runtime.config().roaming().nameAttentionSeconds() * 1000.0);
             // The call goal owns MOVE, so the pet waits with native AI awake and its head on the owner.
-            PetMotion.stop(body);
+            PetMotion.settle(body);
             PetFx.look(body, owner);
             if (!job.greeted) {
                 runtime.voice().happy(body, false);

@@ -50,6 +50,18 @@ class WaterEscapeTest {
         assertEquals(shore, WaterEscape.exit(from, owner));
     }
 
+    @Test void enclosedWaterTriesOnlyTheNearestBanksForARoute() {
+        Location from = new Location(world, 2.5, 62, 2.5);
+        for (int x = 0; x <= 10; x++) block(x, 63, 8, Material.STONE);
+        int[] searches = {0};
+        assertNull(WaterEscape.exit(from, null, candidate -> { searches[0]++; return false; }));
+        assertEquals(WaterEscape.ROUTE_ATTEMPTS, searches[0], "unreachable banks must not each cost a path search");
+        searches[0] = 0;
+        Location nearest = WaterEscape.exit(from, null, candidate -> ++searches[0] == 2);
+        assertNotNull(nearest);
+        assertEquals(2, searches[0]);
+    }
+
     @Test void rejectsHazardsLowCeilingsAndUnloadedOrUnsupportedPositions() {
         Location at = new Location(world, 4.5, 64, 2.5);
         assertFalse(WaterEscape.safe(at));

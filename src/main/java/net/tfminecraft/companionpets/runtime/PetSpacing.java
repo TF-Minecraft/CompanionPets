@@ -1,12 +1,16 @@
 package net.tfminecraft.companionpets.runtime;
 
 import org.bukkit.Location;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import net.tfminecraft.companionpets.pet.*;
 
 /** Individual destinations avoid converging on the same player's coordinates. */
 final class PetSpacing {
+    /** Vertical reach of a standing spot; a pet more than this far above or below does not crowd it. */
+    private static final double LEVEL = 1.5;
+    private static final double MIN_CLEARANCE = 0.9;
     private PetSpacing() { }
     static Location toyFront(PetRuntime runtime, Pet pet, Player owner) {
         int slot = Math.max(0, formation(runtime, pet, owner).slot());
@@ -26,11 +30,17 @@ final class PetSpacing {
     static boolean free(PetRuntime runtime, Pet self, Location at) {
         Mob body = runtime.entity(self) instanceof Mob mob ? mob : null;
         double width = body == null ? 0.6 : body.getWidth();
-        for (Pet other : runtime.store().active()) {
-            if (other.id().equals(self.id()) || other.stored() || !(runtime.entity(other) instanceof Mob entity)
-                    || !entity.getWorld().equals(at.getWorld()) || Math.abs(entity.getLocation().getY() - at.getY()) > 1.5) continue;
-            double clearance = Math.max(0.9, (width + entity.getWidth()) * 0.5 + 0.25);
-            Location there = entity.getLocation();
+        // Only nearby bodies can crowd a spot. An entity's box reaches the query box whenever its centre is
+        // within the clearance below, so a world query replaces scanning every pet on the server.
+        double reach = Math.max(MIN_CLEARANCE, width * 0.5 + 0.25) + 0.01;
+        for (Entity entity : at.getWorld().getNearbyEntities(at, reach, LEVEL + 0.01, reach)) {
+            if (!(entity instanceof Mob other) || other == body
+                    || Math.abs(other.getLocation().getY() - at.getY()) > LEVEL) continue;
+            Pet pet = runtime.byEntity(other);
+            if (pet == null || pet.id().equals(self.id()) || pet.stored() || pet.dead()
+                    || !other.getUniqueId().equals(pet.entityId())) continue;
+            double clearance = Math.max(MIN_CLEARANCE, (width + other.getWidth()) * 0.5 + 0.25);
+            Location there = other.getLocation();
             double dx = there.getX() - at.getX(), dz = there.getZ() - at.getZ();
             if (dx * dx + dz * dz < clearance * clearance) return false;
         }
@@ -41,8 +51,8 @@ final class PetSpacing {
     private static Formation formation(PetRuntime runtime, Pet pet, Player owner) {
         int count = 0, slot = 0;
         boolean included = false;
-        for (Pet other : runtime.store().active()) {
-            if (!other.ownerId().equals(pet.ownerId()) || other.stored() || other.dead()
+        for (Pet other : runtime.store().of(pet.ownerId())) {
+            if (other.stored() || other.dead()
                     || other.activity() != Activity.TOY_FOCUS
                     || !(runtime.entity(other) instanceof Mob body) || !body.getWorld().equals(owner.getWorld())) continue;
             count++;

@@ -134,6 +134,18 @@ class PetSocialCoverageTest {
         assertFalse(paths.containsKey(a.getUniqueId())); assertFalse(paths.containsKey(b.getUniqueId()));
     }
 
+    @Test void aLargeSearchRoundIsSpreadOverSeveralBehaviorPasses() {
+        yaml.set("social.search-interval-seconds", 3); configure();
+        first.stored(true); second.stored(true);
+        for (int i = 0; i < 40; i++) pet(100 + i * 10);
+        Pet lateA = pet(-3), lateB = pet(-1.8);
+        social().tick(now);
+        assertFalse(social().engaged(lateA), "one pass searches a share of the pets, not all of them");
+        social().tick(now + 500);
+        assertTrue(social().engaged(lateA));
+        assertTrue(social().engaged(lateB));
+    }
+
     @Test void completedFriendshipReachesDiskThroughTheNormalPendingFlush() throws Exception {
         assertTrue(runtime.store().save()); assertFalse(runtime.store().pending());
         assertTrue(social().trigger(owner, first, "sniff", now));

@@ -20,6 +20,7 @@ public class GoalServerMock extends ServerMock {
                     case "addGoal" -> { var goal = (Goal<?>) args[2]; goals.put(prefix + goal.getKey(), goal); yield null; }
                     case "removeGoal" -> { goals.remove(prefix + (args[1] instanceof Goal<?> g ? g.getKey() : args[1])); yield null; }
                     case "removeAllGoals" -> { goals.keySet().removeIf(k -> k.startsWith(prefix)); yield null; }
+                    case "getAllGoals" -> goals.entrySet().stream().filter(e -> e.getKey().startsWith(prefix)).map(Map.Entry::getValue).toList();
                     default -> throw new AssertionError("Unexpected mob goals call: " + method.getName());
                 };
             });

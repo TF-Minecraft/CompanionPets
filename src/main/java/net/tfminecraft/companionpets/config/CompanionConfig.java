@@ -483,12 +483,17 @@ public final class CompanionConfig {
     }
 
     public PetTypeDef byEgg(ItemStack item) {
+        return byEgg(item, ItemRef.identify(item));
+    }
+
+    /** As {@link #byEgg(ItemStack)}, reusing an identity the caller already looked up. */
+    public PetTypeDef byEgg(ItemStack item, net.tfminecraft.companionpets.item.ItemIdentity identity) {
         // Explicit custom identity wins over legacy material + model eggs.
         for (PetTypeDef type : types.values()) {
-            if (type.egg().kind() != ItemRef.Kind.VANILLA && type.matchesEgg(item)) return type;
+            if (type.egg().kind() != ItemRef.Kind.VANILLA && type.matchesEgg(item, identity)) return type;
         }
         for (PetTypeDef type : types.values()) {
-            if (type.matchesEgg(item)) {
+            if (type.matchesEgg(item, identity)) {
                 return type;
             }
         }

@@ -367,6 +367,101 @@ class PetActionsCoverageTest {
         assertTrue(bars().contains("comes running"));
     }
 
+    private CollisionWorldMock collisions() { return (CollisionWorldMock) world; }
+
+    @Test void spacingOnlyCountsNearbyActivePetBodiesOnTheSameLevel() {
+        var other = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Rex", PetSex.MALE);
+        var otherBody = wolf(new Location(world, 10.5, 64, 0.5));
+        otherBody.getPersistentDataContainer().set(runtime.petKey(), PersistentDataType.STRING, other.id().toString());
+        runtime.store().add(other); runtime.remember(other, otherBody);
+        wolf(new Location(world, 10.5, 64, 6.5)); // An untagged wolf is not a pet.
+        assertFalse(PetSpacing.free(runtime, pet, new Location(world, 10.8, 64, 0.5)), "a pet body crowds the spot");
+        assertTrue(PetSpacing.free(runtime, pet, new Location(world, 11.405, 64, 0.5)), "just beyond its clearance");
+        assertTrue(PetSpacing.free(runtime, pet, new Location(world, 10.5, 64, 6.5)));
+        assertTrue(PetSpacing.free(runtime, pet, new Location(world, 10.5, 66, 0.5)), "another level is not crowded");
+        other.stored(true);
+        assertTrue(PetSpacing.free(runtime, pet, new Location(world, 10.8, 64, 0.5)), "a stored pet's leftover body is ignored");
+        assertTrue(PetSpacing.free(runtime, other, new Location(world, 10.8, 64, 0.5)), "a pet never crowds itself");
+    }
+
+    @Test void callingAPetInAnUnloadedChunkLoadsItInTheBackgroundAndReleasesTheChunk() {
+        assertFalse(world.isChunkLoaded(0, 0));
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        String feedback = bars();
+        assertTrue(feedback.contains("Calling Toby"));
+        assertTrue(feedback.contains("comes running"));
+        assertTrue(collisions().tickets.isEmpty(), "The call holds its chunk only until the pet answers");
+    }
+
+    @Test void callingAPetInALoadedChunkAnswersAtOnce() {
+        world.getChunkAt(0, 0);
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        String feedback = bars();
+        assertFalse(feedback.contains("Calling Toby"));
+        assertTrue(feedback.contains("comes running"));
+    }
+
+    @Test void repeatedCallsWhileTheChunkLoadsShareOneLoad() {
+        var load = new java.util.concurrent.CompletableFuture<Chunk>();
+        collisions().nextLoad = load;
+        body.teleport(new Location(world, 6, 64, 0));
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertTrue(bars().contains("Toby is already on the way"));
+        assertEquals(6, body.getLocation().getX(), "Nothing moves before the chunk is available");
+        load.complete(world.getChunkAt(0, 0));
+        assertTrue(body.getLocation().distance(owner.getLocation()) < 3);
+        assertTrue(bars().contains("comes running"));
+        assertTrue(collisions().tickets.isEmpty());
+    }
+
+    @Test void anUngeneratedChunkReportsTheMissingPetAndAllowsAnotherCall() {
+        body.remove(); // Nothing can wait in a chunk that was never generated.
+        collisions().nextLoad = java.util.concurrent.CompletableFuture.completedFuture(null);
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertTrue(bars().contains("can't be found"));
+        assertTrue(collisions().tickets.isEmpty());
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertFalse(bars().contains("already on the way"));
+    }
+
+    @Test void entitiesStillLoadingAreAwaitedWhileTheChunkIsHeld() {
+        var loading = org.mockito.Mockito.mock(Chunk.class);
+        org.mockito.Mockito.when(loading.isEntitiesLoaded()).thenReturn(false, false, true);
+        org.mockito.Mockito.when(loading.getWorld()).thenReturn(world);
+        collisions().nextLoad = java.util.concurrent.CompletableFuture.completedFuture(loading);
+        body.teleport(new Location(world, 6, 64, 0));
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertEquals(Set.of("0,0"), collisions().tickets);
+        assertEquals(6, body.getLocation().getX());
+        server.getScheduler().performTicks(2);
+        assertTrue(body.getLocation().distance(owner.getLocation()) < 3);
+        assertTrue(collisions().tickets.isEmpty());
+    }
+
+    @Test void aPetSentAwayDuringTheLoadIgnoresTheCall() {
+        var load = new java.util.concurrent.CompletableFuture<Chunk>();
+        collisions().nextLoad = load;
+        body.teleport(new Location(world, 6, 64, 0));
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        pet.stored(true);
+        load.complete(world.getChunkAt(0, 0));
+        assertEquals(6, body.getLocation().getX());
+        assertFalse(bars().contains("comes running"));
+        assertTrue(collisions().tickets.isEmpty());
+    }
+
+    @Test void aFailedLoadIsLoggedAndAllowsAnotherCall() {
+        var load = new java.util.concurrent.CompletableFuture<Chunk>();
+        collisions().nextLoad = load;
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        load.completeExceptionally(new IllegalStateException("region file unreadable"));
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        String feedback = bars();
+        assertFalse(feedback.contains("already on the way"));
+        assertTrue(feedback.contains("comes running"));
+    }
+
     @Test void cancelledCallKeepsFollowingAndSavesTheActualLocationWithoutReportingSuccess() {
         Location before = body.getLocation();
         pet.order(PetOrder.STAY);

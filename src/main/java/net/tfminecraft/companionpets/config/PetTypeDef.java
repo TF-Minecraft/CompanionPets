@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import net.tfminecraft.companionpets.item.ItemIdentity;
 import net.tfminecraft.companionpets.item.ItemRef;
 import org.bukkit.entity.EntityType;
 import org.bukkit.inventory.ItemStack;
@@ -42,10 +43,15 @@ public record PetTypeDef(
     }
 
     public boolean matchesEgg(ItemStack item) {
+        return matchesEgg(item, ItemRef.identify(item));
+    }
+
+    /** As {@link #matchesEgg(ItemStack)}, reusing the stack's identity across every configured type. */
+    public boolean matchesEgg(ItemStack item, ItemIdentity identity) {
         if (item == null || item.getAmount() <= 0) return false;
-        if (eggCustomModelData == null && egg.kind() != ItemRef.Kind.VANILLA) return egg.matches(item);
+        if (eggCustomModelData == null && egg.kind() != ItemRef.Kind.VANILLA) return egg.matches(identity);
         // Legacy material + model eggs also match provider-created eggs.
-        if (eggCustomModelData != null ? item.getType() != egg.material() : !egg.matches(item)) return false;
+        if (eggCustomModelData != null ? item.getType() != egg.material() : !egg.matches(identity)) return false;
         ItemMeta meta = item.getItemMeta();
         boolean hasModelData = meta != null && meta.hasCustomModelData();
         return eggCustomModelData == null ? !hasModelData
@@ -63,6 +69,10 @@ public record PetTypeDef(
     }
 
     public ItemRef toy(ItemStack item) {
+        return items.toy(item);
+    }
+
+    public ItemRef toy(ItemIdentity item) {
         return items.toy(item);
     }
 

@@ -32,6 +32,7 @@ public final class PetRuntime {
     private final PetVoice voice = new PetVoice(this);
     private final java.util.Map<String, net.tfminecraft.companionpets.visual.PetCapabilities> capabilities = new java.util.HashMap<>();
     private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
+    private final java.util.Map<UUID, Entity> loadedBodies = new java.util.HashMap<>();
 
     public PetRuntime(
             JavaPlugin plugin,
@@ -155,11 +156,22 @@ public final class PetRuntime {
         if (pet == null || pet.entityId() == null) {
             return null;
         }
+        // Behaviour code asks for a body many times per pass. A loaded body keeps its Bukkit object
+        // until it is removed, unloaded or changes world, all of which make it invalid.
+        Entity cached = loadedBodies.get(pet.id());
+        if (cached != null && cached.isValid() && !cached.isDead() && pet.entityId().equals(cached.getUniqueId())) return cached;
         Entity entity = Bukkit.getEntity(pet.entityId());
         if (entity == null || !entity.isValid() || entity.isDead()) {
+            loadedBodies.remove(pet.id());
             return null;
         }
+        loadedBodies.put(pet.id(), entity);
         return entity;
+    }
+
+    /** Drops cached bodies of pets that left the store. */
+    void forgetBodies() {
+        loadedBodies.keySet().removeIf(id -> store.get(id) == null);
     }
 
     public void remember(Pet pet, Entity entity) {

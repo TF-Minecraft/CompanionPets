@@ -271,6 +271,19 @@ class PetHatchingCoverageTest {
         assertStoredAfterRejectedPlacement();
     }
 
+    @Test void withoutRoomOutsideAFullPetHouseKeepsTheEggUnhatched() {
+        for (int i = 0; i < 2; i++) {
+            var stored = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Stored" + i, net.tfminecraft.companionpets.pet.PetSex.FEMALE);
+            stored.stored(true); runtime.store().add(stored);
+        }
+        onTaggedTeleport(EventPriority.HIGHEST, event -> event.setCancelled(true));
+        begin(); namePet(); chat("yes");
+        assertEquals(2, runtime.store().all().size(), "no pet may exceed the Pet House limit");
+        assertEquals(2, player.getInventory().getItemInMainHand().getAmount(), "the egg is kept");
+        assertTrue(messages().contains("your Pet House is full"));
+        assertFalse(lastSpawned.isValid());
+    }
+
     @Test void anExternalUnsafeRetargetCannotLeaveANewPetInsideTheFloor() {
         onTaggedTeleport(EventPriority.HIGHEST, event -> event.setTo(event.getTo().clone().subtract(0, 1, 0)));
         begin(); namePet(); chat("yes");
@@ -281,9 +294,8 @@ class PetHatchingCoverageTest {
     @Test void anExternalSafeRetargetIsRememberedAfterInitialPlacementCompletes() {
         Location destination = new Location(world, 4.5, 64, 4.5);
         onTaggedTeleport(EventPriority.HIGHEST, event -> {
-            Pet pending = onlyPet();
-            assertNull(pending.entityId(), "a spawn must not be remembered before teleport listeners finish");
-            assertNull(runtime.entity(pending));
+            // The egg is used, and the pet recorded, only after its place is known.
+            assertTrue(runtime.store().all().isEmpty(), "a spawn must not be remembered before teleport listeners finish");
             event.setTo(destination.clone());
         });
         begin(); namePet(); chat("yes");

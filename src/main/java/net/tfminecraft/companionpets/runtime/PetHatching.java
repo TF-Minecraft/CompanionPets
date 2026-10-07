@@ -103,18 +103,23 @@ final class PetHatching {
             PetFx.tell(player, PetTexts.refusal(name, sex, "full-out"));
             return;
         }
-        net.tfminecraft.companionpets.item.HandItems.consume(player, hand);
         Pet pet = new Pet(UUID.randomUUID(), player.getUniqueId(), type.id(), name, sex);
         net.tfminecraft.companionpets.training.DefaultTricks.apply(runtime.config(), pet);
         pet.bornAt(System.currentTimeMillis());
         FavoriteToy.Result favorite = FavoriteToy.reconcile(null, PetActions.toyNames(type), runtime.random());
         pet.favoriteToy(favorite.toy());
+        // Find its place before using the egg: without room outside, the Pet House must have a free space.
+        Entity entity = runtime.bodies().spawn(pet, type, PetRuntime.beside(player), player);
+        if (entity == null && !Quota.canStore(runtime.store().countStored(player.getUniqueId()), runtime.config().limits().maxStored())) {
+            PetFx.tell(player, "There is no room out here and your Pet House is full, so the egg did not hatch. Your egg is safe.");
+            return;
+        }
+        net.tfminecraft.companionpets.item.HandItems.consume(player, hand);
         runtime.store().add(pet);
         PetFx.tell(player, name + " has hatched! Welcome to the family.");
         if (!type.defaultTricks().isEmpty()) PetFx.tell(player, "Already learned: "
                 + type.defaultTricks().stream().map(t -> net.tfminecraft.companionpets.training.TrickAvailability.name(runtime, t)).collect(java.util.stream.Collectors.joining(", "))
                 + ". Open the Tricks page to see the command words.");
-        Entity entity = runtime.bodies().spawn(pet, type, PetRuntime.beside(player), player);
         if (entity == null) {
             pet.stored(true);
             PetFx.tell(player, "There was no room out here, so " + name + " is waiting for you in the Pet House.");

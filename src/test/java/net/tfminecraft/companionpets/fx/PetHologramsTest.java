@@ -25,4 +25,27 @@ class PetHologramsTest {
         assertTrue(pet.getWorld().getEntitiesByClass(ArmorStand.class).isEmpty());
         labels.clear();
     }
+    @Test void oneTaskFollowsEveryLabelAndStopsWhenNoneRemain() throws Exception {
+        var plugin=MockBukkit.createMockPlugin(); var labels=new PetHolograms(plugin);
+        var world=server.getWorlds().getFirst();
+        var first=server.addPlayer(); first.teleport(new Location(world,0,64,0));
+        var second=server.addPlayer(); second.teleport(new Location(world,8,64,0));
+        labels.sleep(first,true); var follower=follower(labels);
+        labels.show(second,Component.text("Sit"),100);
+        assertSame(follower,follower(labels),"labels share a single follower");
+        assertFalse(follower.isCancelled());
+        first.teleport(new Location(world,3,64,0)); server.getScheduler().performTicks(2);
+        var stand=world.getEntitiesByClass(ArmorStand.class).stream()
+                .filter(label->label.getLocation().getX()<6).findFirst().orElseThrow();
+        assertEquals(3,stand.getLocation().getX(),"a moving pet's label follows it");
+        labels.sleep(first,false); assertFalse(follower.isCancelled());
+        server.getScheduler().performTicks(100);
+        assertTrue(world.getEntitiesByClass(ArmorStand.class).isEmpty());
+        assertTrue(follower.isCancelled(),"no task remains without labels");
+        assertNull(follower(labels));
+    }
+    private static org.bukkit.scheduler.BukkitTask follower(PetHolograms labels) throws Exception {
+        var field=PetHolograms.class.getDeclaredField("follower"); field.setAccessible(true);
+        return (org.bukkit.scheduler.BukkitTask) field.get(labels);
+    }
 }

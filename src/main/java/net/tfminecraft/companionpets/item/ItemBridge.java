@@ -11,15 +11,17 @@ import org.bukkit.plugin.Plugin;
 /** Optional integrations loaded from their owning plugins, without bundling their APIs. */
 final class ItemBridge {
     private ItemBridge() { }
-    record Identity(Material material, String mmoType, String mmoId, String itemsAdderId, boolean known) {}
     private static final Set<String> warned = new HashSet<>();
     private static Mmo mmo;
     private static Ia ia;
+    static final long DISPLAY_MILLIS = 30_000L;
+    private record Shown(ItemStack item, Plugin provider, long at) {}
+    private static final java.util.Map<ItemRef, Shown> shown = new java.util.HashMap<>();
 
     private record Mmo(Method type, Method id, Method getType, Method getItem, Plugin plugin) {}
     private record Ia(Method identify, Method id, Method create, Method stack, Plugin plugin) {}
 
-    static Identity identity(ItemStack item) {
+    static ItemIdentity identity(ItemStack item) {
         String mmoType = null, mmoId = null, iaId = null;
         try {
             Mmo api = mmo();
@@ -35,10 +37,10 @@ final class ItemBridge {
                 Object custom = iaApi.identify().invoke(null, item);
                 if (custom != null) iaId = (String) iaApi.id().invoke(custom);
             }
-            return new Identity(item.getType(), mmoType, mmoId, iaId, true);
+            return new ItemIdentity(item.getType(), mmoType, mmoId, iaId, true);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
             warn("identify", "Could not identify custom item; refusing to match it", ex);
-            return new Identity(item.getType(), null, null, null, false);
+            return new ItemIdentity(item.getType(), null, null, null, false);
         }
     }
 
@@ -70,6 +72,27 @@ final class ItemBridge {
             warn(ref.key(), "Could not create icon for " + ref.key(), ex);
         }
         return null;
+    }
+
+    /**
+     * Menus refresh their icons twice a second and providers build complete items, so display
+     * copies are reused for a while. A replaced or reloaded provider rebuilds them at once.
+     */
+    static ItemStack display(ItemRef ref) {
+        if (ref.kind() == ItemRef.Kind.VANILLA) return create(ref);
+        long now = System.currentTimeMillis();
+        Plugin provider = enabled(ref.kind() == ItemRef.Kind.MMOITEMS ? "MMOItems" : "ItemsAdder");
+        Shown cached = shown.get(ref);
+        if (cached == null || cached.provider() != provider || now - cached.at() >= DISPLAY_MILLIS) {
+            ItemStack item = create(ref);
+            if (item == null) {
+                shown.remove(ref);
+                return null;
+            }
+            cached = new Shown(item, provider, now);
+            shown.put(ref, cached);
+        }
+        return cached.item().clone();
     }
 
     private static Mmo mmo() throws ReflectiveOperationException {

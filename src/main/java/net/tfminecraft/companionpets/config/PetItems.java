@@ -9,6 +9,7 @@ import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.inventory.ItemStack;
+import net.tfminecraft.companionpets.item.ItemIdentity;
 import net.tfminecraft.companionpets.item.ItemRef;
 
 /** Effective interaction lists. Each present pet list replaces its global list. */
@@ -85,12 +86,18 @@ public record PetItems(Map<ItemRef, Double> foods, List<ItemRef> treats,
         return items;
     }
 
-    public boolean isTreat(ItemStack item) { return treats.stream().anyMatch(ref -> ref.matches(item)); }
-    public boolean isMedicine(ItemStack item) { return medicines.stream().anyMatch(ref -> ref.matches(item)); }
-    public boolean isBrush(ItemStack item) { return brushes.stream().anyMatch(ref -> ref.matches(item)); }
-    public ItemRef toy(ItemStack item) { return toys.stream().filter(ref -> ref.matches(item)).findFirst().orElse(null); }
+    public boolean isTreat(ItemStack item) { return isTreat(ItemRef.identify(item)); }
+    public boolean isTreat(ItemIdentity item) { return treats.stream().anyMatch(ref -> ref.matches(item)); }
+    public boolean isMedicine(ItemStack item) { return isMedicine(ItemRef.identify(item)); }
+    public boolean isMedicine(ItemIdentity item) { return medicines.stream().anyMatch(ref -> ref.matches(item)); }
+    public boolean isBrush(ItemStack item) { return isBrush(ItemRef.identify(item)); }
+    public boolean isBrush(ItemIdentity item) { return brushes.stream().anyMatch(ref -> ref.matches(item)); }
+    public ItemRef toy(ItemStack item) { return toy(ItemRef.identify(item)); }
+    public ItemRef toy(ItemIdentity item) { return toys.stream().filter(ref -> ref.matches(item)).findFirst().orElse(null); }
 
-    public Double foodGain(ItemStack item) {
+    public Double foodGain(ItemStack item) { return foodGain(ItemRef.identify(item)); }
+
+    public Double foodGain(ItemIdentity item) {
         Double gain = foods.entrySet().stream().filter(entry -> entry.getKey().matches(item))
                 .map(Map.Entry::getValue).findFirst().orElse(null);
         // Retain the former favourite-food behaviour when a hungry pet eats a treat.

@@ -105,11 +105,11 @@ public final class PetListener implements Listener {
         // Paper denies block use for air clicks, but explicit item denial still applies.
         if (event.useItemInHand() == Event.Result.DENY) return;
         if (!air && event.useInteractedBlock() == Event.Result.DENY) return;
-        if (!actions.handledWorld(event.getPlayer(), event.getItem(), event.getClickedBlock(), event.getBlockFace(), event.getPlayer().isSneaking(), air)) {
-            return;
+        // Every right-click with any item reaches here, so the held item is identified only once.
+        if (actions.useWorldIfHandled(event.getPlayer(), event.getItem(), event.getClickedBlock(), event.getBlockFace(),
+                event.getPlayer().isSneaking(), air)) {
+            event.setCancelled(true);
         }
-        event.setCancelled(true);
-        actions.useWorld(event.getPlayer(), event.getItem(), event.getClickedBlock(), event.getBlockFace(), event.getPlayer().isSneaking(), air);
     }
 
     // RPCharacters dispatches this event at MONITOR. Consume private dialogue first.

@@ -35,6 +35,19 @@ public final class PetMotion {
         body.setVelocity(velocity);
     }
 
+    /** Below this squared horizontal speed, vanilla friction has already brought the body to rest. */
+    static final double SETTLED = 1.0E-6;
+
+    /**
+     * For callers that hold a body still every tick. A velocity change is sent to every nearby
+     * player, so a body that is already still is left alone; a route or a slide is stopped.
+     */
+    public static void settle(Mob body) {
+        var velocity = body.getVelocity();
+        if (net.tfminecraft.companionpets.behavior.WaterEscape.needed(body) || body.getPathfinder().hasPath()
+                || velocity.getX() * velocity.getX() + velocity.getZ() * velocity.getZ() > SETTLED) stop(body);
+    }
+
     public static void hold(Mob body) {
         stop(body);
         if (!net.tfminecraft.companionpets.behavior.WaterEscape.needed(body)) body.setAware(false);

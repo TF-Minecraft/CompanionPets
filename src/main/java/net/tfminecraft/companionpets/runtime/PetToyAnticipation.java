@@ -15,11 +15,13 @@ import net.tfminecraft.companionpets.config.PetBehavior;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.integration.PetMotion;
+import net.tfminecraft.companionpets.item.ItemIdentity;
 import net.tfminecraft.companionpets.item.ItemRef;
 import net.tfminecraft.companionpets.pet.*;
 
 /** A held toy takes priority until played with, put away or ignored long enough to become boring. */
 final class PetToyAnticipation {
+    private static final long HANDS_MILLIS = 250L;
     private final PetRuntime runtime;
     private final PetActions actions;
     private final Map<UUID, Focus> active = new HashMap<>();
@@ -32,9 +34,12 @@ final class PetToyAnticipation {
             Pet pet = runtime.store().get(id);
             if (pet != null && (pet.stored() || pet.dead())) { interests.remove(id); cancel(pet); }
         }
+        // Identify each owner's hands once per pass, however many pets and configured toys share them.
+        Map<UUID, Hands> hands = new HashMap<>();
         for (Pet pet : runtime.store().active()) {
             Player owner = Bukkit.getPlayer(pet.ownerId());
-            ItemRef toy = owner != null && owner.isOnline() ? heldToy(pet, owner) : null;
+            ItemRef toy = owner != null && owner.isOnline()
+                    ? heldToy(pet, hands.computeIfAbsent(owner.getUniqueId(), id -> Hands.of(owner))) : null;
             if (toy == null) { interests.remove(pet.id()); cancel(pet); continue; }
             if (!(runtime.entity(pet) instanceof Mob body) || !ready(pet, body, owner, now)) {
                 cancel(pet); continue;
@@ -50,6 +55,7 @@ final class PetToyAnticipation {
                 active.put(pet.id(), focus);
                 ToyNavigationGoal.ensure(runtime, pet, body, this);
             }
+            focus.toyAt(toy, now);
             advance(pet, now);
         }
         active.keySet().removeIf(id -> {
@@ -67,7 +73,10 @@ final class PetToyAnticipation {
         Focus focus = active.get(pet.id());
         if (focus == null) return;
         Player owner = focus.owner;
-        ItemRef toy = owner.isOnline() ? heldToy(pet, owner) : null;
+        // The navigation goal advances every AI tick; the owner's hands are rechecked a few times a second.
+        if (now >= focus.handsCheckedAt + HANDS_MILLIS || now < focus.handsCheckedAt)
+            focus.toyAt(owner.isOnline() ? heldToy(pet, Hands.of(owner)) : null, now);
+        ItemRef toy = focus.held;
         if (toy == null) interests.remove(pet.id());
         if (pet.activity() != Activity.TOY_FOCUS || !ready(pet, focus.body, owner, now)
                 || toy == null || !focus.toy.equals(toy.key()) || runtime.entity(pet) != focus.body
@@ -153,7 +162,7 @@ final class PetToyAnticipation {
         boolean moving = target != null && (horizontalDistance(body.getLocation(), target) > (playful ? 0.3 : 0.65)
                 || Math.abs(body.getLocation().getY() - target.getY()) > 1);
         if (!moving) {
-            PetMotion.stop(body);
+            PetMotion.settle(body);
         } else if (now >= focus.nextMoveAt) {
             var path = body.getPathfinder().findPath(target);
             if (path != null && path.canReachFinalPoint())
@@ -200,11 +209,18 @@ final class PetToyAnticipation {
                         && s.petId().equals(pet.id()));
     }
 
-    private ItemRef heldToy(Pet pet, Player owner) {
+    private record Hands(ItemIdentity main, ItemIdentity off) {
+        static Hands of(Player owner) {
+            return new Hands(ItemRef.identify(owner.getInventory().getItemInMainHand()),
+                    ItemRef.identify(owner.getInventory().getItemInOffHand()));
+        }
+    }
+
+    private ItemRef heldToy(Pet pet, Hands hands) {
         PetTypeDef type = runtime.config().type(pet.typeId());
         if (type == null) return null;
-        ItemRef main = type.toy(owner.getInventory().getItemInMainHand());
-        ItemRef off = type.toy(owner.getInventory().getItemInOffHand());
+        ItemRef main = type.toy(hands.main());
+        ItemRef off = type.toy(hands.off());
         if (main != null && main.key().equals(pet.favoriteToy())) return main;
         if (off != null && off.key().equals(pet.favoriteToy())) return off;
         return main == null ? off : main;
@@ -244,6 +260,9 @@ final class PetToyAnticipation {
         final Mob body;
         final String toy;
         final Player owner;
+        ItemRef held;
+        long handsCheckedAt;
+        void toyAt(ItemRef toy, long now) { held = toy; handsCheckedAt = now; }
         long nextSoundAt, nextJumpAt, nextMoveAt, nextWaitingJumpAt;
         long wiggleStartedAt, wiggleUntil, nextWiggleAt;
         int wiggleSide;

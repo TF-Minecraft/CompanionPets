@@ -14,6 +14,9 @@ import net.tfminecraft.companionpets.fx.PetFx;
 
 /** Land pets must be able to swim even when an order or a need keeps them still on land. */
 public final class WaterEscape {
+    /** Path searches allowed per exit search. */
+    public static final int ROUTE_ATTEMPTS = 6;
+
     private WaterEscape() { }
 
     public static boolean needed(Mob body) {
@@ -61,10 +64,12 @@ public final class WaterEscape {
                 }
             }
         }
+        // Each reachability test is a path search. Enclosed water can offer hundreds of unreachable
+        // banks, so only the best few are tried; the caller searches again a little later.
         return candidates.stream().sorted(java.util.Comparator.comparingDouble(candidate ->
                 candidate.distanceSquared(from) + (preferred != null && world.equals(preferred.getWorld())
                         ? candidate.distanceSquared(preferred) : 0)))
-                .filter(reachable).findFirst().orElse(null);
+                .limit(ROUTE_ATTEMPTS).filter(reachable).findFirst().orElse(null);
     }
 
     /** Native land routes or an unobstructed swim to water/a low, dry bank. */

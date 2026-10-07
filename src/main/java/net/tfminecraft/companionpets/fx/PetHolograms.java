@@ -18,9 +18,13 @@ import net.kyori.adventure.text.format.NamedTextColor;
 public final class PetHolograms {
     private static final long FOLLOW_TICKS = 2L;
     private static final double ABOVE_NAME = 0.25;
+    /** Labels closer than this to their place stay put; a teleport is sent to every nearby player. */
+    private static final double SETTLED_SQUARED = 1.0E-4;
 
     private final Plugin plugin;
     private final Map<UUID, Hologram> shown = new HashMap<>();
+    /** One task follows every label, and only while any label is shown. */
+    private BukkitTask follower;
 
     public PetHolograms(Plugin plugin) {
         this.plugin = plugin;
@@ -65,17 +69,25 @@ public final class PetHolograms {
             as.setSilent(true);
             as.setPersistent(false);
         });
-        Hologram hologram = new Hologram(stand, held);
+        Hologram hologram = new Hologram(pet, stand, held);
         shown.put(id, hologram);
-        hologram.follow = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (!pet.isValid() || !stand.isValid()) {
-                remove(id, hologram);
-                return;
-            }
-            stand.teleport(above(pet));
-        }, FOLLOW_TICKS, FOLLOW_TICKS);
+        if (follower == null) follower = Bukkit.getScheduler().runTaskTimer(plugin, this::follow, FOLLOW_TICKS, FOLLOW_TICKS);
         if (!held) {
             hologram.expire = Bukkit.getScheduler().runTaskLater(plugin, () -> remove(id, hologram), ticks);
+        }
+    }
+
+    private void follow() {
+        for (var entry : List.copyOf(shown.entrySet())) {
+            Hologram hologram = entry.getValue();
+            if (!hologram.pet.isValid() || !hologram.stand.isValid()) {
+                remove(entry.getKey(), hologram);
+                continue;
+            }
+            Location target = above(hologram.pet);
+            Location at = hologram.stand.getLocation();
+            // Sleeping pets lie still, so most labels need no update at all.
+            if (!at.getWorld().equals(target.getWorld()) || at.distanceSquared(target) > SETTLED_SQUARED) hologram.stand.teleport(target);
         }
     }
 
@@ -96,14 +108,15 @@ public final class PetHolograms {
         if (shown.get(id) == hologram) {
             shown.remove(id);
         }
-        if (hologram.follow != null) {
-            hologram.follow.cancel();
-        }
         if (hologram.expire != null) {
             hologram.expire.cancel();
         }
         if (hologram.stand.isValid()) {
             hologram.stand.remove();
+        }
+        if (shown.isEmpty() && follower != null) {
+            follower.cancel();
+            follower = null;
         }
     }
 
@@ -112,12 +125,13 @@ public final class PetHolograms {
     }
 
     private static final class Hologram {
+        private final Entity pet;
         private final ArmorStand stand;
         private final boolean held;
-        private BukkitTask follow;
         private BukkitTask expire;
 
-        private Hologram(ArmorStand stand, boolean held) {
+        private Hologram(Entity pet, ArmorStand stand, boolean held) {
+            this.pet = pet;
             this.stand = stand;
             this.held = held;
         }
