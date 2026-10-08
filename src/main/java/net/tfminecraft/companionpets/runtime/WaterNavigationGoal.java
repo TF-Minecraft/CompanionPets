@@ -86,8 +86,9 @@ final class WaterNavigationGoal implements Goal<Mob> {
         searchFrom = from.clone();
         Location ground = runtime.lastGround(pet);
         preferredExit = false;
-        if (ground != null && WaterEscape.safe(ground) && reachable(ground)) exit = ground;
-        else if (reachable(preferred)) { exit = preferred.clone(); preferredExit = true; }
+        // Fetch and calls keep their destination; the remembered bank is an escape fallback.
+        if (reachable(preferred)) { exit = preferred.clone(); preferredExit = true; }
+        else if (ground != null && WaterEscape.safe(ground) && reachable(ground)) exit = ground;
         else exit = WaterEscape.exit(from, preferred, candidate -> !candidate.equals(preferred) && reachable(candidate));
         if (exit != null) {
             follow(now);

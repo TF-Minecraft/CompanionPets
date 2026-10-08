@@ -23,6 +23,8 @@ import org.bukkit.entity.Mob;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.block.BlockMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
@@ -46,6 +48,7 @@ class WaterNavigationBudgetTest {
     private boolean blocked = true, floor = true, nullPath;
     private double clearFromX = Double.POSITIVE_INFINITY;
     private Location routedTo;
+    private Location waterTarget;
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
@@ -54,8 +57,13 @@ class WaterNavigationBudgetTest {
             @Override public BlockMock getBlockAt(int x, int y, int z) {
                 blockReads++;
                 return new BlockMock(new Location(this, x, y, z)) {
-                    @Override public Material getType() { return floor && y == 63 ? Material.STONE : Material.AIR; }
-                    @Override public boolean isPassable() { return getType().isAir(); }
+                    @Override public Material getType() {
+                        if (waterTarget != null && x == waterTarget.getBlockX() && y == waterTarget.getBlockY()
+                                && z == waterTarget.getBlockZ()) return Material.WATER;
+                        return floor && y == 63 ? Material.STONE : Material.AIR;
+                    }
+                    @Override public boolean isPassable() { return getType().isAir() || isLiquid(); }
+                    @Override public boolean isLiquid() { return getType() == Material.WATER; }
                     @Override public Block getRelative(int dx, int dy, int dz) { return world.getBlockAt(x + dx, y + dy, z + dz); }
                 };
             }
@@ -177,6 +185,37 @@ class WaterNavigationBudgetTest {
         assertTrue(body.getVelocity().getX() < 0);
         goal.tick(NOW + 500);
         assertEquals(1, searches);
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void fetchSwimsTowardsTheToyInWaterOrAcrossItInsteadOfReturningToTheRememberedBank(boolean inWater) {
+        swimming = false; runtime.rememberGround(pet, body);
+        swimming = true; body.teleport(body.getLocation().add(1.5, 0, 0));
+        var target = new Location(world, 12.5, 64, 2.5);
+        if (inWater) waterTarget = target;
+        blocked = false;
+        pet.order(PetOrder.FOLLOW);
+        pet.fetch(new net.tfminecraft.companionpets.play.FetchJob("STICK", owner.getUniqueId()));
+        var fetch = mock(PetFetchActions.class);
+        var waterActions = mock(PetActions.class);
+        when(waterActions.fetchActions()).thenReturn(fetch);
+        when(fetch.destination(pet)).thenReturn(target);
+        when(fetch.movementSpeed(pet)).thenReturn(1.1);
+        server.getMobGoals().removeGoal(body, goal);
+        WaterNavigationGoal.ensure(runtime, pet, body, waterActions);
+        goal = (WaterNavigationGoal) server.getMobGoals().getGoal(body,
+                GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
+        int reads = blockReads;
+        goal.tick(NOW);
+        assertEquals(target, routedTo);
+        assertEquals(1, searches); assertEquals(0, moves);
+        assertTrue(blockReads - reads < 20, "A reachable toy requires no bank scan");
+        assertTrue(body.getVelocity().getX() > 0, "Swim away from the remembered bank towards the toy");
+        body.teleport(body.getLocation().add(2, 0, 0));
+        goal.tick(NOW + 500);
+        assertEquals(1, searches);
+        assertTrue(body.getVelocity().getX() > 0);
+        verify(fetch, times(2)).step(pet, body);
     }
 
     @Test void tickerRemembersSittingPetsBeforeTheyFallIntoWaterAndKeepsTheirRoute() throws Exception {
