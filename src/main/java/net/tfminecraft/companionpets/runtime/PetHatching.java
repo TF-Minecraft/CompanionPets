@@ -3,11 +3,9 @@ package net.tfminecraft.companionpets.runtime;
 import java.util.Locale;
 import java.util.UUID;
 
-import org.bukkit.GameMode;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 
 
 import net.tfminecraft.companionpets.config.PetTypeDef;
@@ -26,6 +24,10 @@ final class PetHatching {
     private final PetRuntime runtime;
     PetHatching(PetRuntime runtime) { this.runtime = runtime; }
     void begin(Player player, PetTypeDef type) {
+        if (!Quota.canAdopt(runtime.store().countPets(player.getUniqueId()), runtime.config().limits().maxPets())) {
+            PetFx.bar(player, PetTexts.refusal("", PetSex.FEMALE, "full-total"));
+            return;
+        }
         if (!Quota.canBringOut(runtime.store().countOut(player.getUniqueId()), runtime.config().limits().maxOut())) {
             PetFx.bar(player, PetTexts.refusal("", PetSex.FEMALE, "full-out"));
             return;
@@ -101,6 +103,10 @@ final class PetHatching {
             PetFx.tell(player, "The egg left your hand, so nothing hatched. Use it again to start over.");
             return;
         }
+        if (!Quota.canAdopt(runtime.store().countPets(player.getUniqueId()), runtime.config().limits().maxPets())) {
+            PetFx.tell(player, PetTexts.refusal(name, sex, "full-total"));
+            return;
+        }
         if (!Quota.canBringOut(runtime.store().countOut(player.getUniqueId()), runtime.config().limits().maxOut())) {
             PetFx.tell(player, PetTexts.refusal(name, sex, "full-out"));
             return;
@@ -111,17 +117,8 @@ final class PetHatching {
         FavoriteToy.Result favorite = FavoriteToy.reconcile(null, PetActions.toyNames(type), runtime.random());
         pet.favoriteToy(favorite.toy());
         // Use the egg before placing the pet: teleport listeners run during the spawn and may move the held stack.
-        int slot = player.getInventory().getHeldItemSlot();
-        ItemStack egg = hand.asOne();
-        boolean usesEgg = player.getGameMode() != GameMode.CREATIVE;
         if (!net.tfminecraft.companionpets.item.HandItems.consume(player, hand)) return;
         Entity entity = runtime.bodies().spawn(pet, type, PetRuntime.beside(player), player);
-        // Without room outside, the Pet House must have a free space, or the egg goes back.
-        if (entity == null && !Quota.canStore(runtime.store().countStored(player.getUniqueId()), runtime.config().limits().maxStored())) {
-            if (usesEgg) returnEgg(player, slot, egg);
-            PetFx.tell(player, "There is no room out here and your Pet House is full, so the egg did not hatch. Your egg is safe.");
-            return;
-        }
         runtime.store().add(pet);
         PetFx.tell(player, name + " has hatched! Welcome to the family.");
         if (!type.defaultTricks().isEmpty()) PetFx.tell(player, "Already learned: "
@@ -137,16 +134,4 @@ final class PetHatching {
         runtime.store().requestSave();
     }
 
-    private static void returnEgg(Player player, int slot, ItemStack egg) {
-        PlayerInventory inventory = player.getInventory();
-        ItemStack there = inventory.getItem(slot);
-        if (there == null || there.getType().isAir()) {
-            inventory.setItem(slot, egg);
-        } else if (there.isSimilar(egg) && there.getAmount() < there.getMaxStackSize()) {
-            there.setAmount(there.getAmount() + 1);
-            inventory.setItem(slot, there);
-        } else {
-            inventory.addItem(egg).values().forEach(leftover -> player.getWorld().dropItem(player.getLocation(), leftover));
-        }
-    }
 }

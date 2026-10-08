@@ -13,8 +13,18 @@ class QuotaAndPresenceTest {
     void quotasAreHardStops() {
         assertTrue(Quota.canBringOut(3, 4));
         assertFalse(Quota.canBringOut(4, 4));
-        assertTrue(Quota.canStore(19, 20));
-        assertFalse(Quota.canStore(20, 20));
+        assertTrue(Quota.canAdopt(19, 20));
+        assertFalse(Quota.canAdopt(20, 20));
+        assertFalse(Quota.canAdopt(0, 0));
+        assertFalse(Quota.canBringOut(0, 0));
+    }
+
+    @Test void outsideQuotaIsASubsetOfTheTotalEvenWhenConfiguredHigher() {
+        var limits = new Limits(2, 4);
+        assertEquals(2, limits.maxPets()); assertEquals(4, limits.maxOut());
+        assertTrue(Quota.canAdopt(1, limits.maxPets()));
+        assertFalse(Quota.canAdopt(2, limits.maxPets()));
+        assertTrue(Quota.canBringOut(2, limits.maxOut()));
     }
 
     @Test

@@ -378,5 +378,5 @@ social:
 
 # Per-owner quotas; zero prevents additional pets in that category.
 limits:
-  max-stored: 20              # Maximum pets stored in the Pet House per owner; excludes pets currently out.
+  max-pets: 20                # Maximum living pets per owner, counting those inside the Pet House and outside.
   max-out: 4                  # Maximum pets simultaneously out in the world per owner.

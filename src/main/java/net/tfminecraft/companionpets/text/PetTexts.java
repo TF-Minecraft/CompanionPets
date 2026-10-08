@@ -214,7 +214,7 @@ public final class PetTexts {
             case "attention" -> name + " is too distracted to listen";
             case "owner" -> "Only " + his(sex) + " owner can do that";
             case "full-out" -> "You already have as many pets out as you can look after";
-            case "full-stored" -> "Your Pet House has no room left";
+            case "full-total" -> "You already have as many pets as you can care for";
             case "bored" -> name + " has had enough training for now";
             default -> reason;
         };

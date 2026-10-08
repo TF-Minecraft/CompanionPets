@@ -34,7 +34,7 @@ public final class PetMenus {
     public static final int NAME_SLOT = 13;
     public static final int BACK_SLOT = 36;
     public static final int TRICKS_BACK_SLOT = 18;
-    public static final int CALL_SLOT = 38;
+    public static final int BRING_OUT_SLOT = 38;
     public static final int STORE_SLOT = 42;
     public static final int TRICKS_SLOT = 40;
     public static final int RELEASE_SLOT = 44;
@@ -143,11 +143,12 @@ public final class PetMenus {
                 line("See what " + pet.name() + " has learned", NamedTextColor.GRAY)));
         if (management) {
             boolean stored = pet.stored();
-            inventory.setItem(careSlot(CALL_SLOT, back), action(stored ? Material.LEAD : Material.COMPASS,
-                    stored ? "Bring out" : "Call",
-                    line(stored ? "Bring " + PetTexts.him(pet.sex()) + " out beside you" : "Call " + PetTexts.him(pet.sex()) + " to your side", NamedTextColor.GRAY)));
+            if (stored) inventory.setItem(careSlot(BRING_OUT_SLOT, back), action(Material.LEAD, "Bring out",
+                    line("Bring " + PetTexts.him(pet.sex()) + " out beside you", NamedTextColor.GRAY)));
             if (!stored) inventory.setItem(careSlot(STORE_SLOT, back), action(Material.BARREL, "Send to Pet House",
-                    line("Take " + PetTexts.him(pet.sex()) + " out of the world", NamedTextColor.GRAY)));
+                    line("Take " + PetTexts.him(pet.sex()) + " out of the world", NamedTextColor.GRAY),
+                    line("Bring " + PetTexts.him(pet.sex()) + " out again beside you", NamedTextColor.GRAY),
+                    line("from the Pet House", NamedTextColor.GRAY)));
             else inventory.setItem(careSlot(STORE_SLOT, back), named(Material.GRAY_DYE, "In Pet House", NamedTextColor.GRAY,
                     line(pet.name() + " is already resting here", NamedTextColor.GRAY)));
             inventory.setItem(careSlot(RELEASE_SLOT, back), action(Material.BARRIER, "Release forever",

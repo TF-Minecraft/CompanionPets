@@ -122,7 +122,7 @@ class StaffCommandsTest {
         owner = server.addPlayer("Owner");
         var yaml = new YamlConfiguration();
         yaml.loadFromString("""
-                limits: {max-stored: 2, max-out: 2}
+                limits: {max-pets: 2, max-out: 2}
                 items:
                   treats: [COD, SALMON]
                   foods: [{item: BEEF, hunger: 35}]
@@ -157,9 +157,22 @@ class StaffCommandsTest {
         assertEquals(100, created.progress(Trick.LAY));
     }
 
+    @Test void creationRejectsTheTotalIncludingOutsidePetsAndExcludesDeadPets() {
+        Pet outside = add(owner.getUniqueId(), "wolf", "Outside", false);
+        command("create", "Owner", "wolf", "New");
+        assertTrue(staff.nextMessage().contains("maximum number of pets"));
+        assertEquals(2, runtime.store().countPets(owner.getUniqueId()));
+        assertEquals(2, runtime.store().all().size());
+        outside.dead(true);
+        command("create", "Owner", "wolf", "New");
+        assertTrue(staff.nextMessage().contains("Created New"));
+        assertEquals(2, runtime.store().countPets(owner.getUniqueId()));
+        assertEquals(3, runtime.store().all().size());
+    }
+
     @Test void creationKeepsDogCatAndBasicProfilesInTheirConfiguredPetTypes() throws Exception {
         configure("""
-                limits: {max-stored: 4}
+                limits: {max-pets: 4}
                 pets:
                   wolf: {entity: WOLF, behavior: dog, egg: WOLF_SPAWN_EGG}
                   cat: {entity: CAT, behavior: cat, egg: CAT_SPAWN_EGG}
@@ -180,7 +193,7 @@ class StaffCommandsTest {
             assertEquals(100, created.progress(Trick.SIT));
         }
         var reloaded = new PetStore(plugin); assertTrue(reloaded.load());
-        assertEquals(4, reloaded.countStored(owner.getUniqueId()));
+        assertEquals(4, reloaded.countPets(owner.getUniqueId()));
         for (var entry : profiles.entrySet()) {
             var restored = reloaded.of(owner.getUniqueId()).stream()
                     .filter(p -> p.name().equals(entry.getValue().name())).findFirst().orElseThrow();
