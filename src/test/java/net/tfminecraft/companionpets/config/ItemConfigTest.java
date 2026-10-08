@@ -76,6 +76,38 @@ class ItemConfigTest {
                 CompanionConfig.readFoods(yaml.getConfigurationSection("care"), logger));
     }
 
+    @Test void eggAndToyIndicesAreRebuiltOnLoadAndRespectModelsAndOverrides() throws Exception {
+        var yaml = new YamlConfiguration();
+        yaml.loadFromString("""
+                items: {toys: [STICK, BONE]}
+                pets:
+                  wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}
+                  cat: {entity: CAT, egg: CAT_SPAWN_EGG, items: {toys: [BONE]}}
+                """);
+        var plugin = MockBukkit.createMockPlugin();
+        var config = CompanionConfig.load(plugin, yaml);
+        var stick = net.tfminecraft.companionpets.item.HeldItem.of(new org.bukkit.inventory.ItemStack(org.bukkit.Material.STICK));
+        assertEquals(java.util.Set.of(config.type("wolf")), config.toyTypes(stick));
+        assertTrue(config.type("wolf").acceptsToy(stick));
+        var plainStick = new org.bukkit.inventory.ItemStack(org.bukkit.Material.STICK);
+        assertEquals(ItemRef.parse("STICK"), config.type("wolf").toy(plainStick));
+        assertTrue(config.type("wolf").acceptsToy(plainStick));
+        assertFalse(config.type("wolf").isTreat(plainStick));
+        assertNull(config.type("wolf").foodGain(plainStick));
+        assertFalse(config.type("wolf").isTreat(stick));
+        assertNull(config.type("wolf").foodGain(stick));
+        assertEquals(2, config.toyTypes(net.tfminecraft.companionpets.item.HeldItem.of(new org.bukkit.inventory.ItemStack(org.bukkit.Material.BONE))).size());
+        var egg = new org.bukkit.inventory.ItemStack(org.bukkit.Material.WOLF_SPAWN_EGG);
+        var meta = egg.getItemMeta(); meta.setCustomModelData(9); egg.setItemMeta(meta);
+        assertNull(config.byEgg(egg));
+        yaml.set("pets.wolf.egg-custom-model-data", 9);
+        yaml.set("pets.wolf.items.toys", java.util.List.of());
+        var reloaded = CompanionConfig.load(plugin, yaml);
+        assertEquals("wolf", reloaded.byEgg(egg).id());
+        assertTrue(reloaded.toyTypes(stick).isEmpty());
+        assertNull(reloaded.byEgg(new org.bukkit.inventory.ItemStack(org.bukkit.Material.WOLF_SPAWN_EGG)));
+    }
+
     @Test void invalidFoodsDoNotBecomeAnotherItemOrGain() throws Exception {
         var yaml = new YamlConfiguration();
         yaml.loadFromString("""

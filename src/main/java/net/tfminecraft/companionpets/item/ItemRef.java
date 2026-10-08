@@ -87,8 +87,7 @@ public record ItemRef(Kind kind, String id, String type) {
     }
 
     public boolean matches(ItemStack item) {
-        return item != null && !item.getType().isAir() && item.getAmount() > 0
-                && matches(ItemBridge.identity(item));
+        return HeldItem.of(item).matches(this);
     }
 
     boolean matches(ItemBridge.Identity item) {

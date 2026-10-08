@@ -16,6 +16,7 @@ import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.item.ItemRef;
+import net.tfminecraft.companionpets.item.HeldItem;
 import net.tfminecraft.companionpets.pet.*;
 
 /** A held toy takes priority until played with, put away or ignored long enough to become boring. */
@@ -34,11 +35,11 @@ final class PetToyAnticipation {
         }
         for (Pet pet : runtime.store().active()) {
             Player owner = Bukkit.getPlayer(pet.ownerId());
-            ItemRef toy = owner != null && owner.isOnline() ? heldToy(pet, owner) : null;
+            if (owner == null || !owner.isOnline()) { interests.remove(pet.id()); cancel(pet); continue; }
+            if (!(runtime.entity(pet) instanceof Mob body)
+                    || !ready(pet, body, owner, now)) { cancel(pet); continue; }
+            ItemRef toy = heldToy(pet, owner);
             if (toy == null) { interests.remove(pet.id()); cancel(pet); continue; }
-            if (!(runtime.entity(pet) instanceof Mob body) || !ready(pet, body, owner, now)) {
-                cancel(pet); continue;
-            }
             if (!interested(pet, owner, toy, now)) { cancel(pet); continue; }
             Focus focus = active.get(pet.id());
             if (focus == null || focus.body != body || focus.owner != owner || !focus.toy.equals(toy.key())) {
@@ -203,8 +204,8 @@ final class PetToyAnticipation {
     private ItemRef heldToy(Pet pet, Player owner) {
         PetTypeDef type = runtime.config().type(pet.typeId());
         if (type == null) return null;
-        ItemRef main = type.toy(owner.getInventory().getItemInMainHand());
-        ItemRef off = type.toy(owner.getInventory().getItemInOffHand());
+        ItemRef main = type.toy(HeldItem.of(owner.getInventory().getItemInMainHand()));
+        ItemRef off = type.toy(HeldItem.of(owner.getInventory().getItemInOffHand()));
         if (main != null && main.key().equals(pet.favoriteToy())) return main;
         if (off != null && off.key().equals(pet.favoriteToy())) return off;
         return main == null ? off : main;

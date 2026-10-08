@@ -63,7 +63,7 @@ class ItemBridgeTest {
                 import net.Indyuce.mmoitems.api.Type;
                 public class Provider extends PluginMock {
                     public static ItemStack item;
-                    public static boolean identifyFails, createFails;
+                    public static int identifies, creates; public static boolean identifyFails, createFails;
                     public static String requestedType, requestedId;
                     public Provider(String name, Server server, File folder) {
                         super(new JavaPluginLoader(server),
@@ -71,7 +71,7 @@ class ItemBridgeTest {
                     }
                     public void active(boolean active) { setEnabled(active); }
                     public static String getTypeName(ItemStack item) {
-                        if (identifyFails) throw new IllegalStateException("MMOItems identification failed");
+                        identifies++; if (identifyFails) throw new IllegalStateException("MMOItems identification failed");
                         return item.getItemMeta().getPersistentDataContainer().get(
                             new NamespacedKey("fixture", "mmo_type"), PersistentDataType.STRING);
                     }
@@ -81,7 +81,7 @@ class ItemBridgeTest {
                     }
                     public ItemStack getItem(Type type, String id) {
                         requestedType = type.id(); requestedId = id;
-                        if (createFails) throw new IllegalStateException("MMOItems creation failed");
+                        creates++; if (createFails) throw new IllegalStateException("MMOItems creation failed");
                         return item;
                     }
                 }
@@ -94,12 +94,12 @@ class ItemBridgeTest {
                 import org.bukkit.persistence.PersistentDataType;
                 public class CustomStack {
                     public static ItemStack item;
-                    public static boolean identifyFails, createFails, missing;
+                    public static int identifies, creates; public static boolean identifyFails, createFails, missing;
                     public static String requestedId;
                     private final ItemStack stack;
                     public CustomStack(ItemStack stack) { this.stack = stack; }
                     public static CustomStack byItemStack(ItemStack stack) {
-                        if (identifyFails) throw new IllegalStateException("ItemsAdder identification failed");
+                        identifies++; if (identifyFails) throw new IllegalStateException("ItemsAdder identification failed");
                         var custom = new CustomStack(stack);
                         return custom.getNamespacedID() == null ? null : custom;
                     }
@@ -109,7 +109,7 @@ class ItemBridgeTest {
                     }
                     public static CustomStack getInstance(String id) {
                         requestedId = id;
-                        if (createFails) throw new IllegalStateException("ItemsAdder creation failed");
+                        creates++; if (createFails) throw new IllegalStateException("ItemsAdder creation failed");
                         return missing ? null : new CustomStack(item);
                     }
                     public ItemStack getItemStack() { return stack; }
@@ -313,6 +313,78 @@ class ItemBridgeTest {
         assertIncompatibleReplacement("ItemsAdder", "ia.pets:bone");
     }
 
+    @Test void mismatchedVanillaMaterialNeverQueriesProviders() throws Exception {
+        var mmo = provider("MMOItems"); var ia = provider("ItemsAdder");
+        mmo.set("identifyFails", true); ia.set("identifyFails", true);
+        assertFalse(bridge.matches("STICK", new ItemStack(Material.BONE)));
+        assertEquals(0, mmo.get("identifies"));
+        assertEquals(0, ia.get("identifies"));
+        assertTrue(warnings.isEmpty());
+    }
+
+    @Test void oneIdentityRecognizesEveryCareCategoryAndBothProviders() throws Exception {
+        var mmo = provider("MMOItems"); var ia = provider("ItemsAdder");
+        var stack = mmoItem(Material.BONE, "pets", "care");
+        tag(stack, "ia_id", "pets:care");
+        var ref = ItemRef.parse("m.pets.care");
+        var refs = List.of(ItemRef.parse("m.pets.other"), ref);
+        var items = new net.tfminecraft.companionpets.config.PetItems(Map.of(ref, 55.0), refs, refs, refs, refs);
+        try (var held = HeldItem.of(stack).scope()) {
+            assertTrue(items.isTreat(held));
+            assertTrue(items.isMedicine(stack));
+            assertTrue(items.isBrush(stack));
+            assertEquals(ref, items.toy(held));
+            assertEquals(55.0, items.foodGain(held));
+            assertTrue(held.matches(ItemRef.parse("ia.pets:care")));
+            assertFalse(held.matches(ItemRef.parse("BONE")));
+            assertEquals(List.of(ref, ItemRef.parse("ia.pets:care")), held.keys());
+        }
+        assertEquals(1, mmo.get("identifies"));
+        assertEquals(1, ia.get("identifies"));
+    }
+
+    @Test void clickSharesIdentityBetweenHandlingAndUseAndIndicesPreserveEggPrecedence() throws Exception {
+        var mmo = provider("MMOItems"); var ia = provider("ItemsAdder");
+        var yaml = new org.bukkit.configuration.file.YamlConfiguration();
+        yaml.loadFromString("""
+                pets:
+                  legacy: {entity: WOLF, egg: BONE, egg-custom-model-data: 42}
+                  adder: {entity: WOLF, egg: 'ia.pets:egg', toys: ['ia.pets:egg']}
+                  mmo: {entity: WOLF, egg: m.pets.egg, toys: [m.pets.egg]}
+                """);
+        var plugin = MockBukkit.createMockPlugin();
+        var config = net.tfminecraft.companionpets.config.CompanionConfig.load(plugin, yaml);
+        var stack = mmoItem(Material.BONE, "PETS", "EGG");
+        tag(stack, "ia_id", "pets:egg");
+        var meta = stack.getItemMeta(); meta.setCustomModelData(42); stack.setItemMeta(meta);
+        var held = HeldItem.of(stack);
+        assertEquals("adder", config.eggType(held).id(), "Configuration order wins between custom providers");
+        assertEquals(java.util.Set.of(config.type("adder"), config.type("mmo")), config.toyTypes(held));
+        assertTrue(config.type("mmo").matchesEgg(held));
+        assertTrue(config.type("legacy").matchesEgg(held));
+        var key = new NamespacedKey(plugin, "pet");
+        var visual = new net.tfminecraft.companionpets.visual.IdleVisual();
+        var runtime = new net.tfminecraft.companionpets.runtime.PetRuntime(plugin, config,
+                new net.tfminecraft.companionpets.store.PetStore(plugin), new net.tfminecraft.companionpets.session.Sessions(),
+                new net.tfminecraft.companionpets.body.Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
+        var actions = new net.tfminecraft.companionpets.runtime.PetActions(runtime);
+        var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
+        var player = server.addPlayer();
+        mmo.set("identifies", 0); ia.set("identifies", 0);
+        var event = new org.bukkit.event.player.PlayerInteractEvent(player,
+                org.bukkit.event.block.Action.RIGHT_CLICK_AIR, stack, null, org.bukkit.block.BlockFace.UP,
+                org.bukkit.inventory.EquipmentSlot.HAND);
+        listener.onUse(event);
+        assertEquals(org.bukkit.event.Event.Result.DENY, event.useItemInHand());
+        assertEquals("adder", runtime.sessions().hatch(player.getUniqueId()).typeId());
+        assertEquals(1, mmo.get("identifies")); assertEquals(1, ia.get("identifies"));
+        mmo.set("identifyFails", true);
+        assertEquals("legacy", config.byEgg(stack).id(), "Legacy models still match if identification fails");
+        assertTrue(config.toyTypes(HeldItem.of(stack)).isEmpty());
+        var missingId = mmoItem(Material.BONE, "PETS", null);
+        assertFalse(HeldItem.of(missingId).matches(ItemRef.parse("BONE")));
+    }
+
     private void assertIncompatibleReplacement(String name, String token) throws Exception {
         var original = provider(name);
         var item = name.equals("MMOItems") ? mmoItem(Material.BONE, "TOY", "BONE")
@@ -419,7 +491,7 @@ class ItemBridgeTest {
                     .invoke(ref.getMethod("parse", String.class).invoke(null, token), item);
         }
         @Override protected synchronized Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-            if (!name.startsWith(ItemBridge.class.getName()) && !name.startsWith(ItemRef.class.getName()))
+            if (!name.startsWith(ItemBridge.class.getName()) && !name.startsWith(ItemRef.class.getName()) && !name.startsWith(HeldItem.class.getName()))
                 return super.loadClass(name, resolve);
             Class<?> loaded = findLoadedClass(name);
             if (loaded == null) {
