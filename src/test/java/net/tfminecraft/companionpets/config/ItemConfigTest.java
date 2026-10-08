@@ -131,8 +131,8 @@ class ItemConfigTest {
         assertEquals(java.util.List.of(ItemRef.parse("mmoitems:PETS:FISH_SNACK"),
                 ItemRef.parse("mmoitems:PETS:BISCUIT_TREAT")),
                 config.items().treats());
-        assertEquals(Map.of(ItemRef.parse("mmoitems:PETS:MEAT_TREAT"), 35.0,
-                ItemRef.parse("mmoitems:PETS:FISH_TREAT"), 35.0), config.items().foods());
+        assertEquals(Map.of(ItemRef.parse("mmoitems:PETS:MEAT_TREAT"), 45.0,
+                ItemRef.parse("mmoitems:PETS:FISH_TREAT"), 45.0), config.items().foods());
         assertEquals(java.util.List.of(ItemRef.parse("STICK"), ItemRef.parse("mmoitems:PETS:PET_BALL"),
                 ItemRef.parse("mmoitems:PETS:PET_CHEW_BONE"), ItemRef.parse("mmoitems:PETS:PET_TUG_ROPE"),
                 ItemRef.parse("mmoitems:PETS:PET_MOUSE_PLUSH"), ItemRef.parse("mmoitems:PETS:PET_TEDDY_PLUSH")),
