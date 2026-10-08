@@ -69,11 +69,18 @@ public final class WaterEscape {
 
     /** Native land routes or an unobstructed swim to water/a low, dry bank. */
     public static boolean reachable(Mob body, Location target) {
+        return reachable(body, target, at -> {
+            var path = body.getPathfinder().findPath(at);
+            return path != null && path.canReachFinalPoint();
+        });
+    }
+
+    /** The caller budgets native routes; swimming remains a cheap fallback for every candidate. */
+    public static boolean reachable(Mob body, Location target, java.util.function.Predicate<Location> landRoute) {
         if (target == null || !body.getWorld().equals(target.getWorld())
                 || !body.getWorld().isChunkLoaded(target.getBlockX() >> 4, target.getBlockZ() >> 4)
                 || !body.getWorld().getWorldBorder().isInside(target)) return false;
-        var path = body.getPathfinder().findPath(target);
-        if (path != null && path.canReachFinalPoint()) return true;
+        if (landRoute.test(target)) return true;
         if (!needed(body) || Math.abs(target.getY() - body.getLocation().getY()) > 1.5
                 || !(target.getBlock().getType() == Material.WATER || safe(target))) return false;
         var from = body.getEyeLocation();

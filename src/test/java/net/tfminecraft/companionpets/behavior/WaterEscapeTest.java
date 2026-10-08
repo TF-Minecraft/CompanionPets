@@ -96,4 +96,21 @@ class WaterEscapeTest {
         blockedSwim = true;
         assertFalse(WaterEscape.reachable(body, shore));
     }
+
+    @Test void exhaustedNativeRouteBudgetStillChecksTheCheapSwimWithoutFindingAPath() {
+        var body = org.mockito.Mockito.mock(org.bukkit.entity.Mob.class);
+        var from = new Location(world, 2.5, 64, 2.5);
+        org.mockito.Mockito.when(body.getWorld()).thenReturn(world);
+        org.mockito.Mockito.when(body.getLocation()).thenReturn(from);
+        org.mockito.Mockito.when(body.getEyeLocation()).thenReturn(from.clone().add(0, 1, 0));
+        org.mockito.Mockito.when(body.getEyeHeight()).thenReturn(1.0);
+        org.mockito.Mockito.when(body.isInWater()).thenReturn(true);
+        block(4, 63, 2, Material.STONE);
+        var shore = new Location(world, 4.5, 64, 2.5);
+        assertTrue(WaterEscape.reachable(body, shore, at -> false));
+        blockedSwim = true;
+        assertFalse(WaterEscape.reachable(body, shore, at -> false));
+        assertTrue(WaterEscape.reachable(body, shore, at -> true));
+        org.mockito.Mockito.verify(body, org.mockito.Mockito.never()).getPathfinder();
+    }
 }
