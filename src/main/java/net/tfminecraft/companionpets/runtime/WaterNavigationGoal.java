@@ -52,8 +52,7 @@ final class WaterNavigationGoal implements Goal<Mob> {
             speed = pet.fetch() != null ? actions.fetchActions().movementSpeed(pet)
                     : actions.roaming().returningFromFetch(pet) ? actions.roaming().movementSpeed(pet) : 1.1;
             if (exit != null) body.getPathfinder().moveTo(exit, speed);
-            // Without a way out the pet keeps floating; searching again at once would repeat the same failures.
-            searchAt = now + (exit != null ? 500L : 2_000L);
+            searchAt = now + 500L;
         }
         WaterEscape.swim(body, exit, speed);
     }
