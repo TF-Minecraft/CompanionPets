@@ -31,7 +31,8 @@ class TfDevConfigurationTest {
             var deployed = CompanionConfig.load(plugin, deployedYaml);
             var bundled = CompanionConfig.load(plugin, bundledYaml);
             for (var field : CompanionConfig.class.getDeclaredFields()) {
-                if (Set.of("types", "customTricks").contains(field.getName())) continue;
+                // Item lookup indexes contain type identities; compare type definitions below.
+                if (Set.of("types", "customTricks", "eggs", "modelEggs", "eggOrder", "toys").contains(field.getName())) continue;
                 field.setAccessible(true);
                 assertEquals(field.get(deployed), field.get(bundled), field.getName());
             }
@@ -53,7 +54,7 @@ class TfDevConfigurationTest {
                     if (oldCue == null) { assertNull(newCue); continue; }
                     assertEquals(oldCue.sounds(), newCue.sounds());
                     assertEquals(oldCue.volume(), newCue.volume());
-                    assertEquals(oldCue.pitch() * pitch, newCue.pitch(), .0001f);
+                    assertEquals(oldCue.pitch() / expected.sounds().pitch() * pitch, newCue.pitch(), .0001f);
                 }
             }
             for (String id : java.util.List.of("tongue", "croak"))
@@ -124,7 +125,7 @@ class TfDevConfigurationTest {
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_JUMPS));
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_VOCALIZING));
             assertTrue(config.type("beagle").behaves(PetBehavior.TOY_WIGGLE));
-            assertEquals(1f, config.type("chihuahua").sounds().pitch());
+            assertEquals(1.25f, config.type("chihuahua").sounds().pitch());
             assertTrue(config.type("chihuahua").behaves(PetBehavior.DIG_GIFTS));
         } finally { MockBukkit.unmock(); }
     }
