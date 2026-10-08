@@ -26,8 +26,8 @@ ItemsAdder are optional.
   and animations. Resting pets look around with bounded head movement.
 - **Staff tools** — browse, locate, and create pets for any player, give eggs,
   and audit every staff intervention.
-- **Durable saves** — atomic saves, a deletion journal, and recovery for pets left
-  outside across restarts.
+- **Pet recovery** — keep pets and their learning across restarts, including pets
+  left outside their Pet House.
 
 ## Documentation
 
@@ -40,15 +40,18 @@ Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/
 With Java 21 and Maven installed, run:
 
 ```sh
-mvn clean install -DskipTests=false -Dmaven.test.skip=false
+mvn clean verify
 ```
 
-Unit and MockBukkit workflow tests run with JUnit. Every normal verification writes
-a JaCoCo report to `target/site/jacoco/` and requires 100% production line coverage,
-without class or package exclusions. Verification also requires the execution data
-and XML report to exist. CI uploads both test and coverage reports. The `coverage`
-profile remains available for older commands. The dev-only Paper server check is
-described in [integration-tests/README.md](integration-tests/README.md).
+Tests use JUnit, MockBukkit, and Mockito. Surefire reports go to
+`target/surefire-reports/`; JaCoCo HTML, XML, and CSV reports go to
+`target/site/jacoco/`. Verification requires 100% production line coverage without
+class or package exclusions, plus the execution data and XML report. CI uploads
+test and coverage reports.
+
+These tests simulate Bukkit and provider integrations. Real Paper behaviour and
+client rendering need separate checks; see the
+[testing guide](https://github.com/TF-Minecraft/Docs/blob/main/projects/CompanionPets/docs/testing.md).
 
 ## License
 
