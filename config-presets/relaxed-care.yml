@@ -3,14 +3,15 @@
 # This is a partial preset, not a complete replacement config.
 # Preserve your pet types, models, item IDs, custom tricks and unrelated values.
 # For each existing items.foods entry, set hunger to 45; keep its item selector.
+# Needs and bond use 0-100 points; gain/loss values below are points, not %.
 care:
   hunger-minutes-to-critical: 480
   mood-minutes-to-critical: 720
   energy-minutes-to-critical: 480
   dirty-every-minutes: 120
   dirty-loss: 10
-  minutes-until-unwell: 30
-  minutes-until-sick: 60
+  minutes-until-unwell: 30       # Minutes with critical needs before becoming unwell.
+  minutes-until-sick: 60         # Additional minutes after the unwell threshold before sickness.
   decay-while-stored: false
   death-on-neglect: false
   play-energy-cost: 1
@@ -19,7 +20,7 @@ care:
   health-regen-per-minute: 20
   medicine-health-bump: 40
   bond-loss-per-minute: 0.05
-  wake-mood-penalty: 2
+  wake-mood-penalty: 2           # Loaded value; currently unused when waking.
   critical-sound-seconds: 60
   overfeed-mood-penalty: 2
   overfeed-health-penalty: 0
@@ -30,7 +31,7 @@ training:
   attempt-mood-cost: 0.5
   rest-seconds: 45
 presence:
-  away-rate: 0.1
+  away-rate: 0.1                # Need changes at 10% of normal while away; offline care is frozen.
   cry-interval-seconds: 180
 moments:
   belly-up:

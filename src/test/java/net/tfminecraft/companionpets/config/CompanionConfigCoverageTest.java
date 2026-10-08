@@ -39,7 +39,7 @@ class CompanionConfigCoverageTest {
     }
 
     @Test void integerCountsRejectFractionsTextAndOverflowInsteadOfSilentlyChangingQuotasOrTraining() throws Exception {
-        for (String path : List.of("limits.max-stored", "limits.max-out", "training.attempts-before-bored")) {
+        for (String path : List.of("limits.max-pets", "limits.max-stored", "limits.max-out", "training.attempts-before-bored")) {
             for (String value : List.of("1.5", "not-a-count", "4294967297", ".nan", ".inf")) {
                 var yaml = yaml(path.substring(0, path.indexOf('.')) + ": {" + path.substring(path.indexOf('.') + 1) + ": " + value + "}");
                 IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
@@ -51,16 +51,41 @@ class CompanionConfigCoverageTest {
 
     @Test void integerDefaultsZeroQuotasAndLargestIntegerRemainExact() throws Exception {
         var defaults = load("");
-        assertEquals(20, defaults.limits().maxStored()); assertEquals(4, defaults.limits().maxOut());
+        assertEquals(20, defaults.limits().maxPets()); assertEquals(4, defaults.limits().maxOut());
         assertEquals(6, defaults.training().attemptsBeforeBored());
-        var zero = load("limits: {max-stored: 0, max-out: 0}\ntraining: {attempts-before-bored: 1}");
-        assertEquals(0, zero.limits().maxStored()); assertEquals(0, zero.limits().maxOut());
+        var zero = load("limits: {max-pets: 0, max-out: 0}\ntraining: {attempts-before-bored: 1}");
+        assertEquals(0, zero.limits().maxPets()); assertEquals(0, zero.limits().maxOut());
         assertEquals(1, zero.training().attemptsBeforeBored());
-        var max = load("limits: {max-stored: 2147483647, max-out: 2147483647}\ntraining: {attempts-before-bored: 2147483647}");
-        assertEquals(Integer.MAX_VALUE, max.limits().maxStored()); assertEquals(Integer.MAX_VALUE, max.limits().maxOut());
+        var max = load("limits: {max-pets: 2147483647, max-out: 2147483647}\ntraining: {attempts-before-bored: 2147483647}");
+        assertEquals(Integer.MAX_VALUE, max.limits().maxPets()); assertEquals(Integer.MAX_VALUE, max.limits().maxOut());
         assertEquals(Integer.MAX_VALUE, max.training().attemptsBeforeBored());
         assertThrows(IllegalArgumentException.class, () -> load("limits: {max-out: -1}"));
         assertThrows(IllegalArgumentException.class, () -> load("training: {attempts-before-bored: 0}"));
+    }
+
+    @Test void totalLimitUsesTheNewKeyWithoutAnObsoleteWarning() throws Exception {
+        var config = load("limits: {max-pets: 7, max-out: 3}");
+        assertEquals(7, config.limits().maxPets()); assertEquals(3, config.limits().maxOut());
+        assertTrue(warnings.isEmpty());
+    }
+
+    @Test void legacyLimitWarnsAndOverridesBundledDefaultsUntilRenamed() throws Exception {
+        var config = yaml("limits: {max-stored: 7, max-out: 3}");
+        config.setDefaults(yaml("limits: {max-pets: 20, max-out: 4}"));
+        assertEquals(7, CompanionConfig.load(plugin, config).limits().maxPets());
+        assertTrue(warnings.stream().anyMatch(s -> s.contains("max-stored is obsolete") && s.contains("rename it to limits.max-pets")));
+    }
+
+    @Test void explicitTotalLimitWinsOverTheObsoleteKeyWithAWarning() throws Exception {
+        var config = load("limits: {max-pets: 6, max-stored: invalid, max-out: 3}");
+        assertEquals(6, config.limits().maxPets());
+        assertTrue(warnings.stream().anyMatch(s -> s.contains("max-stored is obsolete and ignored") && s.contains("max-pets is set")));
+    }
+
+    @Test void outsideLimitAboveTheTotalWarnsAndPreservesTheConfiguredValues() throws Exception {
+        var config = load("limits: {max-pets: 2, max-out: 4}");
+        assertEquals(2, config.limits().maxPets()); assertEquals(4, config.limits().maxOut());
+        assertTrue(warnings.stream().anyMatch(s -> s.contains("max-out exceeds limits.max-pets") && s.endsWith("2")));
     }
 
     @Test void numericFallbacksWarnAndPreserveValidNeighbours() throws Exception {
@@ -229,7 +254,7 @@ class CompanionConfigCoverageTest {
     @Test void yamlRoundTripKeepsResolvedInheritanceLegacyItemsAndImmutableCollections() throws Exception {
         var source = yaml("""
                 training: {default-tricks: [follow, sit]}
-                limits: {max-stored: 7, max-out: 2}
+                limits: {max-pets: 7, max-out: 2}
                 presence: {owner-near-radius: 16, away-rate: 0.5, cry-interval-seconds: 20}
                 items: {kennel: CHEST, brush: FEATHER}
                 custom-tricks: {salute: {fallback-text: '{pet} salutes {owner}'}}

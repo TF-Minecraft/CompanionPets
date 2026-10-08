@@ -173,9 +173,20 @@ public final class CompanionConfig {
 
         ConfigurationSection limits = config.getConfigurationSection("limits");
         Limits limitDefaults = Limits.defaults();
+        String maxPetsPath = "max-pets";
+        if (PetItems.has(limits, "max-stored")) {
+            if (PetItems.has(limits, "max-pets")) {
+                logger.warning("limits.max-stored is obsolete and ignored because limits.max-pets is set; remove max-stored");
+            } else {
+                maxPetsPath = "max-stored";
+                logger.warning("limits.max-stored is obsolete; rename it to limits.max-pets (total pets inside and outside the Pet House)");
+            }
+        }
         Limits limitSettings = new Limits(
-                integer(limits, "max-stored", limitDefaults.maxStored()),
+                integer(limits, maxPetsPath, limitDefaults.maxPets()),
                 integer(limits, "max-out", limitDefaults.maxOut()));
+        if (limitSettings.maxOut() > limitSettings.maxPets())
+            logger.warning("limits.max-out exceeds limits.max-pets; the effective maximum outside is " + limitSettings.maxPets());
 
         MomentSettings momentSettings = MomentSettings.load(config.getConfigurationSection("moments"), logger);
         SocialSettings socialSettings = SocialSettings.load(config.getConfigurationSection("social"), logger);

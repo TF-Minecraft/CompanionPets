@@ -130,7 +130,6 @@ public class PetsPlugin extends JavaPlugin {
         }
         if (flusher != null) flusher.cancel();
         if (actions != null) {
-            actions.closeCalls();
             for (var pet : store.all()) {
                 Entity body = runtime.entity(pet);
                 if (body != null) runtime.remember(pet, body);

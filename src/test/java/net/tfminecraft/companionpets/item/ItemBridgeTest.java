@@ -473,7 +473,8 @@ class ItemBridgeTest {
         var refs = new java.util.LinkedHashSet<ItemRef>();
         for (String id : yaml.getConfigurationSection("pets").getKeys(false))
             refs.add(ItemRef.parse(yaml.getString("pets." + id + ".egg")));
-        assertEquals(14, refs.size());
+        assertEquals(yaml.getConfigurationSection("pets").getKeys(false).size(), refs.size(),
+                "Every configured pet must have a unique egg selector");
         for (var items : java.util.stream.Stream.concat(java.util.stream.Stream.of(config.items()),
                 config.types().values().stream().map(net.tfminecraft.companionpets.config.PetTypeDef::items)).toList()) {
             refs.addAll(items.foods().keySet()); refs.addAll(items.treats()); refs.addAll(items.medicines());

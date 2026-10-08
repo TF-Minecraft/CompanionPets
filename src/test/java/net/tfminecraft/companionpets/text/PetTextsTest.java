@@ -224,7 +224,7 @@ class PetTextsTest {
                 {"attention", "Luna is too distracted to listen"},
                 {"owner", "Only her owner can do that"},
                 {"full-out", "You already have as many pets out as you can look after"},
-                {"full-stored", "Your Pet House has no room left"},
+                {"full-total", "You already have as many pets as you can care for"},
                 {"bored", "Luna has had enough training for now"}
         };
         for (String[] reason : reasons) assertEquals(reason[1], PetTexts.refusal("Luna", PetSex.FEMALE, reason[0]));

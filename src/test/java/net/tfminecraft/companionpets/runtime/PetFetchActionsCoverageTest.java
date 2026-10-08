@@ -391,7 +391,7 @@ class PetFetchActionsCoverageTest {
         assertTrue(ground.isValid()); assertOnePlainToy(); assertNull(foreign.carriedToy());
     }
 
-    @Test void anyOwnerTrickImmediatelyAbandonsForeignFetchAndCallAlsoLocksOutVisitors() throws Exception {
+    @Test void anyOwnerTrickImmediatelyAbandonsForeignFetchAndCallingItsNameAlsoLocksOutVisitors() throws Exception {
         pet.order(PetOrder.STAY); Pet foreign = foreignPet(); carry(foreign);
         Player petOwner = Bukkit.getPlayer(foreign.ownerId());
         foreign.bindWord("speak", Trick.SPEAK); foreign.progress(Trick.SPEAK, 100);
@@ -402,8 +402,7 @@ class PetFetchActionsCoverageTest {
         actions.anticipation().tick(System.currentTimeMillis()); assertFalse(actions.anticipation().active(foreign));
         actions.anticipation().clear(); runtime.entity(foreign).teleport(new Location(world, 3, 64, 0)); runtime.random().setSeed(4096);
         actions.anticipation().tick(System.currentTimeMillis()); assertTrue(actions.anticipation().active(foreign));
-        var call = PetActions.class.getDeclaredMethod("call", Player.class, Pet.class);
-        call.setAccessible(true); call.invoke(actions, petOwner, foreign);
+        actions.onChat(petOwner, foreign.name());
         assertFalse(actions.anticipation().active(foreign));
         actions.anticipation().tick(System.currentTimeMillis()); assertFalse(actions.anticipation().active(foreign));
     }}

@@ -98,7 +98,7 @@ class PetHatchingCoverageTest {
         var plugin = MockBukkit.createMockPlugin();
         yaml = new YamlConfiguration();
         yaml.loadFromString("""
-                limits: {max-out: 2, max-stored: 2}
+                limits: {max-out: 2, max-pets: 2}
                 items: {toys: [STICK]}
                 pets:
                   wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, sex: choose, default-tricks: [follow]}
@@ -271,14 +271,52 @@ class PetHatchingCoverageTest {
         assertStoredAfterRejectedPlacement();
     }
 
-    @Test void withoutRoomOutsideAFullPetHouseKeepsTheEggUnhatched() {
+    @Test void reachingTheTotalRefusesHatchingBeforeTheDialogueWithRoomOutside() {
         fillPetHouse();
-        onTaggedTeleport(EventPriority.HIGHEST, event -> event.setCancelled(true));
-        begin(); namePet(); chat("yes");
-        assertEquals(2, runtime.store().all().size(), "no pet may exceed the Pet House limit");
-        assertEquals(2, player.getInventory().getItemInMainHand().getAmount(), "the egg is kept");
-        assertTrue(messages().contains("your Pet House is full"));
-        assertFalse(lastSpawned.isValid());
+        runtime.store().all().iterator().next().stored(false);
+        var egg = new ItemStack(Material.WOLF_SPAWN_EGG, 2);
+        player.getInventory().setItemInMainHand(egg);
+        actions.useWorld(player, player.getInventory().getItemInMainHand(), null, null, false, true);
+        assertNull(runtime.sessions().hatch(player.getUniqueId()));
+        assertEquals(2, runtime.store().countPets(player.getUniqueId()));
+        assertEquals(1, runtime.store().countOut(player.getUniqueId()));
+        assertEquals(egg, player.getInventory().getItemInMainHand());
+        assertTrue(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(player.nextActionBar()).contains("as many pets as you can care for"));
+        assertNull(lastSpawned);
+    }
+
+    @Test void reachingTheTotalDuringTheDialogueKeepsTheEggAtConfirmation() {
+        begin(); namePet();
+        fillPetHouse();
+        runtime.store().all().iterator().next().stored(false);
+        chat("yes");
+        assertNull(runtime.sessions().hatch(player.getUniqueId()));
+        assertEquals(2, runtime.store().countPets(player.getUniqueId()));
+        assertEquals(1, runtime.store().countOut(player.getUniqueId()));
+        assertEquals(2, player.getInventory().getItemInMainHand().getAmount());
+        assertTrue(messages().contains("as many pets as you can care for"));
+        assertNull(lastSpawned);
+    }
+
+    @Test void outsideLimitStillRefusesHatchingAtBothChecksBeforeTheTotalIsReached() {
+        reload("limits.max-pets", 3);
+        fillPetHouse();
+        runtime.store().all().forEach(pet -> pet.stored(false));
+        player.getInventory().setItemInMainHand(new ItemStack(Material.WOLF_SPAWN_EGG, 2));
+        actions.useWorld(player, player.getInventory().getItemInMainHand(), null, null, false, true);
+        assertNull(runtime.sessions().hatch(player.getUniqueId()));
+        assertTrue(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(player.nextActionBar()).contains("as many pets out"));
+        runtime.store().all().forEach(pet -> pet.stored(true));
+        begin(); namePet();
+        runtime.store().all().forEach(pet -> pet.stored(false));
+        chat("yes");
+        assertNull(runtime.sessions().hatch(player.getUniqueId()));
+        assertEquals(2, runtime.store().countPets(player.getUniqueId()));
+        assertEquals(2, player.getInventory().getItemInMainHand().getAmount());
+        assertTrue(messages().contains("as many pets out"));
+        assertNull(lastSpawned);
     }
 
     @Test void movingTheEggDuringPlacementCannotHatchAFreePet() {
@@ -287,31 +325,6 @@ class PetHatchingCoverageTest {
         assertFalse(onlyPet().stored());
         assertEquals(1, eggs(), "the egg is used before placement listeners can move it");
         assertEquals(1, player.getInventory().getItem(5).getAmount());
-    }
-
-    @Test void aFullPetHouseReturnsTheEggToItsEmptiedSlot() {
-        fillPetHouse();
-        onTaggedTeleport(EventPriority.HIGHEST, event -> { moveHeldStackTo(5); event.setCancelled(true); });
-        begin(); namePet(); chat("yes");
-        assertEquals(2, runtime.store().all().size());
-        assertEquals(new ItemStack(Material.WOLF_SPAWN_EGG), player.getInventory().getItemInMainHand());
-        assertEquals(2, eggs());
-        assertTrue(messages().contains("your Pet House is full"));
-    }
-
-    @Test void aFullPetHouseDropsTheEggWhenTheInventoryHasNoRoom() {
-        fillPetHouse();
-        onTaggedTeleport(EventPriority.HIGHEST, event -> {
-            var inventory = player.getInventory();
-            for (int i = 0; i < inventory.getSize(); i++) inventory.setItem(i, new ItemStack(Material.STONE, 64));
-            inventory.setItemInMainHand(new ItemStack(Material.STICK));
-            event.setCancelled(true);
-        });
-        begin(); namePet(); chat("yes");
-        assertEquals(2, runtime.store().all().size());
-        assertEquals(0, eggs());
-        assertTrue(world.getEntitiesByClass(org.bukkit.entity.Item.class).stream()
-                .anyMatch(item -> item.getItemStack().equals(new ItemStack(Material.WOLF_SPAWN_EGG))), "the egg is dropped at the player");
     }
 
     private void fillPetHouse() {

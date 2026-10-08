@@ -105,7 +105,7 @@ class PetStoreTest {
         var saved = new Pet(UUID.randomUUID(), owner, "cat", "Sol", PetSex.MALE); saved.stored(true);
         store.add(out); store.add(saved);
         assertEquals(java.util.List.of(out), java.util.List.copyOf(store.active()));
-        assertEquals(1, store.countOut(owner)); assertEquals(1, store.countStored(owner));
+        assertEquals(1, store.countOut(owner)); assertEquals(2, store.countPets(owner));
         out.entityId(body); assertSame(out, store.byEntity(body));
         out.entityId(null); assertNull(store.byEntity(body));
         out.stored(true); saved.stored(false);
@@ -113,6 +113,9 @@ class PetStoreTest {
         var heir = UUID.randomUUID(); saved.ownerId(heir);
         assertEquals(java.util.List.of(out), store.of(owner)); assertEquals(java.util.List.of(saved), store.of(heir));
         saved.dead(true); assertTrue(store.active().isEmpty());
+        assertEquals(1, store.countPets(owner)); assertEquals(0, store.countPets(heir));
+        out.dead(true); assertEquals(0, store.countPets(owner));
+        assertEquals(0, store.countPets(UUID.randomUUID()));
         saved.dead(false); saved.entityId(body); assertTrue(store.remove(saved.id()));
         assertNull(store.byEntity(body)); assertTrue(store.of(heir).isEmpty());
         saved.stored(true); assertTrue(store.active().isEmpty(), "Removed records no longer refresh the index");
