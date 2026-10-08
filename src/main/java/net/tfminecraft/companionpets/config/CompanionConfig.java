@@ -12,6 +12,7 @@ import java.util.logging.Logger;
 
 import org.bukkit.Material;
 import net.tfminecraft.companionpets.item.ItemRef;
+import net.tfminecraft.companionpets.item.HeldItem;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.EntityType;
@@ -43,6 +44,11 @@ public final class CompanionConfig {
     private final String kennelFurniture;
     private final PetItems items;
     private final Map<String, PetTypeDef> types;
+    private final Map<ItemRef, PetTypeDef> eggs = new LinkedHashMap<>();
+    private final Map<EggModel, PetTypeDef> modelEggs = new LinkedHashMap<>();
+    private final Map<PetTypeDef, Integer> eggOrder = new java.util.IdentityHashMap<>();
+    private final Map<ItemRef, Set<PetTypeDef>> toys = new LinkedHashMap<>();
+    private record EggModel(Material material, Integer model) { }
     private final Map<Trick, CustomTrick> customTricks;
     private final BellySettings belly;
     public BellySettings belly() { return belly; }
@@ -92,6 +98,13 @@ public final class CompanionConfig {
         this.kennelFurniture = kennelFurniture;
         this.items = items;
         this.types = types;
+        for (PetTypeDef type : types.values()) {
+            eggOrder.put(type, eggOrder.size());
+            if (type.eggCustomModelData() == null) eggs.putIfAbsent(type.egg(), type);
+            else modelEggs.putIfAbsent(new EggModel(type.egg().material(), type.eggCustomModelData()), type);
+            for (ItemRef toy : type.toys()) toys.computeIfAbsent(toy, key -> new java.util.LinkedHashSet<>()).add(type);
+        }
+        toys.replaceAll((key, accepting) -> Collections.unmodifiableSet(accepting));
         this.customTricks = customTricks;
         this.belly = belly;
         this.greeting = greeting;
@@ -482,16 +495,25 @@ public final class CompanionConfig {
         return types.get(id.toLowerCase(Locale.ROOT));
     }
 
-    public PetTypeDef byEgg(ItemStack item) {
-        // Explicit custom identity wins over legacy material + model eggs.
-        for (PetTypeDef type : types.values()) {
-            if (type.egg().kind() != ItemRef.Kind.VANILLA && type.matchesEgg(item)) return type;
+    public PetTypeDef byEgg(ItemStack item) { return eggType(HeldItem.of(item)); }
+
+    public PetTypeDef eggType(HeldItem item) {
+        if (item.empty()) return null;
+        PetTypeDef matched = null;
+        for (ItemRef key : item.keys()) {
+            PetTypeDef type = eggs.get(key);
+            if (type != null && (key.kind() != ItemRef.Kind.VANILLA || item.model() == null)
+                    && (matched == null || eggOrder.get(type) < eggOrder.get(matched))) matched = type;
         }
-        for (PetTypeDef type : types.values()) {
-            if (type.matchesEgg(item)) {
-                return type;
-            }
-        }
-        return null;
+        // Explicit custom identity wins over legacy material + model eggs, even with both providers.
+        return matched != null ? matched : modelEggs.get(new EggModel(item.material(), item.model()));
+    }
+
+    public Set<PetTypeDef> toyTypes(HeldItem item) {
+        List<ItemRef> keys = item.keys();
+        if (keys.size() == 1) return toys.getOrDefault(keys.getFirst(), Set.of());
+        Set<PetTypeDef> result = new java.util.LinkedHashSet<>();
+        for (ItemRef key : keys) result.addAll(toys.getOrDefault(key, Set.of()));
+        return result;
     }
 }

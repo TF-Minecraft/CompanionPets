@@ -10,6 +10,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import net.tfminecraft.companionpets.item.ItemRef;
+import net.tfminecraft.companionpets.item.HeldItem;
 import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -276,55 +277,57 @@ public final class PetActions {
         if (type == null) {
             return false;
         }
-        Material held = hand == null ? Material.AIR : hand.getType();
-        boolean owner = pet.ownerId().equals(player.getUniqueId());
-        boolean favorite = type.isTreat(hand);
-        long now = System.currentTimeMillis();
-        if (careActions.groom(player, pet, entity, hand, type, now)) return true;
-        if (owner && favorite) {
-            TrainingSession session = runtime.sessions().training(player.getUniqueId());
-            if (session != null && session.petId().equals(pet.id()) && session.rewardTrick() != null && session.rewardUntil() > now) {
-                training.reward(player, pet, session, hand);
-                return true;
-            }
-            if (pet.need(Need.HUNGER) >= 60.0) {
-                if (TrainingMath.attentionBlocked(pet.need(Need.HUNGER), pet.need(Need.ENERGY), sick(pet))) {
-                    PetFx.bar(player, pet.name() + " can't train right now: " + training.focusReason(pet));
+        try (HeldItem item = HeldItem.of(hand).scope()) {
+            Material held = hand == null ? Material.AIR : hand.getType();
+            boolean owner = pet.ownerId().equals(player.getUniqueId());
+            boolean favorite = type.isTreat(item);
+            long now = System.currentTimeMillis();
+            if (careActions.groom(player, pet, entity, hand, type, now)) return true;
+            if (owner && favorite) {
+                TrainingSession session = runtime.sessions().training(player.getUniqueId());
+                if (session != null && session.petId().equals(pet.id()) && session.rewardTrick() != null && session.rewardUntil() > now) {
+                    training.reward(player, pet, session, hand);
                     return true;
                 }
-                training.beginTraining(player, pet, entity);
+                if (pet.need(Need.HUNGER) >= 60.0) {
+                    if (TrainingMath.attentionBlocked(pet.need(Need.HUNGER), pet.need(Need.ENERGY), sick(pet))) {
+                        PetFx.bar(player, pet.name() + " can't train right now: " + training.focusReason(pet));
+                        return true;
+                    }
+                    training.beginTraining(player, pet, entity);
+                    return true;
+                }
+            }
+            Double gain = type.foodGain(item);
+            if (gain != null) {
+                if (careActions.feed(player, pet, entity, hand, gain, favorite)) {
+                    return true;
+                }
+                if (owner && favorite) {
+                    PetFx.bar(player, pet.name() + " was too hungry to train, so " + PetTexts.he(pet.sex())
+                            + " ate the treat. Keep feeding " + PetTexts.him(pet.sex()) + " before training");
+                } else {
+                    PetFx.bar(player, pet.name() + " eats happily");
+                }
                 return true;
             }
-        }
-        Double gain = type.foodGain(hand);
-        if (gain != null) {
-            if (careActions.feed(player, pet, entity, hand, gain, favorite)) {
+            if (held == Material.AIR) {
+                if (player.isSneaking()) {
+                    menus.openCare(player, pet);
+                    return true;
+                }
+                if (calmInteraction(player, pet)) {
+                    return true;
+                }
+                checkIn(player, pet, entity, type, now);
                 return true;
             }
-            if (owner && favorite) {
-                PetFx.bar(player, pet.name() + " was too hungry to train, so " + PetTexts.he(pet.sex())
-                        + " ate the treat. Keep feeding " + PetTexts.him(pet.sex()) + " before training");
-            } else {
-                PetFx.bar(player, pet.name() + " eats happily");
-            }
-            return true;
-        }
-        if (held == Material.AIR) {
-            if (player.isSneaking()) {
-                menus.openCare(player, pet);
+            if (type.acceptsToy(item)) {
+                PetFx.bar(player, "Throw it into the air for nearby pets to chase");
                 return true;
             }
-            if (calmInteraction(player, pet)) {
-                return true;
-            }
-            checkIn(player, pet, entity, type, now);
-            return true;
+            return false;
         }
-        if (type.acceptsToy(hand)) {
-            PetFx.bar(player, "Throw it into the air for nearby pets to chase");
-            return true;
-        }
-        return false;
     }
 
     private boolean ownerNearby(Pet pet) {
@@ -393,6 +396,10 @@ public final class PetActions {
     }
 
     public void useWorld(Player player, ItemStack hand, Block clicked, BlockFace face, boolean sneaking, boolean air) {
+        useWorld(player, hand, HeldItem.of(hand), clicked, face, sneaking, air);
+    }
+
+    public void useWorld(Player player, ItemStack hand, HeldItem held, Block clicked, BlockFace face, boolean sneaking, boolean air) {
         if (clicked != null && isKennel(clicked) && !sneaking) {
             UUID owner = runtime.store().kennelOwner(PetStore.kennelKey(
                     clicked.getWorld().getName(), clicked.getX(), clicked.getY(), clicked.getZ()));
@@ -403,31 +410,35 @@ public final class PetActions {
             menus.openKennel(player, 0, clicked.getLocation());
             return;
         }
-        if (sneaking && runtime.config().kennelFurniture() == null && runtime.config().kennel() != null && runtime.config().kennel().matches(hand) && clicked != null && face != null) {
+        if (sneaking && runtime.config().kennelFurniture() == null && runtime.config().kennel() != null && held.matches(runtime.config().kennel()) && clicked != null && face != null) {
             placeKennel(player, hand, clicked, face);
             return;
         }
-        PetTypeDef egg = runtime.config().byEgg(hand);
+        PetTypeDef egg = runtime.config().eggType(held);
         if (egg != null && hand != null) {
             hatching.begin(player, egg);
             return;
         }
-        if (air && hand != null && isToy(hand)) {
-            fetchActions.throwToy(player, hand);
+        if (air && hand != null && isToy(held)) {
+            fetchActions.throwToy(player, hand, held);
         }
     }
 
     public boolean handledWorld(Player player, ItemStack hand, Block clicked, BlockFace face, boolean sneaking, boolean air) {
+        return handledWorld(player, hand, HeldItem.of(hand), clicked, face, sneaking, air);
+    }
+
+    public boolean handledWorld(Player player, ItemStack hand, HeldItem held, Block clicked, BlockFace face, boolean sneaking, boolean air) {
         if (clicked != null && isKennel(clicked) && !sneaking) {
             return true;
         }
-        if (sneaking && runtime.config().kennelFurniture() == null && runtime.config().kennel() != null && runtime.config().kennel().matches(hand) && clicked != null && face != null) {
+        if (sneaking && runtime.config().kennelFurniture() == null && runtime.config().kennel() != null && held.matches(runtime.config().kennel()) && clicked != null && face != null) {
             return true;
         }
-        if (runtime.config().byEgg(hand) != null) {
+        if (runtime.config().eggType(held) != null) {
             return true;
         }
-        return air && isToy(hand);
+        return air && isToy(held);
     }
 
     public void clickMenu(Player player, MenuHolder holder, int slot, ItemStack current, boolean rightClick, boolean shift, boolean lettingGo) {
@@ -1123,13 +1134,8 @@ public final class PetActions {
                 block.getWorld().getName(), block.getX(), block.getY(), block.getZ())) != null;
     }
 
-    private boolean isToy(ItemStack item) {
-        for (PetTypeDef type : runtime.config().types().values()) {
-            if (type.acceptsToy(item)) {
-                return true;
-            }
-        }
-        return false;
+    private boolean isToy(HeldItem item) {
+        return !runtime.config().toyTypes(item).isEmpty();
     }
 
     private static boolean sick(Pet pet) {
