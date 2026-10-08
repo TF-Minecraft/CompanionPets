@@ -542,16 +542,14 @@ public final class PetActions {
         if (handleReleaseChat(player, text, now) || hatching.chat(player, text, now) || handleRenameChat(player, text, now)) {
             return;
         }
-        if (respondToName(player, text, now) || addressedOrder(player, text, now)) return;
-        Pet looked = runtime.byEntity(lookingAt(player, 6.0));
         TrainingSession session = runtime.sessions().training(player.getUniqueId());
-        if (looked != null && looked.ownerId().equals(player.getUniqueId()) && !looked.stored()
-                && (looked.trickFor(SpokenOrder.key(text)) != null
-                        || session != null && session.petId().equals(looked.id()))) {
-            training.handleTrainingChat(player, text, now, looked, runtime.entity(looked));
-            return;
-        }
-        training.handleTrainingChat(player, text, now);
+        if (session == null && runtime.store().countOut(player.getUniqueId()) == 0) return;
+        if (respondToName(player, text, now) || addressedOrder(player, text, now)) return;
+        String word = SpokenOrder.key(text);
+        if (session == null && runtime.store().of(player.getUniqueId()).stream()
+                .noneMatch(pet -> !pet.stored() && pet.trickFor(word) != null)) return;
+        Entity looked = lookingAt(player, 6.0);
+        training.handleTrainingChat(player, text, now, runtime.byEntity(looked), looked);
     }
 
     private boolean audible(Player player, Pet pet) {
@@ -581,7 +579,7 @@ public final class PetActions {
 
     private boolean respondToName(Player player, String text, long now) {
         boolean answered = false;
-        for (Pet pet : runtime.store().active()) {
+        for (Pet pet : runtime.store().of(player.getUniqueId())) {
             if (!audible(player, pet)
                     || !SpokenOrder.matches(text, pet.name())) continue;
             Entity entity = runtime.entity(pet);

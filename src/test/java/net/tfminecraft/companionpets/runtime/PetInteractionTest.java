@@ -33,6 +33,7 @@ class PetInteractionTest {
     private int bodyRemovals;
     private int navigationStops;
     private int navigationRequests;
+    private int chatBlockRays, chatEntityRays;
     private Location navigationTarget;
     private boolean inWater;
     private Location lookedAt;
@@ -88,8 +89,9 @@ class PetInteractionTest {
             @Override public void playSound(Location at, String sound, float volume, float pitch) {
                 customSounds.add(sound);
             }
-            @Override public org.bukkit.util.RayTraceResult rayTraceBlocks(Location at, org.bukkit.util.Vector direction, double distance, org.bukkit.FluidCollisionMode fluids, boolean ignorePassable) { return null; }
+            @Override public org.bukkit.util.RayTraceResult rayTraceBlocks(Location at, org.bukkit.util.Vector direction, double distance, org.bukkit.FluidCollisionMode fluids, boolean ignorePassable) { chatBlockRays++; return null; }
             @Override public org.bukkit.util.RayTraceResult rayTraceEntities(Location at, org.bukkit.util.Vector direction, double distance, java.util.function.Predicate<? super Entity> filter) {
+                chatEntityRays++;
                 return lookingAtPet ? new org.bukkit.util.RayTraceResult(body.getLocation().toVector(), body) : null;
             }
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
@@ -224,6 +226,61 @@ class PetInteractionTest {
         runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
     }
     private void eagerGreeting() { pet.bond(100); pet.personality(PetPersonality.FRIENDLY); }
+
+    @Test void ordinaryChatSkipsRaytracesAndPetIterationWithoutOwnedPetsOut() {
+        for (int i = 0; i < 500; i++) runtime.store().add(new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Other" + i, PetSex.MALE));
+        var other = MockBukkit.getMock().addPlayer();
+        var store = spy(runtime.store());
+        var observed = spy(runtime);
+        when(observed.store()).thenReturn(store);
+        var chat = new PetActions(observed);
+        store.countOut(other.getUniqueId());
+        clearInvocations(store, observed);
+        for (int message = 0; message < 20; message++) chat.onChat(other, "ordinary conversation");
+        long candidates = mockingDetails(observed).getInvocations().stream().filter(call -> call.getMethod().getName().equals("entity")).count();
+        assertEquals(0, candidates);
+        assertEquals(0, chatBlockRays);
+        assertEquals(0, chatEntityRays);
+        verify(observed, never()).entity(any(Pet.class));
+        verify(store, never()).active();
+        verify(store, never()).of(any(UUID.class));
+        clearInvocations(store, observed);
+        chat.onChat(player, "Toby");
+        assertEquals(Activity.ATTENDING, pet.activity());
+        verify(store, never()).active();
+        verify(store).of(player.getUniqueId());
+        verify(observed, never()).entity(argThat(candidate -> candidate != pet));
+    }
+
+    @Test void storedPetsAndUnknownWordsDoNotNeedALookButTrainingStillDoes() {
+        pet.stored(true);
+        actions.onChat(player, "ordinary conversation");
+        assertEquals(0, chatBlockRays);
+        pet.stored(false);
+        actions.onChat(player, "ordinary conversation");
+        assertEquals(0, chatBlockRays);
+        runtime.sessions().training(player.getUniqueId(), new net.tfminecraft.companionpets.session.TrainingSession(pet.id()));
+        lookingAtPet = true;
+        actions.onChat(player, "new word");
+        assertEquals(1, chatBlockRays);
+        assertEquals(1, chatEntityRays);
+        assertEquals("new word", runtime.sessions().training(player.getUniqueId()).pendingWord());
+    }
+
+    @Test void privateRenameAndReleasePromptsRunBeforeTheNoPetsOutGuard() {
+        pet.stored(true);
+        runtime.sessions().rename(player.getUniqueId(), new net.tfminecraft.companionpets.session.RenamePrompt(pet.id(), System.currentTimeMillis() + 30_000));
+        actions.onChat(player, "Rex");
+        actions.onChat(player, "yes");
+        assertEquals("Rex", pet.name());
+        assertNull(runtime.sessions().rename(player.getUniqueId()));
+        runtime.sessions().release(player.getUniqueId(), new net.tfminecraft.companionpets.session.ReleasePrompt(pet.id(), System.currentTimeMillis() + 30_000));
+        actions.onChat(player, "no");
+        assertNull(runtime.sessions().release(player.getUniqueId()));
+        assertSame(pet, runtime.store().get(pet.id()));
+        assertEquals(0, chatBlockRays);
+        assertEquals(0, chatEntityRays);
+    }
 
     @Test void customTrickSoundsFollowTheTimelineWithFallbackAndCancelOnAnotherCommand() throws Exception {
         testConfig.set("custom-tricks.croak.fallback-text", "{pet} croaks");
