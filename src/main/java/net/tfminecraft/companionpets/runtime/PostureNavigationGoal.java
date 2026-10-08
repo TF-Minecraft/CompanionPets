@@ -36,8 +36,8 @@ final class PostureNavigationGoal implements Goal<Mob> {
             Bukkit.getMobGoals().addGoal(body, 0, goal);
             Bukkit.getMobGoals().addGoal(body, 0, new SleepingLook(
                     GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "sleeping_look")), goal));
+            PetMotion.resetNative(body);
         }
-        PetMotion.stop(body);
         body.setAware(true);
         goal.tick();
     }
@@ -67,6 +67,7 @@ final class PostureNavigationGoal implements Goal<Mob> {
         return System.currentTimeMillis() >= pet.listeningUntilMillis() && shouldActivate() && mode() == Locomotion.Mode.SLEEP;
     }
     @Override public boolean shouldStayActive() { return shouldActivate(); }
+    @Override public void start() { PetMotion.resetNative(body); }
     @Override public void tick() {
         if (!shouldActivate()) return;
         PetMotion.settle(body);

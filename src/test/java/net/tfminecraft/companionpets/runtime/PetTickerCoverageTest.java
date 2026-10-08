@@ -63,7 +63,7 @@ class PetTickerCoverageTest {
     private final List<Emission> particles = new ArrayList<>();
     private final List<Sound> sounds = new ArrayList<>();
     private final List<Location> navigation = new ArrayList<>();
-    private int stops, spawns, removals, lastChunkX, lastChunkZ;
+    private int stops, spawns, removals, lastChunkX, lastChunkZ, velocityUpdates;
     private boolean chunksLoaded = true, entitiesLoaded = true, modeled, heldMovement, swimming;
     private long now;
 
@@ -154,6 +154,7 @@ class PetTickerCoverageTest {
 
     private WolfMock wolf(Location at) {
         var wolf = new WolfMock(server, UUID.randomUUID()) {
+            @Override public void setVelocity(org.bukkit.util.Vector velocity) { velocityUpdates++; super.setVelocity(velocity); }
             @Override public boolean isInWater() { return swimming; }
             @Override public boolean isOnGround() { return true; }
             @Override public boolean hasLineOfSight(Entity target) { return true; }
@@ -233,6 +234,24 @@ class PetTickerCoverageTest {
         assertTrue(loaded.load());
         assertEquals(hunger, loaded.get(pet.id()).need(Need.HUNGER), .00001);
         loaded.close();
+    }
+
+    @Test void postureStopsASlideOnceAndLeavesAStillBodyAloneOnRepeatedPasses() throws Exception {
+        pet.order(PetOrder.SIT);
+        body.setVelocity(new org.bukkit.util.Vector(.3, -.2, .4));
+        velocityUpdates = 0;
+        move(now);
+        assertEquals(1, velocityUpdates);
+        assertEquals(new org.bukkit.util.Vector(0, -.2, 0), body.getVelocity());
+        var goal = server.getMobGoals().getGoal(body, GoalKey.of(Mob.class,
+                new NamespacedKey(runtime.plugin(), "posture_navigation")));
+        goal.start();
+        for (int pass = 0; pass < 6; pass++) {
+            move(now + 500 * pass);
+            goal.tick();
+        }
+        assertEquals(1, velocityUpdates);
+        assertTrue(body.isAware());
     }
 
     @Test void sittingPetKeepsItsCustomTrickAcrossRepeatedTickerPasses() throws Exception {
