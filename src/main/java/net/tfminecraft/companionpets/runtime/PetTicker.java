@@ -221,6 +221,7 @@ public final class PetTicker implements Runnable {
     }
 
     private void move(long now) {
+        runtime.forgetMissingGround();
         for (Pet pet : runtime.store().active()) {
             Entity body = runtime.entity(pet);
             if (!(body instanceof Mob mob)) {
@@ -242,6 +243,7 @@ public final class PetTicker implements Runnable {
                 WaterNavigationGoal.ensure(runtime, pet, mob, actions);
                 continue;
             }
+            runtime.rememberGround(pet, mob);
             if (TrainingNavigationGoal.hold(runtime, pet, mob)) continue;
             if (actions.greeting(pet) || actions.anticipation().active(pet)) continue;
             Locomotion.Mode mode = Locomotion.choose(
