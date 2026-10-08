@@ -30,12 +30,7 @@ class TfDevConfigurationTest {
             var plugin = MockBukkit.createMockPlugin();
             var deployed = CompanionConfig.load(plugin, deployedYaml);
             var bundled = CompanionConfig.load(plugin, bundledYaml);
-            for (var field : CompanionConfig.class.getDeclaredFields()) {
-                // Item lookup indexes contain type identities; compare type definitions below.
-                if (Set.of("types", "customTricks", "eggs", "modelEggs", "eggOrder", "toys").contains(field.getName())) continue;
-                field.setAccessible(true);
-                assertEquals(field.get(deployed), field.get(bundled), field.getName());
-            }
+            assertGlobalSettings(deployed, bundled);
             assertEquals(deployed.types().keySet(), bundled.types().keySet());
             var breedPitches = java.util.Map.of("beagle", 1.05f, "chihuahua", 1.25f, "corgi", 1.10f,
                     "golden", .90f, "husky", .95f);
@@ -73,8 +68,8 @@ class TfDevConfigurationTest {
             expectedTypes.remove("fox_custom");
             assertEquals(expectedTypes, config.types().keySet());
             assertEquals(13, config.types().size());
-            for (String root : Set.of("care", "play", "training", "limits", "moments", "social", "items", "orders"))
-                assertEquals(values(original.getConfigurationSection(root)), values(current.getConfigurationSection(root)), root);
+            // Compare effective settings: omitted defaults and legacy map/list forms are equivalent.
+            assertGlobalSettings(CompanionConfig.load(MockBukkit.createMockPlugin(), original), config);
             Path assets = path.getParent().getParent().getParent();
             for (var pet : config.types().values()) {
                 var saved = original.getConfigurationSection("pets." + (pet.id().equals("fox") ? "fox_custom" : pet.id()));
@@ -130,9 +125,12 @@ class TfDevConfigurationTest {
         } finally { MockBukkit.unmock(); }
     }
 
-    private static java.util.Map<String, Object> values(org.bukkit.configuration.ConfigurationSection section) {
-        return section.getValues(true).entrySet().stream()
-                .filter(entry -> !(entry.getValue() instanceof org.bukkit.configuration.ConfigurationSection))
-                .collect(Collectors.toMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue));
+    private static void assertGlobalSettings(CompanionConfig expected, CompanionConfig actual) throws Exception {
+        for (var field : CompanionConfig.class.getDeclaredFields()) {
+            // Item lookup indexes contain type identities; compare type definitions separately.
+            if (Set.of("types", "customTricks", "eggs", "modelEggs", "eggOrder", "toys").contains(field.getName())) continue;
+            field.setAccessible(true);
+            assertEquals(field.get(expected), field.get(actual), field.getName());
+        }
     }
 }
