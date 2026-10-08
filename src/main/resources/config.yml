@@ -9,7 +9,7 @@
 # Pet types: each ID needs a body (directly or from its species) and a unique egg.
 # entity is the navigating body: only WOLF or CAT; a model supplies the visible animal.
 # Thus a fox can use a WOLF body, a fox model and a fox voice independently.
-# TF Dev's modeled types require their ModelEngine blueprints and MMOItems PETS eggs.
+# TF Dev models/eggs require ModelEngine/MMOItems; the Pet House requires ItemsAdder.
 pets:
   wolf:
     species: dog                # Inherit the built-in WOLF species and its overrides.
@@ -188,46 +188,46 @@ custom-tricks:
 # Local lists replace that category; omitted categories inherit, and [] disables one.
 # kennel, kennel-block and kennel-furniture are global only.
 items:
-  kennel: BARREL                # Item used to place a Pet House.
+  kennel: itemsadder:tfmc:pet_house                # Item used to place a Pet House.
   kennel-block: BARREL          # Vanilla block placed for the Pet House; must be a non-air block.
-  # kennel-furniture: itemsadder:companions:pet_house # Optional ItemsAdder furniture; kennel must use the identical ID.
+  kennel-furniture: tfmc:pet_house # ItemsAdder furniture; kennel must refer to this same namespaced ID.
   treats: [mmoitems:PETS:FISH_SNACK, mmoitems:PETS:BISCUIT_TREAT] # Training rewards; also food when hungry.
   foods:                        # Each entry restores hunger points using its hunger value.
-    - {item: mmoitems:PETS:MEAT_TREAT, hunger: 35}
-    - {item: mmoitems:PETS:FISH_TREAT, hunger: 35}
+    - {item: mmoitems:PETS:MEAT_TREAT, hunger: 45}
+    - {item: mmoitems:PETS:FISH_TREAT, hunger: 45}
   medicines: [mmoitems:PETS:PET_MEDICINE] # Treat sick/weakened pets and restore health.
   brushes: [mmoitems:PETS:PET_BRUSH] # Restore cleanliness to full without consuming the brush.
   toys: [STICK, mmoitems:PETS:PET_BALL, mmoitems:PETS:PET_CHEW_BONE, mmoitems:PETS:PET_TUG_ROPE, mmoitems:PETS:PET_MOUSE_PLUSH, mmoitems:PETS:PET_TEDDY_PLUSH] # Accepted toys for play/fetch.
 
 # Care: needs and bond use 0-100 points; higher means healthier/happier/more attached.
 # Critical needs are below 25; timed need changes use presence.away-rate when away.
-# Care settings are global; species/pets override their interaction item lists only.
+# TF Dev uses relaxed care; species/pets override interaction item lists, not care.
 care:
-  hunger-minutes-to-critical: 30 # Minutes for full hunger to reach critical; 0 stops this decay.
-  mood-minutes-to-critical: 30   # Minutes for full mood to reach critical without play; 0 stops this decay.
-  energy-minutes-to-critical: 40 # Minutes for full energy to reach critical walking; idle decay is slower.
-  dirty-every-minutes: 20        # Minutes between cleanliness losses; 0 disables timed dirt.
-  dirty-loss: 30                # Cleanliness points lost each dirty-every-minutes interval.
-  minutes-until-unwell: 3       # Minutes with critical needs before becoming unwell; 0 disables onset.
-  minutes-until-sick: 3         # Additional minutes with critical needs after the unwell threshold before sickness.
+  hunger-minutes-to-critical: 480 # Minutes for full hunger to reach critical; 0 stops this decay.
+  mood-minutes-to-critical: 720  # Minutes for full mood to reach critical without play; 0 stops this decay.
+  energy-minutes-to-critical: 480 # Minutes for full energy to reach critical walking; idle decay is slower.
+  dirty-every-minutes: 120       # Minutes between cleanliness losses; 0 disables timed dirt.
+  dirty-loss: 10                # Cleanliness points lost each dirty-every-minutes interval.
+  minutes-until-unwell: 30      # Minutes with critical needs before becoming unwell; 0 disables onset.
+  minutes-until-sick: 60        # Additional minutes with critical needs after the unwell threshold before sickness.
   decay-while-stored: false     # true advances care in the Pet House while the owner is online.
   death-on-neglect: false       # true kills at zero health from illness; false leaves the pet weakened.
   play-seconds: 6               # Loaded duration in seconds; currently unused by runtime play.
   play-mood-gain: 22            # Mood points gained on play completion or when comforting an ill pet.
-  play-energy-cost: 3           # Energy points spent on play completion.
+  play-energy-cost: 1           # Energy points spent on play completion.
   favorite-mood-multiplier: 1.5 # Multiplies mood gained from fetch with the pet's favorite toy.
   favorite-food-mood: 8         # Mood points gained when a hungry pet eats an accepted treat.
   sleep-minutes-to-full: 8      # Minutes to restore 100 energy points while resting/sleeping.
-  sleeping-hunger-multiplier: 0.5 # Sleeping hunger decay relative to normal (0.5 = half).
-  health-loss-per-minute: 12    # Health points lost per minute with critical physical needs and illness.
+  sleeping-hunger-multiplier: 0.25 # Sleeping hunger decay: 25% of normal.
+  health-loss-per-minute: 0.5   # Health points lost per minute with critical physical needs and illness.
   health-regen-per-minute: 20   # Health points recovered per minute when physical needs allow recovery.
-  medicine-health-bump: 20      # Immediate health points restored by medicine.
+  medicine-health-bump: 40      # Immediate health points restored by medicine.
   bond-gain-per-minute: 0.4     # Bond points gained per minute near the owner with stable needs.
-  bond-loss-per-minute: 0.8     # Bond points lost per minute while ill.
-  wake-mood-penalty: 8          # Loaded mood penalty in points; currently unused when waking.
-  critical-sound-seconds: 8     # Seconds between expressions of critical needs or illness.
-  overfeed-mood-penalty: 12     # Mood points lost when fed at full hunger.
-  overfeed-health-penalty: 8    # Health points lost when fed at full hunger.
+  bond-loss-per-minute: 0.05    # Bond points lost per minute while ill.
+  wake-mood-penalty: 2          # Loaded mood penalty in points; currently unused when waking.
+  critical-sound-seconds: 60    # Seconds between expressions of critical needs or illness.
+  overfeed-mood-penalty: 2      # Mood points lost when fed at full hunger.
+  overfeed-health-penalty: 0    # Health points lost when fed at full hunger.
   struck-mood-penalty: 6        # Mood points lost when someone strikes the pet.
   rest-again-seconds: 45        # Seconds after waking to follow before automatic rest is allowed again.
 
@@ -238,15 +238,15 @@ training:
   attempts-before-bored: 6     # Maximum practice attempts per session before a break.
   reward-gain: 20              # Base progress points for rewarding a successful attempt.
   fail-gain: 2                 # Progress points for rewarding a failed/partial attempt.
-  reward-window-seconds: 3     # Seconds after an attempt in which a treat counts as its reward.
+  reward-window-seconds: 5     # Seconds after an attempt in which a treat counts as its reward.
   sometimes-at: 40             # Progress threshold for occasional success; at most learned-at.
   learned-at: 80               # Progress threshold for reliable obedience (greater than 0, at most 100).
   session-distance: 8          # Maximum trainer-pet distance in blocks before a session ends.
-  attempt-energy-cost: 8       # Energy points spent per practice attempt.
-  attempt-hunger-cost: 5       # Hunger points spent per practice attempt.
-  attempt-mood-cost: 4         # Mood points spent per practice attempt.
+  attempt-energy-cost: 2       # Energy points spent per practice attempt.
+  attempt-hunger-cost: 1       # Hunger points spent per practice attempt.
+  attempt-mood-cost: 0.5       # Mood points spent per practice attempt.
   treat-hunger-gain: 3         # Hunger points restored by a training reward.
-  rest-seconds: 90             # Seconds of recovery after ending a training session.
+  rest-seconds: 45             # Seconds of recovery after ending a training session.
 
 # Throwing speed depends on aim; sneaking reduces the throw toward the low speed.
 play:
@@ -259,8 +259,8 @@ play:
 # Care freezes when the owner is offline; distance changes need decay while online.
 presence:
   owner-near-radius: 32        # Distance in blocks within which the owner counts as nearby.
-  away-rate: 0.25              # Away need-change multiplier (0.25 = 25% of normal; 0 stops need changes).
-  cry-interval-seconds: 45     # Seconds between cries when the online owner is beyond owner-near-radius.
+  away-rate: 0.1               # Away need-change multiplier (0.25 = 25% of normal; 0 stops need changes).
+  cry-interval-seconds: 180    # Seconds between cries when the online owner is beyond owner-near-radius.
 
 # Orders spoken in chat are heard only within this distance.
 orders:
@@ -290,14 +290,14 @@ moments:
   # Mischief: playful interactions with nearby creatures or plants.
   target-radius: 6             # Living-target search radius in blocks for mischief/protest.
   mischief-min-energy: 40       # Minimum energy points to attempt mischief.
-  juvenile-mischief-chance: 40  # Base % for young-pet mischief per random moment.
-  adult-mischief-chance: 8      # Base % for adult-pet mischief per random moment.
+  juvenile-mischief-chance: 15  # Base % for young-pet mischief per random moment.
+  adult-mischief-chance: 3      # Base % for adult-pet mischief per random moment.
 
   # Barking/protest: low mood chooses between protest and asking for affection.
   low-mood-threshold: 55        # Below these mood points, use low-mood reactions instead of random actions.
-  low-mood-bark-chance: 35      # % chance to try protesting when mood is low.
-  juvenile-bark-chance: 20      # Base % for young-pet protest at nearby creatures.
-  adult-bark-chance: 47         # Base % for adult-pet protest at nearby creatures.
+  low-mood-bark-chance: 15      # % chance to try protesting when mood is low.
+  juvenile-bark-chance: 10      # Base % for young-pet protest at nearby creatures.
+  adult-bark-chance: 20         # Base % for adult-pet protest at nearby creatures.
 
   # Digging and gifts: weights are relative chances, not item counts or %.
   digging-enabled: true        # Allow pets with digging behavior to dig up gifts.
@@ -349,7 +349,7 @@ moments:
   belly-up:
     enabled: true             # Allow rolling over for belly rubs when petted.
     chance: 25                # % chance per eligible petting attempt.
-    idle-seconds: 5            # Seconds without a belly rub before standing up (1-60).
+    idle-seconds: 8            # Seconds without a belly rub before standing up (1-60).
     cooldown-seconds: 60       # Seconds between roll-over attempts, including failed attempts.
     min-mood: 70               # Minimum mood points for a belly rub.
 
@@ -367,14 +367,14 @@ social:
   bark-radius: 6              # Maximum territorial protest distance in blocks (1 to encounter-radius).
   owner-radius: 16            # Owner proximity for encounters in blocks; one online owner can cover both pets.
   search-interval-seconds: 3   # Seconds between searches for new encounters (0.5-30).
-  encounter-cooldown-seconds: 60 # Seconds before the same pair can have another random encounter.
+  encounter-cooldown-seconds: 90 # Seconds before the same pair can have another random encounter.
   encounter-chance: 20        # % per eligible search after cooldown; initial greetings bypass this roll.
-  bark-seconds: 8             # Maximum territorial protest duration in seconds (2-60).
-  calm-cooldown-seconds: 30    # Seconds without new encounters after calming a protest.
-  territorial-bark-chance: 80  # Base % for unfamiliar territorial pets with different owners to protest.
-  same-owner-bark-chance: 10   # Base % for unfamiliar territorial pets sharing an owner to protest.
-  chase-chance: 50            # Base % for chase instead of sniffing; personality/friendship adjust it.
-  calm-clicks: 3              # Petting clicks to calm protest (2-8), less than 8 s between clicks.
+  bark-seconds: 4             # Maximum territorial protest duration in seconds (2-60).
+  calm-cooldown-seconds: 120   # Seconds without new encounters after calming a protest.
+  territorial-bark-chance: 20  # Base % for unfamiliar territorial pets with different owners to protest.
+  same-owner-bark-chance: 5    # Base % for unfamiliar territorial pets sharing an owner to protest.
+  chase-chance: 30            # Base % for chase instead of sniffing; personality/friendship adjust it.
+  calm-clicks: 2              # Petting clicks to calm protest (2-8), less than 8 s between clicks.
 
 # Per-owner quotas; zero prevents additional pets in that category.
 limits:

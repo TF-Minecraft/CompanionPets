@@ -30,14 +30,18 @@ class TfDevConfigurationTest {
             var plugin = MockBukkit.createMockPlugin();
             var deployed = CompanionConfig.load(plugin, deployedYaml);
             var bundled = CompanionConfig.load(plugin, bundledYaml);
+            for (var field : CompanionConfig.class.getDeclaredFields()) {
+                if (Set.of("types", "customTricks").contains(field.getName())) continue;
+                field.setAccessible(true);
+                assertEquals(field.get(deployed), field.get(bundled), field.getName());
+            }
             assertEquals(deployed.types().keySet(), bundled.types().keySet());
             var breedPitches = java.util.Map.of("beagle", 1.05f, "chihuahua", 1.25f, "corgi", 1.10f,
                     "golden", .90f, "husky", .95f);
             for (var expected : deployed.types().values()) {
                 var actual = bundled.type(expected.id());
                 for (var component : PetTypeDef.class.getRecordComponents()) {
-                    // Interaction lists inherit each file's own global care/items settings.
-                    if (Set.of("items", "sounds").contains(component.getName())) continue;
+                    if (component.getName().equals("sounds")) continue;
                     assertEquals(component.getAccessor().invoke(expected), component.getAccessor().invoke(actual),
                             expected.id() + " " + component.getName());
                 }

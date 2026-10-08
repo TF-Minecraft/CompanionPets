@@ -163,12 +163,10 @@ class ConfigExamplesTest {
         assertEquals(1.1f, wave.sound().pitch());
     }
 
-    @Test void furnitureExampleLoadsWithTheDocumentedMatchingKennelItem() throws Exception {
-        String text = uncomment(bundled(), "kennel-furniture:", "kennel-furniture:");
-        text = text.replace("kennel: BARREL", "kennel: itemsadder:companions:pet_house");
-        var config = loadWithoutWarnings(text);
-        assertEquals(ItemRef.parse("itemsadder:companions:pet_house"), config.kennel());
-        assertEquals("companions:pet_house", config.kennelFurniture());
+    @Test void tfDevFurnitureLoadsWithItsMatchingKennelItem() throws Exception {
+        var config = loadWithoutWarnings(bundled());
+        assertEquals(ItemRef.parse("itemsadder:tfmc:pet_house"), config.kennel());
+        assertEquals("tfmc:pet_house", config.kennelFurniture());
         assertEquals(Material.BARREL, config.kennelBlock());
     }
 }
