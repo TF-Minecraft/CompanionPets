@@ -272,16 +272,65 @@ class PetHatchingCoverageTest {
     }
 
     @Test void withoutRoomOutsideAFullPetHouseKeepsTheEggUnhatched() {
-        for (int i = 0; i < 2; i++) {
-            var stored = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Stored" + i, net.tfminecraft.companionpets.pet.PetSex.FEMALE);
-            stored.stored(true); runtime.store().add(stored);
-        }
+        fillPetHouse();
         onTaggedTeleport(EventPriority.HIGHEST, event -> event.setCancelled(true));
         begin(); namePet(); chat("yes");
         assertEquals(2, runtime.store().all().size(), "no pet may exceed the Pet House limit");
         assertEquals(2, player.getInventory().getItemInMainHand().getAmount(), "the egg is kept");
         assertTrue(messages().contains("your Pet House is full"));
         assertFalse(lastSpawned.isValid());
+    }
+
+    @Test void movingTheEggDuringPlacementCannotHatchAFreePet() {
+        onTaggedTeleport(EventPriority.HIGH, event -> moveHeldStackTo(5));
+        begin(); namePet(); chat("yes");
+        assertFalse(onlyPet().stored());
+        assertEquals(1, eggs(), "the egg is used before placement listeners can move it");
+        assertEquals(1, player.getInventory().getItem(5).getAmount());
+    }
+
+    @Test void aFullPetHouseReturnsTheEggToItsEmptiedSlot() {
+        fillPetHouse();
+        onTaggedTeleport(EventPriority.HIGHEST, event -> { moveHeldStackTo(5); event.setCancelled(true); });
+        begin(); namePet(); chat("yes");
+        assertEquals(2, runtime.store().all().size());
+        assertEquals(new ItemStack(Material.WOLF_SPAWN_EGG), player.getInventory().getItemInMainHand());
+        assertEquals(2, eggs());
+        assertTrue(messages().contains("your Pet House is full"));
+    }
+
+    @Test void aFullPetHouseDropsTheEggWhenTheInventoryHasNoRoom() {
+        fillPetHouse();
+        onTaggedTeleport(EventPriority.HIGHEST, event -> {
+            var inventory = player.getInventory();
+            for (int i = 0; i < inventory.getSize(); i++) inventory.setItem(i, new ItemStack(Material.STONE, 64));
+            inventory.setItemInMainHand(new ItemStack(Material.STICK));
+            event.setCancelled(true);
+        });
+        begin(); namePet(); chat("yes");
+        assertEquals(2, runtime.store().all().size());
+        assertEquals(0, eggs());
+        assertTrue(world.getEntitiesByClass(org.bukkit.entity.Item.class).stream()
+                .anyMatch(item -> item.getItemStack().equals(new ItemStack(Material.WOLF_SPAWN_EGG))), "the egg is dropped at the player");
+    }
+
+    private void fillPetHouse() {
+        for (int i = 0; i < 2; i++) {
+            var stored = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Stored" + i, net.tfminecraft.companionpets.pet.PetSex.FEMALE);
+            stored.stored(true); runtime.store().add(stored);
+        }
+    }
+
+    private void moveHeldStackTo(int slot) {
+        var inventory = player.getInventory();
+        ItemStack held = inventory.getItemInMainHand().clone();
+        inventory.setItemInMainHand(null);
+        inventory.setItem(slot, held);
+    }
+
+    private int eggs() {
+        return java.util.Arrays.stream(player.getInventory().getContents())
+                .filter(item -> item != null && item.getType() == Material.WOLF_SPAWN_EGG).mapToInt(ItemStack::getAmount).sum();
     }
 
     @Test void anExternalUnsafeRetargetCannotLeaveANewPetInsideTheFloor() {
