@@ -1,20 +1,29 @@
 package net.tfminecraft.companionpets.item;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
 /** Optional integrations loaded from their owning plugins, without bundling their APIs. */
-final class ItemBridge {
+public final class ItemBridge {
     private ItemBridge() { }
     record Identity(Material material, String mmoType, String mmoId, String itemsAdderId, boolean known) {}
     private static final Set<String> warned = new HashSet<>();
     private static Mmo mmo;
     private static Ia ia;
+    private static Plugin mmoProvider, iaProvider;
+    private static final Map<ItemRef, Template> templates = new HashMap<>();
+    private static final long RETRY_MILLIS = 30_000;
+    private record Template(ItemStack item, Component displayName, String name, long retryAt) { }
 
     private record Mmo(Method type, Method id, Method getType, Method getItem, Plugin plugin) {}
     private record Ia(Method identify, Method id, Method create, Method stack, Plugin plugin) {}
@@ -22,6 +31,7 @@ final class ItemBridge {
     static Identity identity(ItemStack item) {
         String mmoType = null, mmoId = null, iaId = null;
         try {
+            refreshProviders();
             Mmo api = mmo();
             if (api != null) {
                 String value = (String) api.type().invoke(null, item);
@@ -43,6 +53,48 @@ final class ItemBridge {
     }
 
     static ItemStack create(ItemRef ref) {
+        ItemStack item = template(ref).item();
+        return item == null ? null : item.clone();
+    }
+
+    static Component displayName(ItemRef ref) { return template(ref).displayName(); }
+    static String name(ItemRef ref) { return template(ref).name(); }
+
+    public static void clearCache() {
+        templates.clear();
+        warned.clear();
+    }
+
+    private static void refreshProviders() {
+        Plugin nextMmo = enabled("MMOItems"), nextIa = enabled("ItemsAdder");
+        if (mmoProvider != nextMmo || iaProvider != nextIa) {
+            templates.clear();
+            mmoProvider = nextMmo;
+            iaProvider = nextIa;
+        }
+    }
+
+    private static Template template(ItemRef ref) {
+        refreshProviders();
+        long now = System.currentTimeMillis();
+        Template cached = templates.get(ref);
+        if (cached != null && (cached.item() != null || now < cached.retryAt())) return cached;
+        ItemStack item = build(ref);
+        String name = ref.id().replace('_', ' ').toLowerCase(Locale.ROOT);
+        Component displayName = Component.text(name);
+        if (item != null) {
+            var meta = item.getItemMeta();
+            if (meta != null && meta.hasDisplayName()) {
+                displayName = meta.displayName();
+                name = PlainTextComponentSerializer.plainText().serialize(displayName);
+            } else displayName = Component.translatable(item.getType().translationKey());
+        }
+        Template template = new Template(item, displayName, name, now + RETRY_MILLIS);
+        templates.put(ref, template);
+        return template;
+    }
+
+    private static ItemStack build(ItemRef ref) {
         if (ref.kind() == ItemRef.Kind.VANILLA) return new ItemStack(ref.material());
         try {
             ItemStack item = null;

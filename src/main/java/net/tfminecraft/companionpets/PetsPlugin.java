@@ -223,6 +223,7 @@ public class PetsPlugin extends JavaPlugin {
         actions.holograms().clear();
         runtime.sessions().clearForReload();
         visual.close();
+        net.tfminecraft.companionpets.item.ItemBridge.clearCache();
         runtime.config(next);
         Bukkit.getScheduler().runTaskLater(this, this::validateProviders, 1L);
         for (var world : Bukkit.getWorlds()) {

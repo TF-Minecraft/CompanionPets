@@ -124,6 +124,7 @@ class ItemBridgeTest {
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new ProviderServer());
+        ItemBridge.clearCache();
         bridge = new Bridge();
         logs = new Handler() {
             @Override public void publish(LogRecord record) {
@@ -276,6 +277,10 @@ class ItemBridgeTest {
         mmo.set("createFails", false); ia.set("createFails", false);
         mmo.set("item", mmoItem(Material.BONE, "TOY", "BONE"));
         ia.set("item", iaItem(Material.STICK, "pets:bone"));
+        assertNull(bridge.create("m.toy.bone"), "Failures are retained during the retry interval");
+        assertNull(bridge.create("ia.pets:bone"));
+        assertEquals(1, mmo.get("creates")); assertEquals(1, ia.get("creates"));
+        bridge.expire("m.toy.bone"); bridge.expire("ia.pets:bone");
         assertNotNull(bridge.create("m.toy.bone"));
         assertNotNull(bridge.create("ia.pets:bone"));
     }
@@ -385,6 +390,125 @@ class ItemBridgeTest {
         assertFalse(HeldItem.of(missingId).matches(ItemRef.parse("BONE")));
     }
 
+    @Test void iconsNamesAndEggIconsShareIndependentCachedTemplatesForBothProviders() throws Exception {
+        var mmo = provider("MMOItems"); var ia = provider("ItemsAdder");
+        var yaml = new org.bukkit.configuration.file.YamlConfiguration();
+        yaml.loadFromString("""
+                pets:
+                  mmo: {entity: WOLF, egg: m.toy.bone}
+                  adder: {entity: CAT, egg: 'ia.pets:bone'}
+                  model: {entity: WOLF, egg: BONE, egg-custom-model-data: 42}
+                """);
+        var config = net.tfminecraft.companionpets.config.CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        var mmoStack = mmoItem(Material.BONE, "TOY", "BONE");
+        var iaStack = iaItem(Material.BONE, "pets:bone");
+        for (ItemStack stack : List.of(mmoStack, iaStack)) {
+            var meta = stack.getItemMeta(); meta.displayName(net.kyori.adventure.text.Component.text("Pet egg"));
+            stack.setItemMeta(meta); stack.setAmount(7);
+        }
+        mmo.set("item", mmoStack); ia.set("item", iaStack);
+        for (String id : List.of("mmo", "adder")) {
+            var type = config.type(id); var ref = type.egg();
+            var first = ref.icon(Material.STICK);
+            var meta = first.getItemMeta(); meta.displayName(net.kyori.adventure.text.Component.text("Changed"));
+            meta.setCustomModelData(99); first.setItemMeta(meta); first.setAmount(23);
+            for (int i = 0; i < 3; i++) {
+                assertEquals("Pet egg", ref.name());
+                assertEquals(net.kyori.adventure.text.Component.text("Pet egg"), ref.displayName());
+                assertEquals(1, ref.icon(Material.STICK).getAmount());
+                var egg = type.eggIcon();
+                assertEquals(net.kyori.adventure.text.Component.text("Pet egg"), egg.getItemMeta().displayName());
+                assertFalse(egg.getItemMeta().hasCustomModelData());
+                assertNotSame(first, egg);
+            }
+        }
+        assertEquals(1, mmo.get("creates")); assertEquals(1, ia.get("creates"));
+        assertEquals(7, mmoStack.getAmount()); assertEquals(7, iaStack.getAmount());
+        var model = config.type("model");
+        assertEquals(42, model.eggIcon().getItemMeta().getCustomModelData());
+        var modified = model.eggIcon(); var meta = modified.getItemMeta(); meta.setCustomModelData(88); modified.setItemMeta(meta);
+        assertEquals(42, model.eggIcon().getItemMeta().getCustomModelData());
+        assertFalse(ItemRef.parse("BONE").icon(Material.STICK).getItemMeta().hasCustomModelData());
+    }
+
+    @Test void successfulSettingsReloadClearsTemplatesAndCachedNames() throws Exception {
+        var mmo = provider("MMOItems");
+        var plugin = MockBukkit.load(net.tfminecraft.companionpets.PetsPlugin.class);
+        var ref = ItemRef.parse("m.toy.bone");
+        var first = mmoItem(Material.BONE, "TOY", "BONE");
+        mmo.set("item", first);
+        assertEquals(Material.BONE, ref.icon(Material.STICK).getType());
+        assertEquals(1, mmo.get("creates"));
+        var replacement = mmoItem(Material.STICK, "TOY", "BONE");
+        var meta = replacement.getItemMeta(); meta.displayName(net.kyori.adventure.text.Component.text("Reloaded"));
+        replacement.setItemMeta(meta); mmo.set("item", replacement);
+        assertEquals(Material.BONE, ref.create().getType());
+        assertTrue(plugin.onCommand(server.getConsoleSender(), plugin.getCommand("pets"), "pets", new String[]{"reload"}));
+        assertEquals(Material.STICK, ref.icon(Material.BONE).getType());
+        assertEquals("Reloaded", ref.name());
+        assertEquals(2, mmo.get("creates"));
+    }
+
+    @Test void absentAndUnknownIconsCacheFallbackNamesUntilExplicitReload() throws Exception {
+        var ia = provider("ItemsAdder"); ia.set("missing", true);
+        var ref = ItemRef.parse("ia.pets:missing_egg");
+        assertEquals(Material.BONE, ref.icon(Material.BONE).getType());
+        assertEquals("pets:missing egg", ref.name());
+        assertEquals(net.kyori.adventure.text.Component.text("pets:missing egg"), ref.displayName());
+        assertEquals(1, ia.get("creates"));
+        ia.set("missing", false); ia.set("item", iaItem(Material.STICK, "pets:missing_egg"));
+        assertNull(ref.create());
+        ItemBridge.clearCache();
+        assertEquals(Material.STICK, ref.icon(Material.BONE).getType());
+        assertEquals(2, ia.get("creates"));
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "companionpets.item-config", matches = ".+")
+    void productionSelectorsUseOneIdentityAndIndicesAgreeWithLinearMatching() throws Exception {
+        var mmo = provider("MMOItems"); var ia = provider("ItemsAdder");
+        var yaml = new org.bukkit.configuration.file.YamlConfiguration();
+        yaml.load(new File(System.getProperty("companionpets.item-config")));
+        var config = net.tfminecraft.companionpets.config.CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        var refs = new java.util.LinkedHashSet<ItemRef>();
+        for (String id : yaml.getConfigurationSection("pets").getKeys(false))
+            refs.add(ItemRef.parse(yaml.getString("pets." + id + ".egg")));
+        assertEquals(14, refs.size());
+        for (var items : java.util.stream.Stream.concat(java.util.stream.Stream.of(config.items()),
+                config.types().values().stream().map(net.tfminecraft.companionpets.config.PetTypeDef::items)).toList()) {
+            refs.addAll(items.foods().keySet()); refs.addAll(items.treats()); refs.addAll(items.medicines());
+            refs.addAll(items.brushes()); refs.addAll(items.toys());
+        }
+        for (var ref : refs) {
+            ItemStack stack = switch (ref.kind()) {
+                case VANILLA -> new ItemStack(ref.material());
+                case MMOITEMS -> mmoItem(Material.BONE, ref.type(), ref.id());
+                case ITEMSADDER -> iaItem(Material.BONE, ref.id());
+            };
+            mmo.set("identifies", 0); ia.set("identifies", 0);
+            var held = HeldItem.of(stack);
+            assertTrue(held.matches(ref));
+            var egg = config.eggType(held); var toys = config.toyTypes(held);
+            for (var type : config.types().values()) {
+                type.isTreat(held); type.foodGain(held); type.items().isMedicine(held); type.items().isBrush(held);
+            }
+            assertEquals(1, mmo.get("identifies")); assertEquals(1, ia.get("identifies"));
+            var expectedEgg = config.types().values().stream()
+                    .filter(type -> type.egg().kind() != ItemRef.Kind.VANILLA && type.matchesEgg(stack)).findFirst()
+                    .orElseGet(() -> config.types().values().stream().filter(type -> type.matchesEgg(stack)).findFirst().orElse(null));
+            assertEquals(expectedEgg, egg, ref.key());
+            var expectedToys = config.types().values().stream().filter(type -> type.acceptsToy(stack))
+                    .collect(java.util.stream.Collectors.toSet());
+            assertEquals(expectedToys, toys, ref.key());
+            for (var type : config.types().values()) {
+                assertEquals(type.isTreat(stack), type.isTreat(held));
+                assertEquals(type.foodGain(stack), type.foodGain(held));
+                assertEquals(type.items().isMedicine(stack), type.items().isMedicine(held));
+                assertEquals(type.items().isBrush(stack), type.items().isBrush(held));
+            }
+        }
+    }
+
     private void assertIncompatibleReplacement(String name, String token) throws Exception {
         var original = provider(name);
         var item = name.equals("MMOItems") ? mmoItem(Material.BONE, "TOY", "BONE")
@@ -485,6 +609,15 @@ class ItemBridgeTest {
         }
         ItemStack create(String token) throws Exception {
             return (ItemStack) ref.getMethod("create").invoke(ref.getMethod("parse", String.class).invoke(null, token));
+        }
+        @SuppressWarnings("unchecked")
+        void expire(String token) throws Exception {
+            var field = loadClass(ItemBridge.class.getName()).getDeclaredField("templates"); field.setAccessible(true);
+            var templates = (Map<Object, Object>) field.get(null);
+            var configured = ref.getMethod("parse", String.class).invoke(null, token);
+            var constructor = templates.get(configured).getClass().getDeclaredConstructors()[0];
+            constructor.setAccessible(true);
+            templates.put(configured, constructor.newInstance(null, null, null, 0L));
         }
         boolean matches(String token, ItemStack item) throws Exception {
             return (boolean) ref.getMethod("matches", ItemStack.class)
