@@ -224,7 +224,9 @@ class PetListenerCoverageTest {
 
     @Test void highPriorityItemDenialPreventsThrowingToyInAir() {
         atHigh(PlayerInteractEvent.class, event -> event.setUseItemInHand(Event.Result.DENY));
-        fire(use(Action.RIGHT_CLICK_AIR, hold(Material.STICK, 2), null, EquipmentSlot.HAND));
+        hold(Material.STICK, 2);
+        new net.tfminecraft.companionpets.runtime.PetTicker(runtime, actions).run();
+        fire(use(Action.RIGHT_CLICK_AIR, owner.getInventory().getItemInMainHand(), null, EquipmentSlot.HAND));
         assertTrue(world.getEntities().stream().noneMatch(Snowball.class::isInstance));
         assertEquals(2, owner.getInventory().getItemInMainHand().getAmount());
     }
@@ -339,7 +341,9 @@ class PetListenerCoverageTest {
     }
 
     @Test void landingThrownToyPreservesItsItemAndProtectsItFromPickups() {
-        fire(use(Action.RIGHT_CLICK_AIR, hold(Material.STICK, 2), null, EquipmentSlot.HAND));
+        hold(Material.STICK, 2);
+        new net.tfminecraft.companionpets.runtime.PetTicker(runtime, actions).run();
+        fire(use(Action.RIGHT_CLICK_AIR, owner.getInventory().getItemInMainHand(), null, EquipmentSlot.HAND));
         Snowball ball = world.getEntities().stream().filter(Snowball.class::isInstance).map(Snowball.class::cast).findFirst().orElseThrow();
         assertNotNull(pet.fetch());
         ball.teleport(new Location(world, 4, 64, 0));

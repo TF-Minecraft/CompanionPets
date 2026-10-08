@@ -586,6 +586,7 @@ public final class PetActions {
                     || !SpokenOrder.matches(text, pet.name())) continue;
             Entity entity = runtime.entity(pet);
             if (!(entity instanceof Mob mob) || !mob.getWorld().equals(player.getWorld())) continue;
+            anticipation.ownerCommanded(pet, now);
             if (pet.order() == PetOrder.FOLLOW && !pet.staying() && pet.activity() != Activity.SLEEPING) {
                 boolean coming = roaming.coming(pet); PetOrder previous = roaming.returnOrder(pet);
                 clearInteractions(pet); releaseFetch(pet, player, true);
@@ -741,6 +742,7 @@ public final class PetActions {
     private void perform(Player player, Pet pet, Entity entity, Trick trick, boolean partial) {
         if (!training.checkTrick(player, pet, trick)) return;
         long now = System.currentTimeMillis();
+        anticipation.ownerCommanded(pet, now);
         if (pet.activity() == Activity.SLEEPING && trick != Trick.LAY && trick != Trick.FOLLOW && trick != Trick.COME && trick != Trick.SIT && trick != Trick.STAY) {
             PetFx.bar(player, pet.name() + " is resting. Tell " + PetTexts.him(pet.sex()) + " to follow");
             return;

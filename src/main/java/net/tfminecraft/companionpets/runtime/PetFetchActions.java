@@ -74,14 +74,14 @@ final class PetFetchActions {
             return;
         }
         register(job, ball);
-        actions.anticipation().ownerThrew(player);
-        double radius = runtime.config().ownerNearRadius();
+        actions.anticipation().threw(player);
+        long now = System.currentTimeMillis();
         for (Pet pet : runtime.store().active()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             Entity body = runtime.entity(pet);
             if (type == null || !accepting.contains(type) || !(body instanceof Mob mob)
                     || !body.getWorld().equals(player.getWorld())
-                    || body.getLocation().distanceSquared(player.getLocation()) > radius * radius
+                    || !actions.anticipation().attentive(pet, player, now)
                     || !canChase(pet)) continue;
             FetchJob previous = pet.fetch();
             ItemRef toy = type.toy(held);
@@ -226,6 +226,7 @@ final class PetFetchActions {
             return;
         }
         if (mob.getLocation().distance(owner.getLocation()) < 2.2) {
+            runtime.recordCare(owner, pet, 3, now);
             returned(pet, owner);
             double mood = runtime.config().care().playMoodGain() * (favorite ? runtime.config().care().favoriteMoodMultiplier() : 1.0);
             pet.need(Need.MOOD, pet.need(Need.MOOD) + mood);
@@ -375,7 +376,8 @@ final class PetFetchActions {
         routes.keySet().removeIf(id -> runtime.store().get(id) == null || runtime.store().get(id).fetch() == null);
         for (FetchJob job : List.copyOf(throwsInProgress.values())) {
             for (Pet pet : chasers(job)) {
-                if (runtime.entity(pet) == null || !canChase(pet)) releaseFetch(pet, false);
+                if (runtime.entity(pet) == null || !canChase(pet)
+                        || !pet.ownerId().equals(job.throwerId()) && !sharedFetchAllowed(pet, job)) releaseFetch(pet, false);
             }
             if (!throwsInProgress.containsKey(job.id())) continue;
             Entity target = job.phase() == FetchPhase.AIR ? entity(job.projectileId()) : entity(job.itemId());
@@ -399,6 +401,10 @@ final class PetFetchActions {
         }
     }
 
+    private boolean sharedFetchAllowed(Pet pet, FetchJob job) {
+        Player thrower = Bukkit.getPlayer(job.throwerId());
+        return thrower != null && actions.anticipation().strangerAllowed(pet, thrower);
+    }
     void stashLooseToys() {
         for (FetchJob job : List.copyOf(throwsInProgress.values())) {
             Pet carrier = job.carrierId() == null ? null : runtime.store().get(job.carrierId());

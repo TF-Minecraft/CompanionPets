@@ -10,12 +10,11 @@ final class PetSpacing {
     private static final double POSITION_MARGIN = 4;
 
     private PetSpacing() { }
-    static Location toyFront(PetRuntime runtime, Pet pet, Player owner) {
-        int slot = Math.max(0, formation(runtime, pet, owner).slot());
+    static Location toyFront(PetRuntime runtime, Pet pet, Player owner, int slot, double extraDistance) {
         double yaw = Math.toRadians(owner.getLocation().getYaw());
         double width = runtime.entity(pet) instanceof Mob body ? body.getWidth() : 0.6;
         double lateral = switch (slot % 3) { case 1 -> -1; case 2 -> 1; default -> 0; } * Math.max(1.35, width + 0.5);
-        double forward = 2.4 + 1.4 * (slot / 3);
+        double forward = 2.4 + extraDistance + 1.4 * (slot / 3);
         Location center = owner.getLocation();
         for (double offset : new double[]{0, -0.35, 0.35}) {
             Location point = PetGreetings.safeGround(center.clone().add(
@@ -43,21 +42,5 @@ final class PetSpacing {
             if (dx * dx + dz * dz < clearance * clearance) return false;
         }
         return true;
-    }
-    private record Formation(int count, int slot) { }
-
-    private static Formation formation(PetRuntime runtime, Pet pet, Player owner) {
-        int count = 0, slot = 0;
-        boolean included = false;
-        for (Pet other : runtime.store().of(pet.ownerId())) {
-            if (!other.ownerId().equals(pet.ownerId()) || other.stored() || other.dead()
-                    || other.activity() != Activity.TOY_FOCUS
-                    || !(runtime.entity(other) instanceof Mob body) || !body.getWorld().equals(owner.getWorld())) continue;
-            count++;
-            if (other.id().compareTo(pet.id()) < 0) slot++;
-            if (other == pet) included = true;
-        }
-        // Stable UUID ranks give the same slots without allocating and sorting a list.
-        return new Formation(count, included ? slot : -1);
     }
 }

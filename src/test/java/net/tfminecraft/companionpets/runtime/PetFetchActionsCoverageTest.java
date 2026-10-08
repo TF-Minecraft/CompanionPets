@@ -133,8 +133,16 @@ class PetFetchActionsCoverageTest {
         return register(ownerId, "wolf", body);
     }
 
+    private Pet foreignPet() {
+        var carer = server.addPlayer(); carer.teleport(new Location(world, 10, 64, 0));
+        Pet result = wolf(carer.getUniqueId(), 3);
+        result.carers().reinforce(owner.getUniqueId(), 40, System.currentTimeMillis(), 0);
+        runtime.random().setSeed(4096);
+        return result;
+    }
     private Pet cat(boolean crouched) {
         var body = new CatMock(server, UUID.randomUUID()) {
+            @Override public double getWidth() { return .6; }
             @Override public Pathfinder getPathfinder() { return pathfinder(this); }
             @Override public boolean isInWater() { return false; }
             @Override public boolean isOnGround() { return true; }
@@ -163,6 +171,7 @@ class PetFetchActionsCoverageTest {
     private void useToy(int amount) {
         var hand = toy.clone(); hand.setAmount(amount); owner.getInventory().setItemInMainHand(hand);
         assertTrue(actions.handledWorld(owner, hand, null, null, false, true));
+        actions.anticipation().tick(System.currentTimeMillis());
         actions.useWorld(owner, owner.getInventory().getItemInMainHand(), null, null, false, true);
     }
     private Snowball throwToy() {
@@ -232,7 +241,7 @@ class PetFetchActionsCoverageTest {
     }
 
     @Test void throwerDisconnectDoesNotStoreTheirToyOnAForeignCarrier() {
-        pet.order(PetOrder.STAY); var foreign = wolf(UUID.randomUUID(), 3); carry(foreign);
+        pet.order(PetOrder.STAY); var foreign = foreignPet(); carry(foreign);
         Location at = runtime.entity(foreign).getLocation(); owner.disconnect();
         actions.fetchActions().step(foreign, (Mob) runtime.entity(foreign));
         assertNull(foreign.fetch()); assertNull(foreign.carriedToy()); assertOnePlainToy();
@@ -306,7 +315,7 @@ class PetFetchActionsCoverageTest {
     }
 
     @Test void vanishedForeignCarrierDropsItsToyAtTheLastObservedCarrierPosition() {
-        pet.order(PetOrder.STAY); var foreign = wolf(UUID.randomUUID(), 3); carry(foreign);
+        pet.order(PetOrder.STAY); var foreign = foreignPet(); carry(foreign);
         Entity body = runtime.entity(foreign); body.teleport(new Location(world, 18, 64, 2));
         actions.fetchActions().tick(System.currentTimeMillis());
         Location last = body.getLocation(); body.remove();
@@ -356,4 +365,44 @@ class PetFetchActionsCoverageTest {
             throw throwable;
         }
     }
-}
+    @Test void disconnectingTheOwnerDropsForeignCarriedToyAtThePetExactlyOnce() {
+        pet.order(PetOrder.STAY); Pet foreign = foreignPet(); carry(foreign);
+        Location dropAt = runtime.entity(foreign).getLocation();
+        ((PlayerMock) Bukkit.getPlayer(foreign.ownerId())).disconnect();
+        long now = System.currentTimeMillis();
+        actions.fetchActions().tick(now); actions.fetchActions().tick(now + 500);
+        assertNull(foreign.fetch()); assertNull(foreign.carriedToy());
+        assertOnePlainToy(); assertEquals(dropAt, items().getFirst().getLocation());
+    }
+
+    @Test void foreignOwnerLeashBreakReleasesGroundToyAndAirToySurvivesLanding() {
+        pet.order(PetOrder.STAY); Pet foreign = foreignPet();
+        Player petOwner = Bukkit.getPlayer(foreign.ownerId());
+        Snowball ball = throwToy(); assertNotNull(foreign.fetch());
+        petOwner.teleport(new Location(world, 13, 64, 0));
+        actions.fetchActions().tick(System.currentTimeMillis()); assertNull(foreign.fetch());
+        land(ball); assertOnePlainToy(); items().getFirst().remove();
+        petOwner.teleport(new Location(world, 10, 64, 0)); runtime.random().setSeed(4096);
+        Item ground = land(throwToy()); assertNotNull(foreign.fetch());
+        petOwner.teleport(new Location(world, 12, 64, 0));
+        actions.fetchActions().tick(System.currentTimeMillis()); assertNotNull(foreign.fetch());
+        petOwner.teleport(new Location(world, 12.01, 64, 0));
+        actions.fetchActions().tick(System.currentTimeMillis()); assertNull(foreign.fetch());
+        assertTrue(ground.isValid()); assertOnePlainToy(); assertNull(foreign.carriedToy());
+    }
+
+    @Test void anyOwnerTrickImmediatelyAbandonsForeignFetchAndCallingItsNameAlsoLocksOutVisitors() throws Exception {
+        pet.order(PetOrder.STAY); Pet foreign = foreignPet(); carry(foreign);
+        Player petOwner = Bukkit.getPlayer(foreign.ownerId());
+        foreign.bindWord("speak", Trick.SPEAK); foreign.progress(Trick.SPEAK, 100);
+        actions.onChat(petOwner, foreign.name() + " speak");
+        assertNull(foreign.fetch()); assertNull(foreign.carriedToy()); assertOnePlainToy();
+        assertFalse(actions.anticipation().attentive(foreign, owner, System.currentTimeMillis()));
+        owner.getInventory().setItemInMainHand(toy.clone());
+        actions.anticipation().tick(System.currentTimeMillis()); assertFalse(actions.anticipation().active(foreign));
+        actions.anticipation().clear(); runtime.entity(foreign).teleport(new Location(world, 3, 64, 0)); runtime.random().setSeed(4096);
+        actions.anticipation().tick(System.currentTimeMillis()); assertTrue(actions.anticipation().active(foreign));
+        actions.onChat(petOwner, foreign.name());
+        assertFalse(actions.anticipation().active(foreign));
+        actions.anticipation().tick(System.currentTimeMillis()); assertFalse(actions.anticipation().active(foreign));
+    }}

@@ -145,89 +145,37 @@ class PetSpacingTest {
         assertTrue(PetSpacing.free(runtime, self, new Location(null, 0, 64, 0)));
     }
 
-    @Test void formationKeepsTheOriginalCountAndUuidRanksWithoutLookingUpOtherOwners() throws Exception {
-        Location at = owner.getLocation().add(20, 0, 0);
-        var focused = new ArrayList<Pet>();
-        for (long id : new long[]{40, 10, 50, 20, 30}) {
-            Pet pet = pet(id, at, 0.6); pet.activity(Activity.TOY_FOCUS); focused.add(pet);
-        }
-        Pet stored = pet(2, at, 0.6); stored.activity(Activity.TOY_FOCUS); stored.stored(true);
-        Pet dead = pet(3, at, 0.6); dead.activity(Activity.TOY_FOCUS); dead.dead(true);
-        Pet idle = pet(4, at, 0.6);
-        Pet wrongWorld = pet(5, new Location(elsewhere, 20, 64, 0), 0.6); wrongWorld.activity(Activity.TOY_FOCUS);
-        Pet missing = record(new UUID(0, 6), owner.getUniqueId(), at); missing.activity(Activity.TOY_FOCUS);
-        Pet nonMob = record(new UUID(0, 7), owner.getUniqueId(), at);
-        nonMob.activity(Activity.TOY_FOCUS); nonMob.entityId(owner.getUniqueId());
-        var strangers = new ArrayList<Pet>();
-        for (int i = 0; i < 250; i++) {
-            Pet other = record(UUID.randomUUID(), UUID.randomUUID(), at); other.activity(Activity.TOY_FOCUS); strangers.add(other);
-        }
-        var expected = new HashMap<Pet, List<Integer>>();
-        for (Pet pet : runtime.store().of(owner.getUniqueId())) expected.put(pet, originalFormation(pet));
-        lookups.clear();
-        for (Pet pet : focused) {
-            assertEquals(expected.get(pet), formation(pet));
-            assertEquals(List.of(5, (int) (pet.id().getLeastSignificantBits() / 10 - 1)), formation(pet));
-        }
-        for (Pet pet : List.of(stored, dead, idle, wrongWorld, missing, nonMob)) {
-            assertEquals(List.of(5, -1), formation(pet)); assertEquals(expected.get(pet), formation(pet));
-        }
-        for (Pet other : strangers) assertFalse(lookups.containsKey(other.entityId()));
-    }
-
-    private List<Integer> formation(Pet pet) throws Exception {
-        var method = PetSpacing.class.getDeclaredMethod("formation", PetRuntime.class, Pet.class, org.bukkit.entity.Player.class);
-        method.setAccessible(true); Object result = method.invoke(null, runtime, pet, owner);
-        var count = result.getClass().getDeclaredMethod("count"); count.setAccessible(true);
-        var slot = result.getClass().getDeclaredMethod("slot"); slot.setAccessible(true);
-        return List.of((int) count.invoke(result), (int) slot.invoke(result));
-    }
-
-    private List<Integer> originalFormation(Pet pet) {
-        int count = 0, slot = 0;
-        boolean included = false;
-        for (Pet other : runtime.store().active()) {
-            if (!other.ownerId().equals(pet.ownerId()) || other.stored() || other.dead()
-                    || other.activity() != Activity.TOY_FOCUS
-                    || !(runtime.entity(other) instanceof Mob body) || !body.getWorld().equals(owner.getWorld())) continue;
-            count++;
-            if (other.id().compareTo(pet.id()) < 0) slot++;
-            if (other == pet) included = true;
-        }
-        return List.of(count, included ? slot : -1);
-    }
-
     @Test void toyFrontKeepsStableRowsAndLateralSlotsWhenInsertionOrderDiffers() {
         Location at = owner.getLocation().add(20, 0, 0);
         var pets = new HashMap<Long, Pet>();
         for (long id : new long[]{4, 2, 1, 3}) {
             Pet pet = pet(id, at, 0.6); pet.activity(Activity.TOY_FOCUS); pets.put(id, pet);
         }
-        assertEquals(new Location(world, 0, 64, 2.4), PetSpacing.toyFront(runtime, pets.get(1L), owner));
-        assertEquals(new Location(world, -1.35, 64, 2.4), PetSpacing.toyFront(runtime, pets.get(2L), owner));
-        assertEquals(new Location(world, 1.35, 64, 2.4), PetSpacing.toyFront(runtime, pets.get(3L), owner));
-        assertEquals(new Location(world, 0, 64, 3.8), PetSpacing.toyFront(runtime, pets.get(4L), owner));
+        assertEquals(new Location(world, 0, 64, 2.4), PetSpacing.toyFront(runtime, pets.get(1L), owner, 0, 0));
+        assertEquals(new Location(world, -1.35, 64, 2.4), PetSpacing.toyFront(runtime, pets.get(2L), owner, 1, 0));
+        assertEquals(new Location(world, 1.35, 64, 2.4), PetSpacing.toyFront(runtime, pets.get(3L), owner, 2, 0));
+        assertEquals(new Location(world, 0, 64, 3.8), PetSpacing.toyFront(runtime, pets.get(4L), owner, 3, 0));
         Pet wide = pet(5, at, 2); wide.activity(Activity.TOY_FOCUS);
-        assertEquals(new Location(world, -2.5, 64, 3.8), PetSpacing.toyFront(runtime, wide, owner));
+        assertEquals(new Location(world, -2.5, 64, 3.8), PetSpacing.toyFront(runtime, wide, owner, 4, 0));
         owner.teleport(new Location(world, 0, 64, 0, 90, 0));
-        Location turned = PetSpacing.toyFront(runtime, pets.get(1L), owner);
+        Location turned = PetSpacing.toyFront(runtime, pets.get(1L), owner, 0, 0);
         assertNotNull(turned); assertEquals(-2.4, turned.getX(), 1e-10); assertEquals(0, turned.getZ(), 1e-10);
     }
 
     @Test void toyFrontKeepsOffsetsBlockedSlotsAndMissingGroundBehavior() {
         Pet self = pet(1, owner.getLocation().add(-10, 0, 0), 0.6);
         self.activity(Activity.TOY_FOCUS);
-        Location front = PetSpacing.toyFront(runtime, self, owner); assertNotNull(front);
+        Location front = PetSpacing.toyFront(runtime, self, owner, 0, 0); assertNotNull(front);
         Pet other = pet(2, front.clone().add(0.8, 0, 0), 0.6);
-        assertEquals(front.clone().add(-0.35, 0, 0), PetSpacing.toyFront(runtime, self, owner));
+        assertEquals(front.clone().add(-0.35, 0, 0), PetSpacing.toyFront(runtime, self, owner, 0, 0));
         runtime.entity(other).teleport(front.clone().add(-0.8, 0, 0));
-        assertEquals(front.clone().add(0.35, 0, 0), PetSpacing.toyFront(runtime, self, owner));
+        assertEquals(front.clone().add(0.35, 0, 0), PetSpacing.toyFront(runtime, self, owner, 0, 0));
         runtime.entity(other).teleport(front);
-        assertNull(PetSpacing.toyFront(runtime, self, owner));
+        assertNull(PetSpacing.toyFront(runtime, self, owner, 0, 0));
         runtime.entity(other).teleport(front.clone().add(5, 0, 0));
-        assertEquals(front, PetSpacing.toyFront(runtime, self, owner));
+        assertEquals(front, PetSpacing.toyFront(runtime, self, owner, 0, 0));
         self.entityId(null); self.activity(Activity.NONE);
-        assertEquals(front, PetSpacing.toyFront(runtime, self, owner));
-        floor = false; assertNull(PetSpacing.toyFront(runtime, self, owner));
+        assertEquals(front, PetSpacing.toyFront(runtime, self, owner, 0, 0));
+        floor = false; assertNull(PetSpacing.toyFront(runtime, self, owner, 0, 0));
     }
 }
