@@ -9,6 +9,7 @@
 # Pet types: each ID needs a body (directly or from its species) and a unique egg.
 # entity is the navigating body: only WOLF or CAT; a model supplies the visible animal.
 # Thus a fox can use a WOLF body, a fox model and a fox voice independently.
+# TF Dev's modeled types require their ModelEngine blueprints and MMOItems PETS eggs.
 pets:
   wolf:
     species: dog                # Inherit the built-in WOLF species and its overrides.
@@ -16,6 +17,55 @@ pets:
   cat:
     species: cat                # Inherit the built-in CAT species and its overrides.
     egg: CAT_SPAWN_EGG           # Egg ID plus vanilla custom model data must be unique.
+  beagle:
+    species: dog                # Dog character and WOLF body; inherits global interaction items.
+    model: beagle               # ModelEngine blueprint ID.
+    egg: mmoitems:PETS:PET_BEAGLE_EGG # Registered MMOItems hatching item.
+    sounds: {preset: wolf, pitch: 1.05} # Slightly brighter voice; pitch multiplies all voice events.
+  chihuahua:
+    species: dog                # Same dog character and WOLF body, with a smaller visible breed.
+    model: chihuahua            # ModelEngine blueprint ID.
+    egg: mmoitems:PETS:PET_CHIHUAHUA_EGG # Registered MMOItems hatching item.
+    sounds: {preset: wolf, pitch: 1.25} # Higher voice for the smallest breed.
+  corgi:
+    species: dog                # Inherit the dog body and character.
+    model: corgi                # ModelEngine blueprint ID.
+    egg: mmoitems:PETS:PET_CORGI_EGG # Registered MMOItems hatching item.
+    sounds: {preset: wolf, pitch: 1.10} # Moderately higher voice for a small breed.
+  golden:
+    species: dog                # Inherit the dog body and character.
+    model: golden               # ModelEngine blueprint ID.
+    egg: mmoitems:PETS:PET_GOLDEN_EGG # Registered MMOItems hatching item.
+    sounds: {preset: wolf, pitch: 0.90} # Deeper voice for a large breed.
+  husky:
+    species: dog                # Inherit the dog body and character.
+    model: husky                # ModelEngine blueprint ID.
+    egg: mmoitems:PETS:PET_HUSKY_EGG # Registered MMOItems hatching item.
+    sounds: {preset: wolf, pitch: 0.95} # Slightly deeper voice, between beagle and golden.
+  catblack:
+    species: cat                # Cat body and restrained cat character.
+    model: catblack             # ModelEngine blueprint ID.
+    egg: mmoitems:PETS:PET_CATBLACK_EGG # Registered MMOItems hatching item.
+  catfunny:
+    species: cat                # Inherit the cat body and character.
+    model: catfunny             # ModelEngine blueprint ID.
+    egg: mmoitems:PETS:PET_CATFUNNY_EGG # Registered MMOItems hatching item.
+  catorange:
+    species: cat                # Inherit the cat body and character.
+    model: catorange            # ModelEngine blueprint ID.
+    egg: mmoitems:PETS:PET_CATORANGE_EGG # Registered MMOItems hatching item.
+  mainecoon:
+    species: cat                # Inherit the cat body and character.
+    model: mainecoon            # ModelEngine blueprint ID.
+    egg: mmoitems:PETS:PET_MAINECOON_EGG # Registered MMOItems hatching item.
+  fox:
+    species: fox                # WOLF body, fox voice and cat character from species.fox.
+    model: fox                  # Visible fox supplied by ModelEngine.
+    egg: mmoitems:PETS:PET_FOX_EGG # Registered MMOItems hatching item; sex choice is inherited.
+  frog:
+    species: frog               # WOLF body, frog voice, basic character and frog tricks.
+    model: frog                 # Visible frog supplied by ModelEngine.
+    egg: mmoitems:PETS:PET_FROG_EGG # Registered MMOItems hatching item.
 
   # Minimal pet example: uncomment this block inside pets to add a modeled rabbit.
   # rabbit:
@@ -26,7 +76,7 @@ pets:
   # Complete pet example: also enable the wave definition under custom-tricks below.
   # behavior defaults to the body: dog = exuberant jumps, tail wagging and mischief.
   # cat = restrained, chatty greetings and stalking toys; basic = neutral hops/sounds.
-  # fox:
+  # fox_example:
   #   species: dog              # Inherits global defaults and species.dog settings.
   #   entity: WOLF              # Only WOLF or CAT, even for a visible fox.
   #   mythic-mob: ""            # Optional MythicMobs mob ID; nonempty requires MythicMobs.
@@ -76,8 +126,23 @@ pets:
 # Defining species.dog merges into the built-in dog; it does not replace it.
 # Species accept the same pet options; items replace only the specified category.
 # Global items and training.default-tricks are inherited; other game settings stay global.
-species: {}
-  # Species example: remove {} above and uncomment this indented block.
+species:
+  fox:
+    entity: WOLF                # Navigation body; appearance.model supplies the visible fox.
+    voice: fox                  # Fox sounds independent of the WOLF body.
+    behavior: cat               # Restrained character without exuberant dog jumps/tail wagging.
+    sex: choose                 # Owner chooses the sex when hatching.
+    appearance:
+      animations: {pet: pet2}    # Use the fox model's existing petting clip.
+  frog:
+    entity: WOLF                # Supported navigation body; appearance.model supplies the frog.
+    voice: frog                 # Frog sounds independent of the WOLF body.
+    behavior: basic             # Neutral hops/sounds rather than dog/cat mannerisms.
+    tricks: [follow, come, stay, jump, lay, tongue, croak] # Replaces built-ins; custom IDs are defined below.
+    appearance:
+      animations: {lie: lay, sleep: lay} # Reuse the frog model's laying clip for both rest slots.
+
+  # Species example: uncomment this indented block to override the built-in dog.
   # dog:
   #   items: {treats: [COOKED_BEEF]} # Replaces global treats for dogs unless a pet overrides them.
   #   tricks: {add: [paw], remove: [speak]} # Only tricks support add/remove, never item lists.
@@ -93,8 +158,20 @@ species: {}
 # Custom tricks: define an ID, then allow it via tricks: {add: [ID]} on a species/pet.
 # Alternatively add it to default-tricks (global/species/pet) to allow it and start learned.
 # IDs must not match built-in/reserved tricks; use letters first, then letters/digits/_/-.
-custom-tricks: {}
-  # Custom trick example: remove {} above and uncomment this indented block.
+custom-tricks:
+  tongue:
+    display-name: Tongue         # Player-facing trick name.
+    animation: tongue            # Frog ModelEngine clip; allowed by species.frog.tricks.
+    sound: ENTITY_FROG_TONGUE    # Per-trick sound independent of the pet's voice pitch.
+    at: 0.1667                   # Seconds after starting the clip when the tongue sound plays.
+  croak:
+    display-name: Croak          # Player-facing trick name.
+    animation: croak             # Frog ModelEngine clip; allowed by species.frog.tricks.
+    duration: 3                  # Seconds for the trick's fallback/action duration.
+    sound: ENTITY_FROG_AMBIENT   # Per-trick sound played at each configured time.
+    at: [0.54, 2.33, 2.67]        # Seconds after starting, matching the three croaks in the model.
+
+  # Custom trick example: uncomment this indented block to add its definition.
   # wave:
   #   display-name: Wave        # Player-facing name; defaults to the ID.
   #   animation: wave           # ModelEngine clip; needs this or nonempty fallback-text.

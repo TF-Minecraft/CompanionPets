@@ -15,9 +15,48 @@ import net.tfminecraft.companionpets.pet.SexMode;
 import net.tfminecraft.companionpets.pet.Trick;
 import net.tfminecraft.companionpets.visual.*;
 
-/** Opt-in verification against the private assets checkout without copying its data into this repo. */
+/** Opt-in comparison with deployed TF Dev definitions and their local model assets. */
 @EnabledIfSystemProperty(named = "companionpets.tfdev-config", matches = ".+")
 class TfDevConfigurationTest {
+    @Test void bundledPetsMatchDeployedDefinitionsWithOnlyBreedVoicePitchChanges() throws Exception {
+        MockBukkit.mock();
+        try {
+            var deployedYaml = new YamlConfiguration();
+            deployedYaml.load(Path.of(System.getProperty("companionpets.tfdev-config")).toFile());
+            var bundledYaml = new YamlConfiguration();
+            try (var input = getClass().getResourceAsStream("/config.yml")) {
+                bundledYaml.loadFromString(new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            }
+            var plugin = MockBukkit.createMockPlugin();
+            var deployed = CompanionConfig.load(plugin, deployedYaml);
+            var bundled = CompanionConfig.load(plugin, bundledYaml);
+            assertEquals(deployed.types().keySet(), bundled.types().keySet());
+            var breedPitches = java.util.Map.of("beagle", 1.05f, "chihuahua", 1.25f, "corgi", 1.10f,
+                    "golden", .90f, "husky", .95f);
+            for (var expected : deployed.types().values()) {
+                var actual = bundled.type(expected.id());
+                for (var component : PetTypeDef.class.getRecordComponents()) {
+                    // Interaction lists inherit each file's own global care/items settings.
+                    if (Set.of("items", "sounds").contains(component.getName())) continue;
+                    assertEquals(component.getAccessor().invoke(expected), component.getAccessor().invoke(actual),
+                            expected.id() + " " + component.getName());
+                }
+                float pitch = breedPitches.getOrDefault(expected.id(), 1f);
+                assertEquals(pitch, actual.sounds().pitch());
+                for (var event : PetSounds.Event.values()) {
+                    var oldCue = expected.sounds().cue(event);
+                    var newCue = actual.sounds().cue(event);
+                    if (oldCue == null) { assertNull(newCue); continue; }
+                    assertEquals(oldCue.sounds(), newCue.sounds());
+                    assertEquals(oldCue.volume(), newCue.volume());
+                    assertEquals(oldCue.pitch() * pitch, newCue.pitch(), .0001f);
+                }
+            }
+            for (String id : java.util.List.of("tongue", "croak"))
+                assertEquals(deployed.customTrick(Trick.valueOf(id)), bundled.customTrick(Trick.valueOf(id)));
+        } finally { MockBukkit.unmock(); }
+    }
+
     @Test void preparedConfigLoadsEveryCapturedTypeAndItsExistingModels() throws Exception {
         MockBukkit.mock();
         try {
