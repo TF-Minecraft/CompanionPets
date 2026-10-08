@@ -52,7 +52,9 @@ training:
 custom-tricks: {}
 
 limits:
-  max-stored: 20
+  # Total pets inside and outside the Pet House.
+  max-pets: 20
+  # How many of those pets may be outside at once.
   max-out: 4
 
 presence:

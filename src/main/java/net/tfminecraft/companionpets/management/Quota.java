@@ -8,7 +8,7 @@ public final class Quota {
         return currentlyOut < maxOut;
     }
 
-    public static boolean canStore(int currentlyStored, int maxStored) {
-        return currentlyStored < maxStored;
+    public static boolean canAdopt(int totalPets, int maxPets) {
+        return totalPets < maxPets;
     }
 }

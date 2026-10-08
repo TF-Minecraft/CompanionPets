@@ -25,7 +25,7 @@ class TrainingValidationTest {
         for (String source : new String[]{"play: {throw-speed-low: 2, throw-speed-high: 1}",
                 "play: {toy-attention-seconds: 0}", "play: {favorite-toy-attention-seconds: 0}",
                 "play: {fetch-speed-multiplier: 0}", "play: {fetch-speed-multiplier: 4}",
-                "limits: {max-stored: -1}", "limits: {max-out: -1}"}) {
+                "limits: {max-pets: -1}", "limits: {max-stored: -1}", "limits: {max-out: -1}"}) {
             var yaml = new YamlConfiguration(); yaml.loadFromString(source);
             assertThrows(IllegalArgumentException.class, () -> CompanionConfig.load(MockBukkit.createMockPlugin(), yaml), source);
         }

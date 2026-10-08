@@ -993,6 +993,10 @@ public final class PetActions {
                     + String.join(", ", runtime.config().types().keySet().stream().sorted().toList()));
             return false;
         }
+        if (!Quota.canAdopt(runtime.store().countPets(player.getUniqueId()), runtime.config().limits().maxPets())) {
+            PetFx.tell(player, PetTexts.refusal("", PetSex.FEMALE, "full-total"));
+            return false;
+        }
         if (!Quota.canBringOut(runtime.store().countOut(player.getUniqueId()), runtime.config().limits().maxOut())) {
             PetFx.tell(player, "You have reached the active pet limit. Send one to the Pet House first.");
             return false;
@@ -1039,10 +1043,6 @@ public final class PetActions {
     }
 
     private void storePet(Player player, Pet pet) {
-        if (!Quota.canStore(runtime.store().countStored(player.getUniqueId()), runtime.config().limits().maxStored())) {
-            PetFx.bar(player, PetTexts.refusal(pet.name(), pet.sex(), "full-stored"));
-            return;
-        }
         clearInteractions(pet);
         releaseFetch(pet, player, true);
         if (pet.carriedToy() != null) {

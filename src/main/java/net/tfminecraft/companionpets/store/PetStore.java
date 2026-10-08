@@ -590,10 +590,10 @@ public final class PetStore {
         return count;
     }
 
-    public int countStored(UUID ownerId) {
+    public int countPets(UUID ownerId) {
         int count = 0;
         for (Pet pet : index().owners().getOrDefault(ownerId, List.of())) {
-            if (pet.stored() && !pet.dead()) {
+            if (!pet.dead()) {
                 count++;
             }
         }

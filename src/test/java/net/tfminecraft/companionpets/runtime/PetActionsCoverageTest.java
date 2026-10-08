@@ -52,6 +52,7 @@ import org.mockbukkit.mockbukkit.world.WorldMock;
 @SuppressWarnings("deprecation")
 class PetActionsCoverageTest {
     private GoalServerMock server;
+    private final Set<UUID> unloaded = new HashSet<>();
     private WorldMock world;
     private PlayerMock owner;
     private WolfMock body;
@@ -71,7 +72,11 @@ class PetActionsCoverageTest {
     private final Map<String, BlockMock> blocks = new HashMap<>();
 
     @BeforeEach void setup() throws Exception {
-        server = MockBukkit.mock(new GoalServerMock());
+        server = MockBukkit.mock(new GoalServerMock() {
+            @Override public Entity getEntity(UUID id) {
+                return unloaded.contains(id) ? null : super.getEntity(id);
+            }
+        });
         world = new CollisionWorldMock() {
             @Override public org.mockbukkit.mockbukkit.world.ChunkMock getChunkAt(int x, int z) {
                 if (forbidDistantChunkLoads && x == 20 && z == 0) throw new AssertionError("Distant chunk must not load");
@@ -107,7 +112,7 @@ class PetActionsCoverageTest {
         yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 moments: {belly-up: {chance: 0}}
-                limits: {max-out: 2, max-stored: 2}
+                limits: {max-out: 2, max-pets: 2}
                 items: {kennel: BARREL, kennel-block: BARREL, toys: [STICK], treats: [COD], foods: [{item: BEEF, hunger: 35}]}
                 custom-tricks:
                   wave: {display-name: Wave, animation: wave_clip, duration: 2, fallback-text: "{pet} waves to {owner}"}
@@ -148,6 +153,7 @@ class PetActionsCoverageTest {
 
     private WolfMock wolf(Location at) {
         var wolf = new WolfMock(server, UUID.randomUUID()) {
+            @Override public boolean isValid() { return !unloaded.contains(getUniqueId()) && super.isValid(); }
             @Override public boolean hasLineOfSight(Entity other) { return true; }
             @Override public boolean isInWater() { return false; }
             @Override public boolean isOnGround() { return true; }
@@ -387,18 +393,19 @@ class PetActionsCoverageTest {
     @Test void storingAnUnavailableDistantBodyAndBringingItOutNeverLoadsItsChunk() {
         body.teleport(new Location(world, 320, 64, 0));
         runtime.remember(pet, body);
-        pet.entityId(UUID.randomUUID()); // Its saved body is unavailable until the chunk's entities load.
+        unloaded.add(body.getUniqueId()); // Bukkit cannot find this body until the chunk's entities load.
         assertNull(runtime.entity(pet));
         assertFalse(world.isChunkLoaded(20, 0));
         forbidDistantChunkLoads = true;
         care(PetMenus.careSlot(PetMenus.STORE_SLOT, false));
         assertTrue(pet.stored()); assertNull(pet.entityId());
-        assertTrue(body.isValid());
+        assertFalse(body.isValid()); assertFalse(body.isDead());
         care(PetMenus.careSlot(PetMenus.BRING_OUT_SLOT, false));
         Entity replacement = runtime.entity(pet);
         assertFalse(pet.stored()); assertNotNull(replacement);
         assertTrue(replacement.getLocation().distance(owner.getLocation()) < 3);
         assertFalse(world.isChunkLoaded(20, 0));
+        unloaded.remove(body.getUniqueId());
         actions.reattach(body); // Natural chunk loading removes the old tagged body.
         assertFalse(body.isValid()); assertSame(replacement, runtime.entity(pet));
     }
@@ -418,19 +425,40 @@ class PetActionsCoverageTest {
         assertTrue(PetSpacing.free(runtime, other, new Location(world, 10.8, 64, 0.5)), "a pet never crowds itself");
     }
 
-    @Test void storageAndActiveLimitsLeaveTheExistingStateIntact() {
-        configure("limits.max-stored", 1);
+    @Test void storingAtTheTotalLimitAlwaysSucceeds() {
         Pet stored = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
         stored.stored(true); runtime.store().add(stored);
+        assertEquals(2, runtime.store().countPets(owner.getUniqueId()));
         care(PetMenus.careSlot(PetMenus.STORE_SLOT, false));
-        assertFalse(pet.stored());
-        assertTrue(body.isValid());
+        assertTrue(pet.stored()); assertNull(pet.entityId()); assertFalse(body.isValid());
+        assertEquals(2, runtime.store().countPets(owner.getUniqueId()));
+        assertEquals(0, runtime.store().countOut(owner.getUniqueId()));
+        care(PetMenus.careSlot(PetMenus.BRING_OUT_SLOT, false));
+        assertFalse(pet.stored()); assertNotNull(runtime.entity(pet));
+        assertEquals(2, runtime.store().countPets(owner.getUniqueId()));
+    }
+
+    @Test void activeLimitKeepsAnExistingStoredPetInTheHouse() {
         configure("limits.max-out", 1);
+        Pet stored = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
+        stored.stored(true); runtime.store().add(stored);
         actions.menus().openCare(owner, stored);
         actions.clickMenu(owner, holder(), PetMenus.careSlot(PetMenus.BRING_OUT_SLOT, false), null, false, false, false);
-        assertTrue(stored.stored());
-        assertNull(stored.entityId());
+        assertTrue(stored.stored()); assertNull(stored.entityId());
         assertEquals(1, runtime.store().countOut(owner.getUniqueId()));
+        assertTrue(bars().contains("as many pets out"));
+    }
+
+    @Test void testPetRejectsTheTotalWithRoomOutsideAndLeavesExistingPetsUntouched() {
+        Pet stored = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
+        stored.stored(true); runtime.store().add(stored);
+        int entities = world.getEntities().size();
+        assertFalse(actions.spawnTestPet(owner, "wolf", "Extra"));
+        assertEquals(2, runtime.store().countPets(owner.getUniqueId()));
+        assertEquals(1, runtime.store().countOut(owner.getUniqueId()));
+        assertEquals(entities, world.getEntities().size());
+        assertTrue(owner.nextMessage().contains("as many pets as you can care for"));
+        assertTrue(stored.stored()); assertSame(body, runtime.entity(pet));
     }
 
     @Test void bringingOutAPetWithoutSafeRoomKeepsItStoredWithItsIdentityAndNeeds() {

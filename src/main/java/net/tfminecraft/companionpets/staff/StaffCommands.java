@@ -134,7 +134,7 @@ public final class StaffCommands {
         require(runtime.store().canRestoreBodies(), "Pet persistence is unavailable; creation refused.");
         UUID owner = resolveOwner(args[1]);
         Pet pet = PetCreation.parse(runtime, owner, args);
-        require(runtime.store().countStored(owner) < runtime.config().limits().maxStored(), "The player's Pet House is full.");
+        require(runtime.store().countPets(owner) < runtime.config().limits().maxPets(), "The player already has the maximum number of pets.");
         if (!audit.append(sender, "create-requested", pet, "none", StaffAudit.snapshot(pet))) return;
         runtime.store().add(pet);
         if (!runtime.store().save()) {
