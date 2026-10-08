@@ -47,7 +47,8 @@ class CommandLifecycleTest {
         assertTrue(player.nextMessage().contains("staff only"));
         player.setOp(true);
         assertEquals(List.of("testpet"), complete("testpet"));
-        assertEquals(List.of("cat", "wolf"), complete("testpet", ""));
+        assertEquals(List.of("beagle", "cat", "catblack", "catfunny", "catorange", "chihuahua", "corgi",
+                "fox", "frog", "golden", "husky", "mainecoon", "wolf"), complete("testpet", ""));
     }
 
 
@@ -71,10 +72,10 @@ class CommandLifecycleTest {
         yaml.set("pets.friend.egg", "FROG_SPAWN_EGG");
         yaml.save(file);
         command("reload");
-        assertEquals(List.of("friend"), complete("testpet", "f"));
+        assertEquals(List.of("fox", "friend", "frog"), complete("testpet", "f"));
         java.nio.file.Files.writeString(file.toPath(), "pets: [broken\n");
         command("reload");
-        assertEquals(List.of("friend"), complete("testpet", "f"), "Failed reload keeps active configuration");
+        assertEquals(List.of("fox", "friend", "frog"), complete("testpet", "f"), "Failed reload keeps active configuration");
     }
 
     @Test void operatorPreviewCompletionFiltersPrefixes() {
@@ -94,7 +95,7 @@ class CommandLifecycleTest {
         yaml.set("training.learned-at", 200);
         yaml.set("pets.friend.entity", "CAT"); yaml.set("pets.friend.egg", "FROG_SPAWN_EGG"); yaml.save(file);
         command("reload");
-        assertEquals(List.of(), complete("testpet", "f"));
+        assertEquals(List.of("fox", "frog"), complete("testpet", "f"));
     }
 
     @Test void consoleCannotUsePlayerOnlyCommands() {

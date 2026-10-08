@@ -15,9 +15,48 @@ import net.tfminecraft.companionpets.pet.SexMode;
 import net.tfminecraft.companionpets.pet.Trick;
 import net.tfminecraft.companionpets.visual.*;
 
-/** Opt-in verification against the private assets checkout without copying its data into this repo. */
+/** Opt-in comparison with deployed TF Dev definitions and their local model assets. */
 @EnabledIfSystemProperty(named = "companionpets.tfdev-config", matches = ".+")
 class TfDevConfigurationTest {
+    @Test void bundledPetsMatchDeployedDefinitionsWithOnlyBreedVoicePitchChanges() throws Exception {
+        MockBukkit.mock();
+        try {
+            var deployedYaml = new YamlConfiguration();
+            deployedYaml.load(Path.of(System.getProperty("companionpets.tfdev-config")).toFile());
+            var bundledYaml = new YamlConfiguration();
+            try (var input = getClass().getResourceAsStream("/config.yml")) {
+                bundledYaml.loadFromString(new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+            }
+            var plugin = MockBukkit.createMockPlugin();
+            var deployed = CompanionConfig.load(plugin, deployedYaml);
+            var bundled = CompanionConfig.load(plugin, bundledYaml);
+            assertGlobalSettings(deployed, bundled);
+            assertEquals(deployed.types().keySet(), bundled.types().keySet());
+            var breedPitches = java.util.Map.of("beagle", 1.05f, "chihuahua", 1.25f, "corgi", 1.10f,
+                    "golden", .90f, "husky", .95f);
+            for (var expected : deployed.types().values()) {
+                var actual = bundled.type(expected.id());
+                for (var component : PetTypeDef.class.getRecordComponents()) {
+                    if (component.getName().equals("sounds")) continue;
+                    assertEquals(component.getAccessor().invoke(expected), component.getAccessor().invoke(actual),
+                            expected.id() + " " + component.getName());
+                }
+                float pitch = breedPitches.getOrDefault(expected.id(), 1f);
+                assertEquals(pitch, actual.sounds().pitch());
+                for (var event : PetSounds.Event.values()) {
+                    var oldCue = expected.sounds().cue(event);
+                    var newCue = actual.sounds().cue(event);
+                    if (oldCue == null) { assertNull(newCue); continue; }
+                    assertEquals(oldCue.sounds(), newCue.sounds());
+                    assertEquals(oldCue.volume(), newCue.volume());
+                    assertEquals(oldCue.pitch() / expected.sounds().pitch() * pitch, newCue.pitch(), .0001f);
+                }
+            }
+            for (String id : java.util.List.of("tongue", "croak"))
+                assertEquals(deployed.customTrick(Trick.valueOf(id)), bundled.customTrick(Trick.valueOf(id)));
+        } finally { MockBukkit.unmock(); }
+    }
+
     @Test void preparedConfigLoadsEveryCapturedTypeAndItsExistingModels() throws Exception {
         MockBukkit.mock();
         try {
@@ -29,8 +68,8 @@ class TfDevConfigurationTest {
             expectedTypes.remove("fox_custom");
             assertEquals(expectedTypes, config.types().keySet());
             assertEquals(13, config.types().size());
-            for (String root : Set.of("care", "play", "training", "limits", "moments", "social", "items", "orders"))
-                assertEquals(values(original.getConfigurationSection(root)), values(current.getConfigurationSection(root)), root);
+            // Compare effective settings: omitted defaults and legacy map/list forms are equivalent.
+            assertGlobalSettings(CompanionConfig.load(MockBukkit.createMockPlugin(), original), config);
             Path assets = path.getParent().getParent().getParent();
             for (var pet : config.types().values()) {
                 var saved = original.getConfigurationSection("pets." + (pet.id().equals("fox") ? "fox_custom" : pet.id()));
@@ -81,14 +120,17 @@ class TfDevConfigurationTest {
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_JUMPS));
             assertTrue(config.type("beagle").behaves(PetBehavior.SOCIAL_VOCALIZING));
             assertTrue(config.type("beagle").behaves(PetBehavior.TOY_WIGGLE));
-            assertEquals(1f, config.type("chihuahua").sounds().pitch());
+            assertEquals(1.25f, config.type("chihuahua").sounds().pitch());
             assertTrue(config.type("chihuahua").behaves(PetBehavior.DIG_GIFTS));
         } finally { MockBukkit.unmock(); }
     }
 
-    private static java.util.Map<String, Object> values(org.bukkit.configuration.ConfigurationSection section) {
-        return section.getValues(true).entrySet().stream()
-                .filter(entry -> !(entry.getValue() instanceof org.bukkit.configuration.ConfigurationSection))
-                .collect(Collectors.toMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue));
+    private static void assertGlobalSettings(CompanionConfig expected, CompanionConfig actual) throws Exception {
+        for (var field : CompanionConfig.class.getDeclaredFields()) {
+            // Item lookup indexes contain type identities; compare type definitions separately.
+            if (Set.of("types", "customTricks", "eggs", "modelEggs", "eggOrder", "toys").contains(field.getName())) continue;
+            field.setAccessible(true);
+            assertEquals(field.get(expected), field.get(actual), field.getName());
+        }
     }
 }
