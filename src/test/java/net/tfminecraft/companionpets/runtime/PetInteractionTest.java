@@ -1,6 +1,7 @@
 package net.tfminecraft.companionpets.runtime;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import java.util.UUID;
 import org.bukkit.GameMode;
@@ -611,6 +612,25 @@ class PetInteractionTest {
         assertEquals(0, body.getVelocity().getY());
         pet.need(Need.ENERGY, 10); actions.anticipation().tick(now + 10_000);
         assertFalse(actions.anticipation().active(pet)); assertEquals(Activity.NONE, pet.activity());
+    }
+
+    @Test void toyPositionsAndPlayfulStepsAreOnlyProbedAtTheNavigationCadence() {
+        greetingGround = true; body.setOnGround(true); pet.favoriteToy("STICK");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STICK));
+        long now = System.currentTimeMillis();
+        actions.anticipation().tick(now);
+        body.teleport(PetSpacing.toyFront(runtime, pet, player, actions.anticipation().slot(pet, player), 0));
+        try (var spacing = mockStatic(PetSpacing.class, CALLS_REAL_METHODS)) {
+            actions.anticipation().advance(pet, now + 250);
+            spacing.verify(() -> PetSpacing.toyFront(eq(runtime), eq(pet), eq(player), anyInt(), eq(0.0)), times(1));
+            spacing.verify(() -> PetSpacing.free(eq(runtime), eq(pet), any(Location.class)), atLeastOnce());
+            spacing.clearInvocations();
+            for (int tick = 1; tick < 5; tick++) actions.anticipation().advance(pet, now + 250 + tick * 50);
+            spacing.verifyNoInteractions();
+            player.teleport(player.getLocation().add(1, 0, 0));
+            actions.anticipation().advance(pet, now + 500);
+            spacing.verify(() -> PetSpacing.toyFront(eq(runtime), eq(pet), eq(player), anyInt(), eq(0.0)), times(1));
+        }
     }
 
     @Test void heldToyFollowsMovingOwnerBeyondAcquisitionRadiusWithoutHoppingOrDestroyingGoals() {
