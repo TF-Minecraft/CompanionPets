@@ -23,6 +23,7 @@ public final class PetRuntime {
     private final JavaPlugin plugin;
     private CompanionConfig config;
     private final PetStore store;
+    private final java.util.Map<UUID, Entity> loadedBodies = new java.util.HashMap<>();
     private final Sessions sessions;
     private final Bodies bodies;
     private final PetVisual visual;
@@ -32,7 +33,6 @@ public final class PetRuntime {
     private final PetVoice voice = new PetVoice(this);
     private final java.util.Map<String, net.tfminecraft.companionpets.visual.PetCapabilities> capabilities = new java.util.HashMap<>();
     private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
-    private final java.util.Map<UUID, Entity> loadedBodies = new java.util.HashMap<>();
 
     public PetRuntime(
             JavaPlugin plugin,
