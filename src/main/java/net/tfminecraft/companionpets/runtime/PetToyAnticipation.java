@@ -15,8 +15,8 @@ import net.tfminecraft.companionpets.config.PetBehavior;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.integration.PetMotion;
-import net.tfminecraft.companionpets.item.ItemIdentity;
 import net.tfminecraft.companionpets.item.ItemRef;
+import net.tfminecraft.companionpets.item.HeldItem;
 import net.tfminecraft.companionpets.pet.*;
 
 /** A held toy takes priority until played with, put away or ignored long enough to become boring. */
@@ -38,12 +38,11 @@ final class PetToyAnticipation {
         Map<UUID, Hands> hands = new HashMap<>();
         for (Pet pet : runtime.store().active()) {
             Player owner = Bukkit.getPlayer(pet.ownerId());
-            ItemRef toy = owner != null && owner.isOnline()
-                    ? heldToy(pet, hands.computeIfAbsent(owner.getUniqueId(), id -> Hands.of(owner))) : null;
+            if (owner == null || !owner.isOnline()) { interests.remove(pet.id()); cancel(pet); continue; }
+            if (!(runtime.entity(pet) instanceof Mob body)
+                    || !ready(pet, body, owner, now)) { cancel(pet); continue; }
+            ItemRef toy = heldToy(pet, hands.computeIfAbsent(owner.getUniqueId(), id -> Hands.of(owner)));
             if (toy == null) { interests.remove(pet.id()); cancel(pet); continue; }
-            if (!(runtime.entity(pet) instanceof Mob body) || !ready(pet, body, owner, now)) {
-                cancel(pet); continue;
-            }
             if (!interested(pet, owner, toy, now)) { cancel(pet); continue; }
             Focus focus = active.get(pet.id());
             if (focus == null || focus.body != body || focus.owner != owner || !focus.toy.equals(toy.key())) {
@@ -209,10 +208,10 @@ final class PetToyAnticipation {
                         && s.petId().equals(pet.id()));
     }
 
-    private record Hands(ItemIdentity main, ItemIdentity off) {
+    private record Hands(HeldItem main, HeldItem off) {
         static Hands of(Player owner) {
-            return new Hands(ItemRef.identify(owner.getInventory().getItemInMainHand()),
-                    ItemRef.identify(owner.getInventory().getItemInOffHand()));
+            return new Hands(HeldItem.of(owner.getInventory().getItemInMainHand()),
+                    HeldItem.of(owner.getInventory().getItemInOffHand()));
         }
     }
 

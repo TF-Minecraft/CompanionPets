@@ -130,6 +130,7 @@ public class PetsPlugin extends JavaPlugin {
         }
         if (flusher != null) flusher.cancel();
         if (actions != null) {
+            actions.closeCalls();
             for (var pet : store.all()) {
                 Entity body = runtime.entity(pet);
                 if (body != null) runtime.remember(pet, body);
@@ -236,6 +237,7 @@ public class PetsPlugin extends JavaPlugin {
         actions.holograms().clear();
         runtime.sessions().clearForReload();
         visual.close();
+        net.tfminecraft.companionpets.item.ItemBridge.clearCache();
         runtime.config(next);
         Bukkit.getScheduler().runTaskLater(this, this::validateProviders, 1L);
         for (var world : Bukkit.getWorlds()) {

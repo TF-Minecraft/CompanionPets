@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import net.tfminecraft.companionpets.item.ItemIdentity;
 import net.tfminecraft.companionpets.item.ItemRef;
+import net.tfminecraft.companionpets.item.HeldItem;
 import org.bukkit.entity.EntityType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -42,20 +42,14 @@ public record PetTypeDef(
         return trick != null && tricks.contains(trick);
     }
 
-    public boolean matchesEgg(ItemStack item) {
-        return matchesEgg(item, ItemRef.identify(item));
-    }
+    public boolean matchesEgg(ItemStack item) { return matchesEgg(HeldItem.of(item)); }
 
-    /** As {@link #matchesEgg(ItemStack)}, reusing the stack's identity across every configured type. */
-    public boolean matchesEgg(ItemStack item, ItemIdentity identity) {
-        if (item == null || item.getAmount() <= 0) return false;
-        if (eggCustomModelData == null && egg.kind() != ItemRef.Kind.VANILLA) return egg.matches(identity);
+    public boolean matchesEgg(HeldItem item) {
+        if (item.empty()) return false;
+        if (eggCustomModelData == null && egg.kind() != ItemRef.Kind.VANILLA) return item.matches(egg);
         // Legacy material + model eggs also match provider-created eggs.
-        if (eggCustomModelData != null ? item.getType() != egg.material() : !egg.matches(identity)) return false;
-        ItemMeta meta = item.getItemMeta();
-        boolean hasModelData = meta != null && meta.hasCustomModelData();
-        return eggCustomModelData == null ? !hasModelData
-                : hasModelData && meta.getCustomModelData() == eggCustomModelData;
+        if (eggCustomModelData != null ? item.material() != egg.material() : !item.matches(egg)) return false;
+        return java.util.Objects.equals(eggCustomModelData, item.model());
     }
 
     public ItemStack eggIcon() {
@@ -68,11 +62,12 @@ public record PetTypeDef(
         return item;
     }
 
-    public ItemRef toy(ItemStack item) {
-        return items.toy(item);
-    }
+    public ItemRef toy(HeldItem item) { return items.toy(item); }
+    public boolean acceptsToy(HeldItem item) { return toy(item) != null; }
+    public boolean isTreat(HeldItem item) { return items.isTreat(item); }
+    public Double foodGain(HeldItem item) { return items.foodGain(item); }
 
-    public ItemRef toy(ItemIdentity item) {
+    public ItemRef toy(ItemStack item) {
         return items.toy(item);
     }
 

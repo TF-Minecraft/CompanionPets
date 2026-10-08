@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.bukkit.Bukkit;
 import net.tfminecraft.companionpets.item.ItemRef;
+import net.tfminecraft.companionpets.item.HeldItem;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
@@ -385,10 +386,8 @@ public final class PetTicker implements Runnable {
             }
             Pet pet = runtime.store().get(session.petId());
             PetTypeDef type = pet == null ? null : runtime.config().type(pet.typeId());
-            java.util.List<ItemRef> treats = type == null ? java.util.List.of() : type.treats();
             Entity body = pet == null ? null : runtime.entity(pet);
-            var held = ItemRef.identify(player.getInventory().getItemInMainHand());
-            boolean holding = treats.stream().anyMatch(treat -> treat.matches(held));
+            boolean holding = type != null && type.isTreat(HeldItem.of(player.getInventory().getItemInMainHand()));
             boolean close = body != null
                     && body.getWorld().equals(player.getWorld())
                     && body.getLocation().distance(player.getLocation()) <= runtime.config().training().sessionDistance();
@@ -398,7 +397,7 @@ public final class PetTicker implements Runnable {
                 actions.endTraining(player, pet, "your pet type is no longer configured");
             } else if (!holding) {
                 String treatName = actions.treatName(pet);
-                actions.endTraining(player, pet, java.util.Arrays.stream(player.getInventory().getContents()).anyMatch(item -> treats.stream().anyMatch(treat -> treat.matches(item)))
+                actions.endTraining(player, pet, java.util.Arrays.stream(player.getInventory().getContents()).anyMatch(item -> type.isTreat(HeldItem.of(item)))
                         ? "you put the " + treatName + " away"
                         : "you ran out of " + treatName);
             } else if (!close) {

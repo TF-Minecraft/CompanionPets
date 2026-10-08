@@ -27,8 +27,8 @@ class ItemRefTest {
     }
 
     @Test void sameMaterialDoesNotConfuseFeedAndGlove() {
-        var glove = new ItemIdentity(Material.RABBIT_HIDE, "PETS", "CARING_ITEM", null, true);
-        var feed = new ItemIdentity(Material.RABBIT_HIDE, "PETS", "UNIVERSAL_FEED", null, true);
+        var glove = new ItemBridge.Identity(Material.RABBIT_HIDE, "PETS", "CARING_ITEM", null, true);
+        var feed = new ItemBridge.Identity(Material.RABBIT_HIDE, "PETS", "UNIVERSAL_FEED", null, true);
         assertTrue(ItemRef.parse("m.pets.caring_item").matches(glove));
         assertFalse(ItemRef.parse("m.pets.caring_item").matches(feed));
         assertTrue(ItemRef.parse("m.pets.universal_feed").matches(feed));
@@ -39,23 +39,23 @@ class ItemRefTest {
 
     @Test void mmoTypeIsPartOfIdentityAndMaterialIsNot() {
         ItemRef ref = ItemRef.parse("m.pets.meat_treat");
-        assertTrue(ref.matches(new ItemIdentity(Material.STICK, "pets", "meat_treat", null, true)));
-        assertFalse(ref.matches(new ItemIdentity(Material.RABBIT_FOOT, "FOOD", "MEAT_TREAT", null, true)));
-        assertFalse(ref.matches(new ItemIdentity(Material.RABBIT_FOOT, null, null, null, true)));
+        assertTrue(ref.matches(new ItemBridge.Identity(Material.STICK, "pets", "meat_treat", null, true)));
+        assertFalse(ref.matches(new ItemBridge.Identity(Material.RABBIT_FOOT, "FOOD", "MEAT_TREAT", null, true)));
+        assertFalse(ref.matches(new ItemBridge.Identity(Material.RABBIT_FOOT, null, null, null, true)));
     }
 
     @Test void itemsAdderRequiresFullNamespaceAndNeverMatchesVanilla() {
-        var custom = new ItemIdentity(Material.SLIME_BALL, null, null, "tfmc:pet_ball", true);
+        var custom = new ItemBridge.Identity(Material.SLIME_BALL, null, null, "tfmc:pet_ball", true);
         assertTrue(ItemRef.parse("ia.tfmc:pet_ball").matches(custom));
         assertFalse(ItemRef.parse("ia.other:pet_ball").matches(custom));
         assertFalse(ItemRef.parse("v.slime_ball").matches(custom));
     }
 
     @Test void unknownIdentityIsRefusedEvenForVanilla() {
-        var failed = new ItemIdentity(Material.BRUSH, null, null, null, false);
+        var failed = new ItemBridge.Identity(Material.BRUSH, null, null, null, false);
         assertFalse(ItemRef.parse("v.brush").matches(failed));
-        assertFalse(ItemRef.parse("v.brush").matches((ItemIdentity) null));
-        assertTrue(ItemRef.parse("v.brush").matches(new ItemIdentity(Material.BRUSH, null, null, null, true)));
+        assertFalse(ItemRef.parse("v.brush").matches((ItemBridge.Identity) null));
+        assertTrue(ItemRef.parse("v.brush").matches(new ItemBridge.Identity(Material.BRUSH, null, null, null, true)));
     }
 
     @Test void malformedSelectorsAreRejected() {
@@ -63,6 +63,28 @@ class ItemRefTest {
                 "ia.pet_ball", "ia.TFMC:pet_ball", "v.not_a_material", "v.air", "v.water"}) {
             assertThrows(IllegalArgumentException.class, () -> ItemRef.parse(value), value);
         }
+    }
+
+    @Test void heldItemsRejectEmptyStacksAndScopesRestoreThePreviousInteraction() {
+        var stack = new org.bukkit.inventory.ItemStack(Material.STICK);
+        var held = HeldItem.of(stack);
+        assertEquals(java.util.List.of(ItemRef.parse("STICK")), held.keys());
+        try (var outer = held.scope()) {
+            assertSame(outer, HeldItem.of(stack));
+            try (var inner = HeldItem.of(new org.bukkit.inventory.ItemStack(Material.BONE)).scope()) {
+                assertSame(outer, HeldItem.of(stack));
+                assertTrue(inner.matches(ItemRef.parse("BONE")));
+            }
+            assertSame(outer, HeldItem.of(stack));
+        }
+        assertNotSame(held, HeldItem.of(stack));
+        stack.setAmount(0);
+        assertTrue(held.matches(ItemRef.parse("STICK")), "Consumed items retain their interaction's identity");
+        assertTrue(HeldItem.of(stack).empty());
+        assertFalse(HeldItem.of(stack).matches(ItemRef.parse("STICK")));
+        assertTrue(HeldItem.of(null).keys().isEmpty());
+        assertNull(HeldItem.of(null).model());
+        assertFalse(HeldItem.of(new org.bukkit.inventory.ItemStack(Material.AIR)).matches(ItemRef.parse("STICK")));
     }
     @Test void providerTokensRoundTripAndRejectMalformedNamespaceSeparators() {
         assertEquals("STICK",ItemRef.parse("minecraft:stick").configToken());

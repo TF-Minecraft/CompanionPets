@@ -5,7 +5,6 @@ import java.util.Map;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 /** A configured identity, independent of an item's underlying material or model. */
 public record ItemRef(Kind kind, String id, String type) {
@@ -86,16 +85,11 @@ public record ItemRef(Kind kind, String id, String type) {
         };
     }
 
-    /** One provider lookup for a stack; null for empty stacks, which never match a configured item. */
-    public static ItemIdentity identify(ItemStack item) {
-        return item == null || item.getType().isAir() || item.getAmount() <= 0 ? null : ItemBridge.identity(item);
-    }
-
     public boolean matches(ItemStack item) {
-        return matches(identify(item));
+        return HeldItem.of(item).matches(this);
     }
 
-    public boolean matches(ItemIdentity item) {
+    boolean matches(ItemBridge.Identity item) {
         if (item == null || !item.known()) return false;
         return switch (kind) {
             case VANILLA -> item.material() == material() && item.mmoType() == null && item.itemsAdderId() == null;
@@ -104,25 +98,18 @@ public record ItemRef(Kind kind, String id, String type) {
         };
     }
 
-    /** A display copy for menus and particles; real items handed to players come from {@link #create()}. */
     public ItemStack icon(Material fallback) {
-        ItemStack item = ItemBridge.display(this);
+        ItemStack item = create();
         return item == null ? new ItemStack(fallback) : item;
     }
 
     public ItemStack create() { return ItemBridge.create(this); }
 
     public Component displayName() {
-        ItemStack item = ItemBridge.display(this);
-        if (item == null) return Component.text(id.replace('_', ' ').toLowerCase(Locale.ROOT));
-        var meta = item.getItemMeta();
-        return meta != null && meta.hasDisplayName() ? meta.displayName() : Component.translatable(item.getType().translationKey());
+        return ItemBridge.displayName(this);
     }
 
     public String name() {
-        ItemStack item = ItemBridge.display(this);
-        if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName())
-            return PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().displayName());
-        return id.replace('_', ' ').toLowerCase(Locale.ROOT);
+        return ItemBridge.name(this);
     }
 }

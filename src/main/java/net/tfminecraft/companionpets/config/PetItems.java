@@ -9,8 +9,8 @@ import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.inventory.ItemStack;
-import net.tfminecraft.companionpets.item.ItemIdentity;
 import net.tfminecraft.companionpets.item.ItemRef;
+import net.tfminecraft.companionpets.item.HeldItem;
 
 /** Effective interaction lists. Each present pet list replaces its global list. */
 public record PetItems(Map<ItemRef, Double> foods, List<ItemRef> treats,
@@ -86,19 +86,19 @@ public record PetItems(Map<ItemRef, Double> foods, List<ItemRef> treats,
         return items;
     }
 
-    public boolean isTreat(ItemStack item) { return isTreat(ItemRef.identify(item)); }
-    public boolean isTreat(ItemIdentity item) { return treats.stream().anyMatch(ref -> ref.matches(item)); }
-    public boolean isMedicine(ItemStack item) { return isMedicine(ItemRef.identify(item)); }
-    public boolean isMedicine(ItemIdentity item) { return medicines.stream().anyMatch(ref -> ref.matches(item)); }
-    public boolean isBrush(ItemStack item) { return isBrush(ItemRef.identify(item)); }
-    public boolean isBrush(ItemIdentity item) { return brushes.stream().anyMatch(ref -> ref.matches(item)); }
-    public ItemRef toy(ItemStack item) { return toy(ItemRef.identify(item)); }
-    public ItemRef toy(ItemIdentity item) { return toys.stream().filter(ref -> ref.matches(item)).findFirst().orElse(null); }
+    public boolean isTreat(ItemStack item) { return isTreat(HeldItem.of(item)); }
+    public boolean isMedicine(ItemStack item) { return isMedicine(HeldItem.of(item)); }
+    public boolean isBrush(ItemStack item) { return isBrush(HeldItem.of(item)); }
+    public ItemRef toy(ItemStack item) { return toy(HeldItem.of(item)); }
+    public Double foodGain(ItemStack item) { return foodGain(HeldItem.of(item)); }
 
-    public Double foodGain(ItemStack item) { return foodGain(ItemRef.identify(item)); }
+    public boolean isTreat(HeldItem item) { return treats.stream().anyMatch(ref -> item.matches(ref)); }
+    public boolean isMedicine(HeldItem item) { return medicines.stream().anyMatch(ref -> item.matches(ref)); }
+    public boolean isBrush(HeldItem item) { return brushes.stream().anyMatch(ref -> item.matches(ref)); }
+    public ItemRef toy(HeldItem item) { return toys.stream().filter(ref -> item.matches(ref)).findFirst().orElse(null); }
 
-    public Double foodGain(ItemIdentity item) {
-        Double gain = foods.entrySet().stream().filter(entry -> entry.getKey().matches(item))
+    public Double foodGain(HeldItem item) {
+        Double gain = foods.entrySet().stream().filter(entry -> item.matches(entry.getKey()))
                 .map(Map.Entry::getValue).findFirst().orElse(null);
         // Retain the former favourite-food behaviour when a hungry pet eats a treat.
         return gain != null ? gain : isTreat(item) ? 30.0 : null;

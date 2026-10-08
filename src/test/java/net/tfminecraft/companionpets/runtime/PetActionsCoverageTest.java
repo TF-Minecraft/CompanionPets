@@ -451,6 +451,59 @@ class PetActionsCoverageTest {
         assertTrue(collisions().tickets.isEmpty());
     }
 
+    @Test void sharedChunkTicketRemainsUntilBothPetsFinishLoading() {
+        var second = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Rex", PetSex.MALE);
+        runtime.store().add(second);
+        runtime.remember(second, wolf(new Location(world, 7, 64, 0)));
+        var loading = org.mockito.Mockito.mock(Chunk.class);
+        org.mockito.Mockito.when(loading.getWorld()).thenReturn(world);
+        var loaded = new java.util.concurrent.atomic.AtomicBoolean();
+        org.mockito.Mockito.when(loading.isEntitiesLoaded()).thenAnswer(call -> loaded.get());
+        collisions().nextLoad = java.util.concurrent.CompletableFuture.completedFuture(loading);
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        collisions().nextLoad = java.util.concurrent.CompletableFuture.completedFuture(loading);
+        actions.menus().openCare(owner, second);
+        actions.clickMenu(owner, holder(), PetMenus.careSlot(PetMenus.CALL_SLOT, false), null, false, false, false);
+        assertEquals(Set.of("0,0"), collisions().tickets);
+        var waitingChecks = new AtomicInteger();
+        var releasedEarly = new java.util.concurrent.atomic.AtomicBoolean();
+        org.mockito.Mockito.when(loading.isEntitiesLoaded()).thenAnswer(call -> {
+            if (waitingChecks.incrementAndGet() == 2) releasedEarly.set(collisions().tickets.isEmpty());
+            return true;
+        });
+        server.getScheduler().performTicks(1);
+        assertFalse(releasedEarly.get(), "The first completed call must retain the second call's ticket");
+        assertEquals(2, waitingChecks.get());
+        assertTrue(collisions().tickets.isEmpty());
+    }
+
+    @Test void shutdownReleasesCallTicketsAndIgnoresPendingCallbacks() {
+        var loading = org.mockito.Mockito.mock(Chunk.class);
+        org.mockito.Mockito.when(loading.getWorld()).thenReturn(world);
+        collisions().nextLoad = java.util.concurrent.CompletableFuture.completedFuture(loading);
+        body.teleport(new Location(world, 6, 64, 0));
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertFalse(collisions().tickets.isEmpty());
+        actions.closeCalls();
+        assertTrue(collisions().tickets.isEmpty());
+        server.getScheduler().performTicks(2);
+        assertEquals(6, body.getLocation().getX());
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        assertFalse(bars().contains("comes running"));
+    }
+
+    @Test void chunkFutureCompletingAfterShutdownDoesNotAcquireATicket() {
+        var load = new java.util.concurrent.CompletableFuture<Chunk>();
+        collisions().nextLoad = load;
+        body.teleport(new Location(world, 6, 64, 0));
+        care(PetMenus.careSlot(PetMenus.CALL_SLOT, false));
+        actions.closeCalls();
+        load.complete(world.getChunkAt(0, 0));
+        assertTrue(collisions().tickets.isEmpty());
+        assertEquals(6, body.getLocation().getX());
+        assertFalse(bars().contains("comes running"));
+    }
+
     @Test void aFailedLoadIsLoggedAndAllowsAnotherCall() {
         var load = new java.util.concurrent.CompletableFuture<Chunk>();
         collisions().nextLoad = load;

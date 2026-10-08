@@ -1,6 +1,7 @@
 package net.tfminecraft.companionpets.listen;
 
 import java.util.UUID;
+import net.tfminecraft.companionpets.item.HeldItem;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -105,11 +106,12 @@ public final class PetListener implements Listener {
         // Paper denies block use for air clicks, but explicit item denial still applies.
         if (event.useItemInHand() == Event.Result.DENY) return;
         if (!air && event.useInteractedBlock() == Event.Result.DENY) return;
-        // Every right-click with any item reaches here, so the held item is identified only once.
-        if (actions.useWorldIfHandled(event.getPlayer(), event.getItem(), event.getClickedBlock(), event.getBlockFace(),
-                event.getPlayer().isSneaking(), air)) {
-            event.setCancelled(true);
+        HeldItem held = HeldItem.of(event.getItem());
+        if (!actions.handledWorld(event.getPlayer(), event.getItem(), held, event.getClickedBlock(), event.getBlockFace(), event.getPlayer().isSneaking(), air)) {
+            return;
         }
+        event.setCancelled(true);
+        actions.useWorld(event.getPlayer(), event.getItem(), held, event.getClickedBlock(), event.getBlockFace(), event.getPlayer().isSneaking(), air);
     }
 
     // RPCharacters dispatches this event at MONITOR. Consume private dialogue first.

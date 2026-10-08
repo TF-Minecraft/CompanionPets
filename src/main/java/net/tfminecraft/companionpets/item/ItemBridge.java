@@ -1,29 +1,37 @@
 package net.tfminecraft.companionpets.item;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
 /** Optional integrations loaded from their owning plugins, without bundling their APIs. */
-final class ItemBridge {
+public final class ItemBridge {
     private ItemBridge() { }
+    record Identity(Material material, String mmoType, String mmoId, String itemsAdderId, boolean known) {}
     private static final Set<String> warned = new HashSet<>();
     private static Mmo mmo;
     private static Ia ia;
-    static final long DISPLAY_MILLIS = 30_000L;
-    private record Shown(ItemStack item, Plugin provider, long at) {}
-    private static final java.util.Map<ItemRef, Shown> shown = new java.util.HashMap<>();
+    private static Plugin mmoProvider, iaProvider;
+    private static final Map<ItemRef, Template> templates = new HashMap<>();
+    private static final long RETRY_MILLIS = 30_000;
+    private record Template(ItemStack item, Component displayName, String name, long retryAt) { }
 
     private record Mmo(Method type, Method id, Method getType, Method getItem, Plugin plugin) {}
     private record Ia(Method identify, Method id, Method create, Method stack, Plugin plugin) {}
 
-    static ItemIdentity identity(ItemStack item) {
+    static Identity identity(ItemStack item) {
         String mmoType = null, mmoId = null, iaId = null;
         try {
+            refreshProviders();
             Mmo api = mmo();
             if (api != null) {
                 String value = (String) api.type().invoke(null, item);
@@ -37,14 +45,56 @@ final class ItemBridge {
                 Object custom = iaApi.identify().invoke(null, item);
                 if (custom != null) iaId = (String) iaApi.id().invoke(custom);
             }
-            return new ItemIdentity(item.getType(), mmoType, mmoId, iaId, true);
+            return new Identity(item.getType(), mmoType, mmoId, iaId, true);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
             warn("identify", "Could not identify custom item; refusing to match it", ex);
-            return new ItemIdentity(item.getType(), null, null, null, false);
+            return new Identity(item.getType(), null, null, null, false);
         }
     }
 
     static ItemStack create(ItemRef ref) {
+        ItemStack item = template(ref).item();
+        return item == null ? null : item.clone();
+    }
+
+    static Component displayName(ItemRef ref) { return template(ref).displayName(); }
+    static String name(ItemRef ref) { return template(ref).name(); }
+
+    public static void clearCache() {
+        templates.clear();
+        warned.clear();
+    }
+
+    private static void refreshProviders() {
+        Plugin nextMmo = enabled("MMOItems"), nextIa = enabled("ItemsAdder");
+        if (mmoProvider != nextMmo || iaProvider != nextIa) {
+            templates.clear();
+            mmoProvider = nextMmo;
+            iaProvider = nextIa;
+        }
+    }
+
+    private static Template template(ItemRef ref) {
+        refreshProviders();
+        long now = System.currentTimeMillis();
+        Template cached = templates.get(ref);
+        if (cached != null && (cached.item() != null || now < cached.retryAt())) return cached;
+        ItemStack item = build(ref);
+        String name = ref.id().replace('_', ' ').toLowerCase(Locale.ROOT);
+        Component displayName = Component.text(name);
+        if (item != null) {
+            var meta = item.getItemMeta();
+            if (meta != null && meta.hasDisplayName()) {
+                displayName = meta.displayName();
+                name = PlainTextComponentSerializer.plainText().serialize(displayName);
+            } else displayName = Component.translatable(item.getType().translationKey());
+        }
+        Template template = new Template(item, displayName, name, now + RETRY_MILLIS);
+        templates.put(ref, template);
+        return template;
+    }
+
+    private static ItemStack build(ItemRef ref) {
         if (ref.kind() == ItemRef.Kind.VANILLA) return new ItemStack(ref.material());
         try {
             ItemStack item = null;
@@ -72,27 +122,6 @@ final class ItemBridge {
             warn(ref.key(), "Could not create icon for " + ref.key(), ex);
         }
         return null;
-    }
-
-    /**
-     * Menus refresh their icons twice a second and providers build complete items, so display
-     * copies are reused for a while. A replaced or reloaded provider rebuilds them at once.
-     */
-    static ItemStack display(ItemRef ref) {
-        if (ref.kind() == ItemRef.Kind.VANILLA) return create(ref);
-        long now = System.currentTimeMillis();
-        Plugin provider = enabled(ref.kind() == ItemRef.Kind.MMOITEMS ? "MMOItems" : "ItemsAdder");
-        Shown cached = shown.get(ref);
-        if (cached == null || cached.provider() != provider || now - cached.at() >= DISPLAY_MILLIS) {
-            ItemStack item = create(ref);
-            if (item == null) {
-                shown.remove(ref);
-                return null;
-            }
-            cached = new Shown(item, provider, now);
-            shown.put(ref, cached);
-        }
-        return cached.item().clone();
     }
 
     private static Mmo mmo() throws ReflectiveOperationException {
