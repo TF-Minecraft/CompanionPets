@@ -106,7 +106,7 @@ class PetSpacingTest {
         runtime.entity(other).teleport(at);
         lookups.clear();
         assertFalse(PetSpacing.free(runtime, self, at));
-        assertEquals(Map.of(self.entityId(), 1, other.entityId(), 1), lookups);
+        assertEquals(Map.of(self.entityId(), 1), lookups, "The previously resolved occupant is reused from the body cache");
         runtime.entity(other).teleport(at.clone().add(5, 0, 0));
         assertTrue(PetSpacing.free(runtime, self, at), "A stale nearby record must not block a point the body has vacated");
     }

@@ -117,6 +117,7 @@ public class PetsPlugin extends JavaPlugin {
             for (var pet : runtime.store().all()) {
                 Entity body = runtime.entity(pet);
                 if (body != null) PetFx.stopLooking(body);
+                if (body instanceof org.bukkit.entity.Mob mob) releaseGoals(mob);
             }
         }
         if (visualTicker != null) visualTicker.cancel();
@@ -129,6 +130,7 @@ public class PetsPlugin extends JavaPlugin {
         }
         if (flusher != null) flusher.cancel();
         if (actions != null) {
+            actions.closeCalls();
             for (var pet : store.all()) {
                 Entity body = runtime.entity(pet);
                 if (body != null) runtime.remember(pet, body);
@@ -142,6 +144,18 @@ public class PetsPlugin extends JavaPlugin {
         }
         if (visual != null) visual.close();
         getLogger().info("CompanionPets disabled");
+    }
+
+    /**
+     * Goals reference this plugin's runtime and classes. Loaded bodies outlive a disable, so a
+     * reload would otherwise leave the old goals running beside the new ones.
+     */
+    private void releaseGoals(org.bukkit.entity.Mob body) {
+        String namespace = new NamespacedKey(this, "goal").getNamespace();
+        var goals = Bukkit.getMobGoals();
+        for (var goal : List.copyOf(goals.getAllGoals(body))) {
+            if (goal.getKey().getNamespacedKey().getNamespace().equals(namespace)) goals.removeGoal(body, goal.getKey());
+        }
     }
 
     @Override

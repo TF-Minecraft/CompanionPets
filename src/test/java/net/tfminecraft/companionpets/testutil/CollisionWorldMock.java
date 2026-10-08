@@ -1,5 +1,8 @@
 package net.tfminecraft.companionpets.testutil;
 
+import java.util.concurrent.CompletableFuture;
+import org.bukkit.Chunk;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.util.BoundingBox;
 import org.mockbukkit.mockbukkit.world.WorldMock;
 
@@ -19,4 +22,21 @@ public class CollisionWorldMock extends WorldMock {
                 }
         return false;
     }
+
+    /** Plugin tickets currently held, as "x,z". */
+    public final java.util.Set<String> tickets = new java.util.HashSet<>();
+
+    /** When set, the next background load returns this future, so a test decides when and how it completes. */
+    public CompletableFuture<Chunk> nextLoad;
+
+    /** Like Paper for a chunk already on disk: the load completes on the calling main thread. */
+    @Override public CompletableFuture<Chunk> getChunkAtAsync(int x, int z, boolean gen, boolean urgent) {
+        CompletableFuture<Chunk> pending = nextLoad;
+        nextLoad = null;
+        return pending != null ? pending : CompletableFuture.completedFuture(getChunkAt(x, z));
+    }
+
+    @Override public boolean addPluginChunkTicket(int x, int z, Plugin plugin) { return tickets.add(x + "," + z); }
+
+    @Override public boolean removePluginChunkTicket(int x, int z, Plugin plugin) { return tickets.remove(x + "," + z); }
 }

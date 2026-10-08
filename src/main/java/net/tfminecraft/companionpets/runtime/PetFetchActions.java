@@ -75,12 +75,13 @@ final class PetFetchActions {
         }
         register(job, ball);
         actions.anticipation().ownerThrew(player);
+        double radius = runtime.config().ownerNearRadius();
         for (Pet pet : runtime.store().active()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             Entity body = runtime.entity(pet);
             if (type == null || !accepting.contains(type) || !(body instanceof Mob mob)
                     || !body.getWorld().equals(player.getWorld())
-                    || body.getLocation().distance(player.getLocation()) > runtime.config().ownerNearRadius()
+                    || body.getLocation().distanceSquared(player.getLocation()) > radius * radius
                     || !canChase(pet)) continue;
             FetchJob previous = pet.fetch();
             ItemRef toy = type.toy(held);
@@ -93,6 +94,7 @@ final class PetFetchActions {
             runtime.visual().cancelAction(body);
             job.favorite(pet.id(), favorite);
             pet.fetch(job);
+            job.join(pet.id());
             pet.activity(Activity.PLAYING);
             pet.playUntilMillis(0L);
             navigate(pet, mob);
@@ -330,8 +332,8 @@ final class PetFetchActions {
         if (forward.lengthSquared() < 0.001) forward = new Vector(0, 0, 1);
         forward.normalize();
         int slot = 0;
-        for (Pet other : runtime.store().active())
-            if (other.fetch() == job && !other.id().equals(job.carrierId()) && other.id().compareTo(pet.id()) < 0) slot++;
+        for (Pet other : chasers(job))
+            if (!other.id().equals(job.carrierId()) && other.id().compareTo(pet.id()) < 0) slot++;
         double side = (slot % 2 == 0 ? -1 : 1) * (0.65 + 0.6 * (slot / 4));
         return at.clone().add(forward.clone().multiply(-1.5 - 0.8 * (slot / 2)))
                 .add(new Vector(-forward.getZ(), 0, forward.getX()).multiply(side));
@@ -409,7 +411,12 @@ final class PetFetchActions {
     }
 
     private List<Pet> chasers(FetchJob job) {
-        return runtime.store().active().stream().filter(pet -> pet.fetch() == job).toList();
+        List<Pet> result = new java.util.ArrayList<>();
+        for (UUID id : job.chasers()) {
+            Pet pet = runtime.store().get(id);
+            if (pet != null && !pet.stored() && !pet.dead() && pet.fetch() == job) result.add(pet);
+        }
+        return result;
     }
 
     private void detach(Pet pet) {

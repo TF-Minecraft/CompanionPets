@@ -9,6 +9,7 @@ public final class FetchJob {
     private final UUID id = UUID.randomUUID();
     private final UUID throwerId;
     private final Set<UUID> favorites = new HashSet<>();
+    private final Set<UUID> chasers = new java.util.LinkedHashSet<>();
     private final java.util.Map<UUID, Double> speeds = new java.util.HashMap<>();
     private final java.util.Map<UUID, Stalk> stalks = new java.util.HashMap<>();
     public static final class Stalk {
@@ -41,6 +42,9 @@ public final class FetchJob {
     public UUID id() { return id; }
     public UUID throwerId() { return throwerId; }
     public UUID carrierId() { return carrierId; }
+    /** Pets that joined this race, so participants are found without scanning every pet. */
+    public void join(UUID petId) { chasers.add(petId); }
+    public Set<UUID> chasers() { return java.util.Collections.unmodifiableSet(chasers); }
     public void favorite(UUID petId, boolean favorite) {
         if (favorite) favorites.add(petId); else favorites.remove(petId);
     }

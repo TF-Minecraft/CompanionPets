@@ -633,6 +633,8 @@ class PetInteractionTest {
         assertEquals(PetSpacing.toyFront(runtime, pet, player), navigationTarget, "Route follows the front of the moving owner");
         player.getInventory().setItemInMainHand(new ItemStack(Material.AIR));
         actions.anticipation().advance(pet, now + 2400);
+        assertTrue(actions.anticipation().active(pet), "Hands are rechecked a few times a second, not on every AI tick");
+        actions.anticipation().advance(pet, now + 2550);
         assertFalse(actions.anticipation().active(pet)); assertEquals(Activity.NONE, pet.activity());
         assertSame(goal, org.bukkit.Bukkit.getMobGoals().getGoal(body, key)); assertFalse(goal.shouldActivate());
         assertTrue(body.isValid()); assertEquals(entityId, pet.entityId());

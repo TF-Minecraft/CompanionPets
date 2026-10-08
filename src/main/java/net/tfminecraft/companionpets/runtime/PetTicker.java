@@ -65,6 +65,7 @@ public final class PetTicker implements Runnable {
         runtime.voice().tick(now);
         previousModes.keySet().removeIf(id -> runtime.store().get(id) == null || runtime.entity(runtime.store().get(id)) == null);
         watchTraining(now);
+        runtime.forgetBodies();
     }
 
     private void care(long now, long elapsed) {
@@ -272,7 +273,7 @@ public final class PetTicker implements Runnable {
             boolean held = mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.STAY
                     || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP;
             if (!held && runtime.visual().holdsMovement(mob)) {
-                net.tfminecraft.companionpets.integration.PetMotion.stop(mob);
+                net.tfminecraft.companionpets.integration.PetMotion.settle(mob);
                 continue;
             }
             if (held && mob.isAware()) actions.clearInteractions(pet);

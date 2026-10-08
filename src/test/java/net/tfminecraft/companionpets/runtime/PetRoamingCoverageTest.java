@@ -96,6 +96,8 @@ class PetRoamingCoverageTest {
             @Override public void setRemoveWhenFarAway(boolean remove) { removeWhenFarAway = remove; }
             @Override public boolean getRemoveWhenFarAway() { return removeWhenFarAway; }
             @Override public float getBodyYaw() { return 0; }
+            // Paper invalidates an entity object when its chunk unloads.
+            @Override public boolean isValid() { return super.isValid() && !unloaded.contains(getUniqueId()); }
             @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() {
                 return (com.destroystokyo.paper.entity.Pathfinder) Proxy.newProxyInstance(getClass().getClassLoader(),
                         new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class}, (proxy, method, args) -> switch (method.getName()) {

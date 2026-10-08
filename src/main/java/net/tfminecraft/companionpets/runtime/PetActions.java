@@ -78,6 +78,12 @@ public final class PetActions {
     private final PlayerHints hints;
     private final java.util.Map<UUID, Long> pettedAt = new java.util.HashMap<>();
     private final java.util.Map<UUID, CalmProgress> calming = new java.util.HashMap<>();
+    /** Pets whose chunk is loading for a call; one load per pet, however often the button is pressed. */
+    private final java.util.Set<UUID> calling = new java.util.HashSet<>();
+    private record CallChunk(World world, int x, int z) { }
+    private final java.util.Map<CallChunk, Integer> callChunks = new java.util.HashMap<>();
+    private boolean callsClosed;
+    private static final int CALL_WAIT_TICKS = 40;
 
     public PetActions(PetRuntime runtime) {
         this.runtime = runtime;
@@ -1065,14 +1071,77 @@ public final class PetActions {
     }
 
     private void call(Player player, Pet pet) {
+        if (callsClosed) return;
         World world = Bukkit.getWorld(pet.worldName());
-        if (world != null) {
-            int chunkX = ((int) Math.floor(pet.x())) >> 4;
-            int chunkZ = ((int) Math.floor(pet.z())) >> 4;
-            Chunk chunk = world.getChunkAt(chunkX, chunkZ);
-            chunk.load(true);
-            chunk.getEntities();
+        int chunkX = ((int) Math.floor(pet.x())) >> 4;
+        int chunkZ = ((int) Math.floor(pet.z())) >> 4;
+        if (world == null || world.isChunkLoaded(chunkX, chunkZ) && world.getChunkAt(chunkX, chunkZ).isEntitiesLoaded()) {
+            arrive(player, pet);
+            return;
         }
+        // A pet may wait anywhere. Reading its chunk on the main thread would stall every player,
+        // so it loads in the background and is held until its entities are available.
+        if (!calling.add(pet.id())) {
+            PetFx.bar(player, pet.name() + " is already on the way");
+            return;
+        }
+        PetFx.bar(player, "Calling " + pet.name() + "...");
+        UUID playerId = player.getUniqueId();
+        // Paper completes chunk futures on the main thread. Ungenerated chunks are never created.
+        world.getChunkAtAsync(chunkX, chunkZ, false).thenAccept(chunk -> {
+            if (callsClosed) return;
+            if (chunk == null) {
+                calling.remove(pet.id());
+                answerCall(playerId, pet);
+                return;
+            }
+            // Hold the chunk while its entities load in the background.
+            CallChunk key = new CallChunk(world, chunkX, chunkZ);
+            if (callChunks.merge(key, 1, Integer::sum) == 1)
+                world.addPluginChunkTicket(chunkX, chunkZ, runtime.plugin());
+            awaitCalledBody(playerId, pet, chunk, CALL_WAIT_TICKS);
+        }).exceptionally(failure -> {
+            calling.remove(pet.id());
+            runtime.plugin().getLogger().log(java.util.logging.Level.WARNING, "Could not load the chunk of pet " + pet.id(), failure);
+            return null;
+        });
+    }
+
+    private void awaitCalledBody(UUID playerId, Pet pet, Chunk chunk, int ticksLeft) {
+        if (callsClosed) return;
+        if (!chunk.isEntitiesLoaded() && ticksLeft > 0) {
+            Bukkit.getScheduler().runTaskLater(runtime.plugin(), () -> awaitCalledBody(playerId, pet, chunk, ticksLeft - 1), 1L);
+            return;
+        }
+        calling.remove(pet.id());
+        try {
+            answerCall(playerId, pet);
+        } finally {
+            CallChunk key = new CallChunk(chunk.getWorld(), chunk.getX(), chunk.getZ());
+            int remaining = callChunks.get(key) - 1;
+            if (remaining == 0) {
+                callChunks.remove(key);
+                key.world().removePluginChunkTicket(key.x(), key.z(), runtime.plugin());
+            } else callChunks.put(key, remaining);
+        }
+    }
+
+    /** Release shared call tickets and ignore futures that complete after plugin shutdown. */
+    public void closeCalls() {
+        callsClosed = true;
+        calling.clear();
+        for (CallChunk key : callChunks.keySet())
+            key.world().removePluginChunkTicket(key.x(), key.z(), runtime.plugin());
+        callChunks.clear();
+    }
+
+    private void answerCall(UUID playerId, Pet pet) {
+        Player player = Bukkit.getPlayer(playerId);
+        if (player == null || runtime.store().get(pet.id()) != pet || pet.stored() || !pet.ownerId().equals(playerId)) return;
+        arrive(player, pet);
+    }
+
+    private void arrive(Player player, Pet pet) {
         Entity entity = restoreBody(pet);
         if (entity == null) {
             PetFx.bar(player, pet.name() + " can't be found. Send " + PetTexts.him(pet.sex()) + " to the Pet House to bring "
@@ -1147,6 +1216,8 @@ public final class PetActions {
         if (last != null && now - last < PET_COOLDOWN_MILLIS) {
             return;
         }
+        // Expired cooldowns carry no information, and released or dead pets never return.
+        pettedAt.values().removeIf(at -> now - at >= PET_COOLDOWN_MILLIS);
         pettedAt.put(pet.id(), now);
         pet.need(Need.MOOD, pet.need(Need.MOOD) + gain);
     }

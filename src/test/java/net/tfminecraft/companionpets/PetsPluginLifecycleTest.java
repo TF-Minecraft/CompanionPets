@@ -159,7 +159,7 @@ class PetsPluginLifecycleTest {
         assertTrue(server.getMobGoals().hasGoal(body, goal));
         body.setLocation(new Location(world, 15, 66, -9, 45, 0));
         server.getPluginManager().disablePlugin(plugin);
-        assertFalse(server.getMobGoals().getGoal(body, goal).shouldActivate());
+        assertNull(server.getMobGoals().getGoal(body, goal), "A disabled plugin leaves no goals on loaded bodies");
         assertFalse(Files.exists(file("pets-recovery-required")));
         assertTrue(server.tasks.stream().noneMatch(task -> task.getOwner() == plugin && !task.isCancelled()));
         var reopened = new PetStore(plugin); assertTrue(reopened.load());

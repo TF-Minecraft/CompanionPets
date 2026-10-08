@@ -72,7 +72,7 @@ final class TrainingNavigationGoal implements Goal<Mob> {
     @Override public boolean shouldStayActive() { return shouldActivate(); }
     @Override public void tick() {
         if (!shouldActivate()) return;
-        PetMotion.stop(body);
+        PetMotion.settle(body);
         body.setTarget(null);
         boolean resting = pet.order() == PetOrder.SIT || pet.order() == PetOrder.LAY
                 || System.currentTimeMillis() < pet.forcedSitUntilMillis();
