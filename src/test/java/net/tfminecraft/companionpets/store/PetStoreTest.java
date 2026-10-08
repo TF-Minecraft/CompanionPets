@@ -57,6 +57,53 @@ class PetStoreTest {
         return new PetStore(new File(directory.toFile(), "pets.yml"), logger);
     }
 
+    @Test void capturedSnapshotCanBeWrittenOnAnotherThreadAfterLiveRecordsChange() throws Exception {
+        var store = store(); assertTrue(store.load());
+        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Before", PetSex.FEMALE);
+        var friend = UUID.randomUUID();
+        pet.carers().reinforce(friend, 20, 1000, 0);
+        pet.bindWord("sit", Trick.SIT); pet.progress(Trick.SIT, 40);
+        store.add(pet);
+        var before = store.snapshot();
+        assertNotNull(before);
+        pet.name("After"); pet.carers().clear(); pet.bindWord("sit", Trick.STAY); pet.progress(Trick.SIT, 100);
+        var writer = Executors.newSingleThreadExecutor();
+        try {
+            assertTrue(writer.submit(() -> store.write(before)).get());
+            var restored = store(); assertTrue(restored.load());
+            assertEquals("Before", restored.get(pet.id()).name());
+            assertEquals(20, restored.get(pet.id()).carers().trust(friend));
+            assertEquals(Trick.SIT, restored.get(pet.id()).trickFor("sit"));
+            assertEquals(40, restored.get(pet.id()).progress(Trick.SIT));
+            var after = store.snapshot();
+            assertTrue(writer.submit(() -> store.write(after)).get());
+            assertTrue(restored.load());
+            assertEquals("After", restored.get(pet.id()).name());
+            assertTrue(restored.get(pet.id()).carers().entries().isEmpty());
+            assertEquals(Trick.STAY, restored.get(pet.id()).trickFor("sit"));
+            assertEquals(100, restored.get(pet.id()).progress(Trick.SIT));
+        } finally { writer.shutdown(); }
+    }
+
+    @Test void writeAndForceFinishesPartialUtf8WritesBeforeForcingTheJournal() throws Exception {
+        var channel = mock(java.nio.channels.FileChannel.class);
+        var bytes = new java.io.ByteArrayOutputStream();
+        String entry = UUID.randomUUID() + "\n";
+        when(channel.write(any(java.nio.ByteBuffer.class))).thenAnswer(call -> {
+            var buffer = call.getArgument(0, java.nio.ByteBuffer.class);
+            int count = Math.min(3, buffer.remaining());
+            for (int i = 0; i < count; i++) bytes.write(buffer.get());
+            return count;
+        });
+        doAnswer(call -> {
+            assertEquals(entry, bytes.toString(java.nio.charset.StandardCharsets.UTF_8));
+            return null;
+        }).when(channel).force(true);
+        PetStore.writeAndForce(channel, entry);
+        verify(channel, times(13)).write(any(java.nio.ByteBuffer.class));
+        verify(channel).force(true);
+    }
+
     @Test void iterationSnapshotsStaySafeAcrossAddReplaceRemoveAndReload() {
         var store = store(); assertTrue(store.load());
         var first = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);

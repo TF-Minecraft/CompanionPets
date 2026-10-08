@@ -220,9 +220,9 @@ public final class PetStore {
         return writer;
     }
 
-    private record Snapshot(Map<String, Map<String, Object>> pets, List<Map<String, Object>> kennels) { }
+    record Snapshot(Map<String, Map<String, Object>> pets, List<Map<String, Object>> kennels) { }
 
-    private Snapshot snapshot() {
+    Snapshot snapshot() {
         if (!loaded || !deletionLogHealthy) {
             return null;
         }
@@ -313,7 +313,7 @@ public final class PetStore {
         row.put(key, value);
     }
 
-    private boolean write(Snapshot snapshot) {
+    boolean write(Snapshot snapshot) {
         YamlConfiguration yaml = new YamlConfiguration();
         yaml.set("version", 1);
         snapshot.pets().forEach((id, row) -> yaml.createSection("pets." + id, row));
@@ -379,7 +379,7 @@ public final class PetStore {
         return true;
     }
 
-    private static void writeAndForce(FileChannel channel, String value) throws IOException {
+    static void writeAndForce(FileChannel channel, String value) throws IOException {
         ByteBuffer bytes = StandardCharsets.UTF_8.encode(value);
         while (bytes.hasRemaining()) channel.write(bytes);
         channel.force(true);
