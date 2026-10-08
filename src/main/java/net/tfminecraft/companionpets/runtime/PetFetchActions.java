@@ -23,6 +23,7 @@ import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.item.HandItems;
 import net.tfminecraft.companionpets.item.ItemRef;
+import net.tfminecraft.companionpets.item.HeldItem;
 import net.tfminecraft.companionpets.item.ToyItems;
 import net.tfminecraft.companionpets.pet.Activity;
 import net.tfminecraft.companionpets.pet.Illness;
@@ -47,7 +48,8 @@ final class PetFetchActions {
         this.actions = actions;
     }
 
-    void throwToy(Player player, ItemStack hand) {
+    void throwToy(Player player, ItemStack hand, HeldItem held) {
+        var accepting = runtime.config().toyTypes(held);
         ItemStack thrown = hand.clone();
         thrown.setAmount(1);
         FetchJob job = new FetchJob(ToyItems.encode(thrown), player.getUniqueId());
@@ -76,12 +78,12 @@ final class PetFetchActions {
         for (Pet pet : runtime.store().active()) {
             PetTypeDef type = runtime.config().type(pet.typeId());
             Entity body = runtime.entity(pet);
-            if (type == null || !type.acceptsToy(thrown) || !(body instanceof Mob mob)
+            if (type == null || !accepting.contains(type) || !(body instanceof Mob mob)
                     || !body.getWorld().equals(player.getWorld())
                     || body.getLocation().distance(player.getLocation()) > runtime.config().ownerNearRadius()
                     || !canChase(pet)) continue;
             FetchJob previous = pet.fetch();
-            ItemRef toy = type.toy(thrown);
+            ItemRef toy = type.toy(held);
             boolean favorite = toy != null && toy.key().equals(pet.favoriteToy());
             double switchChance = favorite ? 0.65 : previous != null && previous.favorite(pet.id()) ? 0.1 : 0.35;
             if (previous != null && (pet.id().equals(previous.carrierId()) || runtime.random().nextDouble() >= switchChance)) continue;

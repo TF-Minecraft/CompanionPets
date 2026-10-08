@@ -64,6 +64,28 @@ class ItemRefTest {
             assertThrows(IllegalArgumentException.class, () -> ItemRef.parse(value), value);
         }
     }
+
+    @Test void heldItemsRejectEmptyStacksAndScopesRestoreThePreviousInteraction() {
+        var stack = new org.bukkit.inventory.ItemStack(Material.STICK);
+        var held = HeldItem.of(stack);
+        assertEquals(java.util.List.of(ItemRef.parse("STICK")), held.keys());
+        try (var outer = held.scope()) {
+            assertSame(outer, HeldItem.of(stack));
+            try (var inner = HeldItem.of(new org.bukkit.inventory.ItemStack(Material.BONE)).scope()) {
+                assertSame(outer, HeldItem.of(stack));
+                assertTrue(inner.matches(ItemRef.parse("BONE")));
+            }
+            assertSame(outer, HeldItem.of(stack));
+        }
+        assertNotSame(held, HeldItem.of(stack));
+        stack.setAmount(0);
+        assertTrue(held.matches(ItemRef.parse("STICK")), "Consumed items retain their interaction's identity");
+        assertTrue(HeldItem.of(stack).empty());
+        assertFalse(HeldItem.of(stack).matches(ItemRef.parse("STICK")));
+        assertTrue(HeldItem.of(null).keys().isEmpty());
+        assertNull(HeldItem.of(null).model());
+        assertFalse(HeldItem.of(new org.bukkit.inventory.ItemStack(Material.AIR)).matches(ItemRef.parse("STICK")));
+    }
     @Test void providerTokensRoundTripAndRejectMalformedNamespaceSeparators() {
         assertEquals("STICK",ItemRef.parse("minecraft:stick").configToken());
         var item = ItemRef.parse("mi:food:pet_treat");

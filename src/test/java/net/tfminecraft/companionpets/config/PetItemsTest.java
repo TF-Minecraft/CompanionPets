@@ -110,4 +110,13 @@ class PetItemsTest {
         assertEquals(List.of(ItemRef.parse("COD")), items.treats());
         assertTrue(items.isTreat(new ItemStack(Material.COD)));
     }
+
+    @Test void oneHeldItemCanBeReusedAcrossAllListsAndTreatFoodFallback() throws Exception {
+        var items = global();
+        var cod = net.tfminecraft.companionpets.item.HeldItem.of(new ItemStack(Material.COD));
+        assertTrue(items.isTreat(cod));
+        assertEquals(30.0, items.foodGain(cod));
+        assertFalse(items.isBrush(cod)); assertFalse(items.isMedicine(cod)); assertNull(items.toy(cod));
+        assertEquals(ItemRef.parse("STICK"), items.toy(net.tfminecraft.companionpets.item.HeldItem.of(new ItemStack(Material.STICK))));
+    }
 }

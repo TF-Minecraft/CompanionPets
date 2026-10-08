@@ -5,7 +5,6 @@ import java.util.Map;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 /** A configured identity, independent of an item's underlying material or model. */
 public record ItemRef(Kind kind, String id, String type) {
@@ -87,8 +86,7 @@ public record ItemRef(Kind kind, String id, String type) {
     }
 
     public boolean matches(ItemStack item) {
-        return item != null && !item.getType().isAir() && item.getAmount() > 0
-                && matches(ItemBridge.identity(item));
+        return HeldItem.of(item).matches(this);
     }
 
     boolean matches(ItemBridge.Identity item) {
@@ -108,16 +106,10 @@ public record ItemRef(Kind kind, String id, String type) {
     public ItemStack create() { return ItemBridge.create(this); }
 
     public Component displayName() {
-        ItemStack item = ItemBridge.create(this);
-        if (item == null) return Component.text(id.replace('_', ' ').toLowerCase(Locale.ROOT));
-        var meta = item.getItemMeta();
-        return meta != null && meta.hasDisplayName() ? meta.displayName() : Component.translatable(item.getType().translationKey());
+        return ItemBridge.displayName(this);
     }
 
     public String name() {
-        ItemStack item = ItemBridge.create(this);
-        if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName())
-            return PlainTextComponentSerializer.plainText().serialize(item.getItemMeta().displayName());
-        return id.replace('_', ' ').toLowerCase(Locale.ROOT);
+        return ItemBridge.name(this);
     }
 }
