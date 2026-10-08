@@ -64,7 +64,7 @@ class PetTickerCoverageTest {
     private final List<Sound> sounds = new ArrayList<>();
     private final List<Location> navigation = new ArrayList<>();
     private int stops, spawns, removals, lastChunkX, lastChunkZ, velocityUpdates;
-    private boolean chunksLoaded = true, entitiesLoaded = true, modeled, heldMovement, swimming;
+    private boolean chunksLoaded = true, entitiesLoaded = true, safeFloor = true, modeled, heldMovement, swimming;
     private long now;
 
     @BeforeEach void setup() throws Exception {
@@ -88,7 +88,7 @@ class PetTickerCoverageTest {
                 return type.cast(wolf(at));
             }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
-                return new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
+                return new BlockMock(safeFloor && y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
                     @Override public boolean isPassable() { return !getType().isSolid(); }
                 };
             }
@@ -298,7 +298,7 @@ class PetTickerCoverageTest {
         assertEquals(1, spawns, "A restored body is reused rather than duplicated");
     }
 
-    @Test void failedSpawnRetriesAfterAnotherGracePeriodAndNeverDecaysAMissingPet() throws Exception {
+    @Test void failedSpawnRetriesWithBackoffAndNeverDecaysAMissingPet() throws Exception {
         body.remove();
         // An enabled provider with an unavailable API is a supported reflective integration failure.
         MockBukkit.createMockPlugin("MythicMobs");
@@ -320,9 +320,48 @@ class PetTickerCoverageTest {
         assertEquals(1, failedAttempts.get());
         configure("pets.wolf.mythic-mob", null);
         care(now + 10_000, 1);
+        assertNull(runtime.entity(pet));
+        care(now + 15_000, 1);
         assertNotNull(runtime.entity(pet));
         assertEquals(1, spawns);
         assertFalse(pet.dead());
+    }
+
+    @Test void unsafePlacementBacksOffToFiveMinutesWarnsOnceAndResetsAfterRecovery() throws Exception {
+        body.remove();
+        safeFloor = false;
+        var warnings = new ArrayList<String>();
+        runtime.plugin().getLogger().addHandler(new java.util.logging.Handler() {
+            @Override public void publish(java.util.logging.LogRecord record) {
+                if (record.getMessage().startsWith("Could not restore body for pet ")) warnings.add(record.getMessage());
+            }
+            @Override public void flush() { }
+            @Override public void close() { }
+        });
+        care(now, 1);
+        long at = now;
+        long[] delays = {5000, 10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000};
+        for (int attempt = 0; attempt < delays.length; attempt++) {
+            at += delays[attempt];
+            care(at - 1, 60_000);
+            assertEquals(attempt, spawns);
+            care(at, 60_000);
+            assertEquals(attempt + 1, spawns);
+            assertEquals(spawns, removals);
+            assertNull(runtime.entity(pet));
+            assertEquals(80, pet.need(Need.HUNGER));
+        }
+        assertEquals(1, warnings.size());
+        assertTrue(warnings.getFirst().contains(pet.id().toString()));
+        safeFloor = true;
+        care(at + 300_000, 1);
+        assertNotNull(runtime.entity(pet));
+        runtime.entity(pet).remove();
+        care(at + 300_001, 1);
+        care(at + 305_001, 1);
+        assertNotNull(runtime.entity(pet));
+        assertEquals(delays.length + 2, spawns);
+        assertEquals(1, warnings.size());
     }
 
     @Test void unloadingEntitiesResetsTheMissingBodyGraceInsteadOfSpawningOnTheFirstReloadedTick() throws Exception {

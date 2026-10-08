@@ -37,9 +37,11 @@ import net.tfminecraft.companionpets.text.PetTexts;
 
 public final class PetTicker implements Runnable {
     private static final long MISSING_BODY_GRACE_MILLIS = 5_000L;
+    private static final long MAX_BODY_RETRY_MILLIS = 300_000L;
     private final PetRuntime runtime;
     private final PetActions actions;
     private final Map<UUID, Long> missingBodySince = new HashMap<>();
+    private final Map<UUID, Long> missingBodyDelay = new HashMap<>();
     private long lastCareAt;
     private final Map<UUID, Locomotion.Mode> previousModes = new HashMap<>();
 
@@ -71,7 +73,7 @@ public final class PetTicker implements Runnable {
     private void care(long now, long elapsed) {
         for (Pet pet : runtime.store().all()) {
             if (pet.dead() || runtime.config().type(pet.typeId()) == null) {
-                missingBodySince.remove(pet.id());
+                forgetMissingBody(pet.id());
                 continue;
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
@@ -79,23 +81,29 @@ public final class PetTicker implements Runnable {
             // Pet House pets with frozen care (owner offline, or no decay while stored) have nothing to update.
             if (pet.stored() && PresenceRules.resolve(true, online, 0, 0,
                     runtime.config().care().decayWhileStored()) == Presence.FROZEN) {
-                missingBodySince.remove(pet.id());
+                forgetMissingBody(pet.id());
                 continue;
             }
             Entity body = runtime.entity(pet);
             if (body != null && !runtime.bodies().compatible(body, runtime.config().type(pet.typeId()))) continue;
             if (!pet.stored() && body == null && bodyChunkEntitiesLoaded(pet)) {
                 long firstMissing = missingBodySince.computeIfAbsent(pet.id(), id -> now);
-                if (now - firstMissing >= MISSING_BODY_GRACE_MILLIS) {
+                long delay = missingBodyDelay.getOrDefault(pet.id(), MISSING_BODY_GRACE_MILLIS);
+                if (now - firstMissing >= delay) {
                     body = actions.restoreBody(pet);
                     if (body != null) {
-                        missingBodySince.remove(pet.id());
+                        forgetMissingBody(pet.id());
                     } else {
+                        if (!missingBodyDelay.containsKey(pet.id()))
+                            runtime.plugin().getLogger().warning("Could not restore body for pet " + pet.id()
+                                    + " (" + pet.name() + "); retrying with increasing delays");
+                        missingBodyDelay.put(pet.id(), Math.min(MAX_BODY_RETRY_MILLIS, delay * 2));
                         missingBodySince.put(pet.id(), now);
                     }
                 }
             } else {
                 missingBodySince.remove(pet.id());
+                if (pet.stored() || body != null) missingBodyDelay.remove(pet.id());
             }
             // An unloaded or missing body is not evidence of death. Keep its record
             // and freeze care until the saved chunk and body are available again.
@@ -210,7 +218,10 @@ public final class PetTicker implements Runnable {
             }
         }
         missingBodySince.keySet().removeIf(id -> runtime.store().get(id) == null);
+        missingBodyDelay.keySet().removeIf(id -> runtime.store().get(id) == null);
     }
+
+    private void forgetMissingBody(UUID id) { missingBodySince.remove(id); missingBodyDelay.remove(id); }
 
     private static boolean bodyChunkEntitiesLoaded(Pet pet) {
         World world = Bukkit.getWorld(pet.worldName());
