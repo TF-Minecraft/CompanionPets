@@ -280,7 +280,6 @@ public final class PetTicker implements Runnable {
                 net.tfminecraft.companionpets.integration.PetMotion.settle(mob);
                 continue;
             }
-            if (held && mob.isAware()) actions.clearInteractions(pet);
             if (held) {
                 actions.roaming().cancel(pet);
                 // Staying, sitting, lying and sleeping keep native AI awake, so the head looks around natively.

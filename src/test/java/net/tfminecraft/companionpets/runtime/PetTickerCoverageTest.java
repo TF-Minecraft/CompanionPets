@@ -1,6 +1,7 @@
 package net.tfminecraft.companionpets.runtime;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
@@ -26,6 +27,9 @@ import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
 import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import net.tfminecraft.companionpets.visual.PetVisual;
+import net.tfminecraft.companionpets.visual.AnimationController;
+import net.tfminecraft.companionpets.visual.AnimationPlayer;
+import net.tfminecraft.companionpets.config.PetAppearance;
 import org.bukkit.*;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.*;
@@ -54,6 +58,8 @@ class PetTickerCoverageTest {
     private PetActions actions;
     private PetTicker ticker;
     private YamlConfiguration yaml;
+    private AnimationController controller;
+    private AnimationPlayer animations;
     private final List<Emission> particles = new ArrayList<>();
     private final List<Sound> sounds = new ArrayList<>();
     private final List<Location> navigation = new ArrayList<>();
@@ -113,8 +119,17 @@ class PetTickerCoverageTest {
                 pets:
                   wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, default-tricks: []}
                 """);
+        animations = mock(AnimationPlayer.class);
+        when(animations.play(any(), anyBoolean())).thenReturn(true);
+        when(animations.playing(anyString())).thenReturn(true);
+        when(animations.length(anyString())).thenReturn(5.0);
+        controller = new AnimationController(animations, java.util.Map.of(), () -> now);
         var visual = new PetVisual() {
             @Override public void apply(Entity entity, PetTypeDef type) { }
+            @Override public void cancelAction(Entity entity) { controller.cancelAction(); }
+            @Override public boolean playClip(Entity entity, PetTypeDef type, String clip, double duration) {
+                return controller.playCustom(new PetAppearance.Clip(clip, 1, .15), duration);
+            }
             @Override public boolean attached(Entity entity) { return modeled; }
             @Override public boolean holdsMovement(Entity entity) { return heldMovement; }
             @Override public void removeBody(Entity entity) { removals++; PetVisual.super.removeBody(entity); }
@@ -218,6 +233,21 @@ class PetTickerCoverageTest {
         assertTrue(loaded.load());
         assertEquals(hunger, loaded.get(pet.id()).need(Need.HUNGER), .00001);
         loaded.close();
+    }
+
+    @Test void sittingPetKeepsItsCustomTrickAcrossRepeatedTickerPasses() throws Exception {
+        pet.order(PetOrder.SIT);
+        move(now);
+        assertTrue(runtime.visual().playClip(body, runtime.config().type(pet.typeId()), "wave", 5));
+        for (int pass = 0; pass < 6; pass++) {
+            now += 500;
+            move(now);
+            assertTrue(controller.holdsMovement());
+        }
+        verify(animations, never()).stop("wave");
+        actions.clearInteractions(pet);
+        assertFalse(controller.holdsMovement());
+        verify(animations).stop("wave");
     }
 
     @Test void missingBodyFreezesCareUntilLoadedEntitiesAndTheFullGracePeriod() throws Exception {
