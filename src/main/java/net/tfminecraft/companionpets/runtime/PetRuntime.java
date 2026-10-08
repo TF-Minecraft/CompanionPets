@@ -32,6 +32,7 @@ public final class PetRuntime {
     private final Random random = new Random();
     private final PetVoice voice = new PetVoice(this);
     private final java.util.Map<String, net.tfminecraft.companionpets.visual.PetCapabilities> capabilities = new java.util.HashMap<>();
+    private final java.util.Map<String, Long> capabilityRetryAt = new java.util.HashMap<>();
     private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
     private final java.util.Map<UUID, Location> lastGround = new java.util.HashMap<>();
     private final java.util.Map<org.bukkit.entity.Mob, WaterNavigationGoal> waterGoals = new java.util.HashMap<>();
@@ -70,6 +71,7 @@ public final class PetRuntime {
         this.config = java.util.Objects.requireNonNull(config);
         voice.clear();
         capabilities.clear();
+        capabilityRetryAt.clear();
         for (Pet pet : store.all()) {
             Entity entity = entity(pet);
             var type = config.type(pet.typeId());
@@ -148,10 +150,12 @@ public final class PetRuntime {
 
     public net.tfminecraft.companionpets.visual.PetCapabilities capabilities(net.tfminecraft.companionpets.config.PetTypeDef type) {
         var cached = capabilities.get(type.id());
-        if (cached != null) return cached;
+        if (cached != null && System.currentTimeMillis() < capabilityRetryAt.getOrDefault(type.id(), Long.MAX_VALUE)) return cached;
         var result = net.tfminecraft.companionpets.visual.PetCapabilities.inspect(type, visual);
-        // ModelEngine registers blueprints asynchronously; retry unavailable models on the next query.
-        if (!type.appearance().modeled() || result.modelAvailable()) capabilities.put(type.id(), result);
+        // ModelEngine registers blueprints asynchronously; retry unavailable models after five seconds.
+        capabilities.put(type.id(), result);
+        if (type.appearance().modeled() && !result.modelAvailable()) capabilityRetryAt.put(type.id(), System.currentTimeMillis() + 5_000L);
+        else capabilityRetryAt.remove(type.id());
         return result;
     }
 
