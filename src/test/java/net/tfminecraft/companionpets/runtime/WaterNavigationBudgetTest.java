@@ -242,6 +242,41 @@ class WaterNavigationBudgetTest {
         assertFalse(body.isSitting());
     }
 
+    @Test void comeInWaterRestoresTheLayOrderButSwimsToLandBeforeLyingDown() throws Exception {
+        swimming = false;
+        runtime.rememberGround(pet, body);
+        Location ground = runtime.lastGround(pet);
+        swimming = true; nativeRoute = true;
+        body.teleport(body.getLocation().add(1.5, 0, 0));
+        owner.teleport(new Location(world, 9.5, 64, 2.5));
+        pet.order(PetOrder.FOLLOW);
+        actions.roaming().come(pet, owner, NOW, PetOrder.LAY);
+        goal.tick(NOW);
+        assertEquals(owner.getLocation(), routedTo);
+        body.teleport(owner.getLocation().add(-1.5, 0, 0));
+        int reads = blockReads;
+        goal.tick(NOW + 500);
+        assertEquals(Activity.NONE, pet.activity());
+        assertEquals(PetOrder.LAY, pet.order());
+        assertFalse(body.isSitting(), "The restored pose must wait until the pet leaves the water");
+        assertEquals(ground, routedTo);
+        assertTrue(blockReads - reads < 20, "Reaching the player switches straight to the remembered bank");
+        assertTrue(body.getVelocity().getX() < 0);
+        assertTrue(body.getVelocity().getY() > 0);
+        assertTrue(goal.shouldStayActive());
+        body.teleport(ground); swimming = false;
+        assertFalse(goal.shouldStayActive());
+        goal.stop();
+        var ticker = new PetTicker(runtime, actions);
+        var move = PetTicker.class.getDeclaredMethod("move", long.class);
+        move.setAccessible(true);
+        for (Need need : Need.values()) pet.need(need, 80);
+        pet.bond(40); runtime.random().setSeed(0);
+        move.invoke(ticker, NOW + 1_000);
+        assertEquals(PetOrder.LAY, pet.order());
+        assertTrue(body.isSitting(), "The wolf can finally apply its lying posture on dry ground");
+    }
+
     @Test void preferredRouteIsReusedUntilTheOwnerMovesTwoBlocksAndSurvivesStop() {
         pet.order(PetOrder.FOLLOW); nativeRoute = true;
         goal.tick(NOW);
