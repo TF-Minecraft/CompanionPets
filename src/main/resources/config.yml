@@ -1,180 +1,305 @@
-care:
-  hunger-minutes-to-critical: 30  # Minutes for full hunger to reach the critical threshold.
-  mood-minutes-to-critical: 30    # Minutes for full mood to reach critical without play.
-  energy-minutes-to-critical: 40  # Minutes for full energy to reach critical while walking.
-  dirty-every-minutes: 20
-  dirty-loss: 30
-  minutes-until-unwell: 3
-  minutes-until-sick: 3
-  decay-while-stored: false
-  death-on-neglect: false
-  play-seconds: 6
-  play-mood-gain: 22
-  play-energy-cost: 3
-  favorite-mood-multiplier: 1.5
-  favorite-food-mood: 8           # Mood points gained when a hungry pet eats an accepted treat.
-  sleep-minutes-to-full: 8
-  sleeping-hunger-multiplier: 0.5 # Hunger decay while sleeping relative to normal (0.5 = half).
-  health-loss-per-minute: 12      # Health points lost per minute with critical physical needs and illness.
-  health-regen-per-minute: 20     # Health points recovered per minute when physical needs allow recovery.
-  medicine-health-bump: 20
-  bond-gain-per-minute: 0.4
-  bond-loss-per-minute: 0.8
-  wake-mood-penalty: 8
-  critical-sound-seconds: 8
-  overfeed-mood-penalty: 12
-  overfeed-health-penalty: 8
-  struck-mood-penalty: 6
-  rest-again-seconds: 45
+# CompanionPets: hatch, care for, train and play with persistent companion pets.
+# Start with pets/species, custom-tricks and items; then tune care/training/play.
+# presence/orders/roaming/moments/social control daily behavior; limits set quotas.
+# Item IDs: STICK (vanilla), mmoitems:TYPE:ID, itemsadder:namespace:id.
+# Inheritance: global settings -> species.<id> -> pets.<id>; omitted options inherit.
+# Nested maps merge deeply; simple values and lists replace inherited values.
+# Exceptions and optional settings are explained below; all examples stay commented.
 
-play:
-  fetch-speed-multiplier: 1.2     # Fetch pace relative to normal movement (1.2 = 20% faster).
-  toy-attention-seconds: 20       # Seconds before a held toy becomes boring without renewed play/movement.
-  favorite-toy-attention-seconds: 35
-  throw-speed-low: 0.6
-  throw-speed-high: 1.1
+# Pet types: each ID needs a body (directly or from its species) and a unique egg.
+# entity is the navigating body: only WOLF or CAT; a model supplies the visible animal.
+# Thus a fox can use a WOLF body, a fox model and a fox voice independently.
+pets:
+  wolf:
+    species: dog                # Inherit the built-in WOLF species and its overrides.
+    egg: WOLF_SPAWN_EGG          # Hatching item; defaults to EGG if omitted.
+  cat:
+    species: cat                # Inherit the built-in CAT species and its overrides.
+    egg: CAT_SPAWN_EGG           # Egg ID plus vanilla custom model data must be unique.
 
-training:
-  default-tricks: [follow]
-  attempts-before-bored: 6
-  reward-gain: 20
-  fail-gain: 2
-  reward-window-seconds: 3
-  sometimes-at: 40
-  learned-at: 80
-  session-distance: 8
-  attempt-energy-cost: 8
-  attempt-hunger-cost: 5
-  attempt-mood-cost: 4
-  treat-hunger-gain: 3
-  rest-seconds: 90
+  # Minimal pet example: uncomment this block inside pets to add a modeled rabbit.
+  # rabbit:
+  #   species: dog              # Supplies the WOLF body; does not restrict the model.
+  #   model: rabbit             # Shortcut for appearance.type: modelengine + appearance.model.
+  #   egg: RABBIT_SPAWN_EGG      # Any supported item ID can be an egg.
 
+  # Complete pet example: also enable the wave definition under custom-tricks below.
+  # behavior defaults to the body: dog = exuberant jumps, tail wagging and mischief.
+  # cat = restrained, chatty greetings and stalking toys; basic = neutral hops/sounds.
+  # fox:
+  #   species: dog              # Inherits global defaults and species.dog settings.
+  #   entity: WOLF              # Only WOLF or CAT, even for a visible fox.
+  #   mythic-mob: ""            # Optional MythicMobs mob ID; nonempty requires MythicMobs.
+  #   egg: EGG                  # Vanilla, MMOItems or ItemsAdder selector.
+  #   egg-custom-model-data: 12002 # Nonnegative integer; only valid for vanilla eggs.
+  #   sex: choose               # random assigns sex at hatching; choose asks the owner.
+  #   native-combat: false      # true allows native targeting/combat; default false suppresses it.
+  #   behavior: cat             # Character independent of body, model and voice.
+  #   items:                    # Present categories replace inherited lists, never append.
+  #     foods: [{item: COOKED_CHICKEN, hunger: 35}] # Hunger points restored per food.
+  #     treats: [SALMON]        # Training rewards; hungry pets can also eat them.
+  #     medicines: [HONEY_BOTTLE] # Accepted medicine items.
+  #     brushes: [BRUSH]        # Accepted grooming items.
+  #     toys: [STICK]           # Accepted play/fetch items; [] disables this category.
+  #   tricks: {add: [wave], remove: [jump]} # Modify inherited tricks; a list replaces them.
+  #   default-tricks: [follow]   # Learned at hatching; list only, also added to allowed tricks.
+  #   appearance:               # Use instead of model for scale or clip mappings.
+  #     type: modelengine       # vanilla uses the body; modelengine needs ModelEngine and a model ID.
+  #     model: fox              # ModelEngine blueprint ID, not an entity type.
+  #     scale: 1.0              # Positive size multiplier; default 1.
+  #     animations:             # Slots default to the same-named clip, speed 1 and blend 0.15 s.
+  #       idle: idle            # Map a slot to a clip name in the model.
+  #       lie: lay              # Default lie also tries lay, then sleep, if lie is absent.
+  #       paw: {name: wave, speed: 1.2, blend: 0.15} # Positive speed multiplier; nonnegative blend seconds.
+  #       belly_up: ""          # Empty text disables this slot.
+  #   voice: fox                # Shortcut for sounds.preset; advanced sounds entries override it.
+  #   sounds:                   # Without voice/sounds: native body sounds; explicit settings use plugin cues.
+  #     preset: fox             # wolf/cat/parrot/fox/frog, any vanilla entity ID, or none; voice: false mutes all.
+  #     pitch: 1.2              # General multiplier (0.1-2); higher sounds younger; final pitch clamps to 0.1-2.
+  #     ambient-interval-seconds: 25 # Idle interval with +/-20% variation; 0 disables scheduled ambience.
+  #     ambient: ENTITY_FOX_AMBIENT # Idle ambience and critical-need expressions.
+  #     happy: ENTITY_FOX_AMBIENT # Lively reaction to petting.
+  #     happy-quiet: ENTITY_FOX_SNIFF # Quiet petting/resting or response to a name call.
+  #     sad: ENTITY_FOX_SNIFF    # Low needs, illness, overfeeding, distant owner or asking for affection.
+  #     hurt: ENTITY_FOX_HURT    # Body takes damage.
+  #     death: ENTITY_FOX_DEATH  # Pet dies from neglect.
+  #     greeting: [ENTITY_FOX_AMBIENT, ENTITY_FOX_SNIFF] # Owner returns or a familiar carer is recognized.
+  #     toy: {sounds: ENTITY_FOX_AMBIENT, volume: 0.4, pitch: 1.1, min-interval-seconds: 3} # Anticipation of a held toy.
+  #     social: ENTITY_FOX_SNIFF # Friendly reactions during pet encounters.
+  #     protest: ENTITY_FOX_AGGRO # Territorial encounters or spontaneous protest at nearby creatures.
+  #     eat: false              # Eating food or a training reward; false silences this event.
+  # Sound events accept a name, random-choice list, or {sounds, volume, pitch, min-interval-seconds}.
+  # Names can be vanilla enums (ENTITY_FOX_SNIFF) or resource-pack keys (companions:fox.wave).
+  # Event volume: 0-4; event pitch: 0.1-2; min-interval-seconds limits repeats of that event.
+
+# Shared species overrides: dog (WOLF) and cat (CAT) are built in.
+# Defining species.dog merges into the built-in dog; it does not replace it.
+# Species accept the same pet options; items replace only the specified category.
+# Global items and training.default-tricks are inherited; other game settings stay global.
+species: {}
+  # Species example: remove {} above and uncomment this indented block.
+  # dog:
+  #   items: {treats: [COOKED_BEEF]} # Replaces global treats for dogs unless a pet overrides them.
+  #   tricks: {add: [paw], remove: [speak]} # Only tricks support add/remove, never item lists.
+  #   default-tricks: [follow, sit] # Replaces training.default-tricks; pet overrides take precedence.
+  #   voice: wolf               # Use voice: none or voice: false for no voice.
+  # Built-in tricks allowed by default: follow, come, sit, stay, lay, paw, speak, jump.
+  # A tricks list replaces the allowed set; add/remove edits it, with removal winning.
+  # default-tricks is always a list; entries are added to allowed tricks even if removed there.
+
+  # Animation slots: idle, walk, run, crouch, jump, fall, swim, sit, lie, sleep, fly, hover,
+  # attack, hurt, death, head_tilt, spawn, eat, speak, shake, paw, spin, pet, lie_back, belly_up, get_up.
+
+# Custom tricks: define an ID, then allow it via tricks: {add: [ID]} on a species/pet.
+# Alternatively add it to default-tricks (global/species/pet) to allow it and start learned.
+# IDs must not match built-in/reserved tricks; use letters first, then letters/digits/_/-.
 custom-tricks: {}
+  # Custom trick example: remove {} above and uncomment this indented block.
+  # wave:
+  #   display-name: Wave        # Player-facing name; defaults to the ID.
+  #   animation: wave           # ModelEngine clip; needs this or nonempty fallback-text.
+  #   fallback-text: "{pet} waves to {owner}" # Hologram when the animation is unavailable.
+  #   duration: 2               # Seconds, greater than 0 and at most 60; default 2.
+  #   sound:                    # Per-trick cue: voice event name/list/map format, or false.
+  #     sounds: ENTITY_FOX_SNIFF # Vanilla name or resource-pack key; lists pick randomly.
+  #     volume: 0.8             # Volume 0-4; default 0.8.
+  #     pitch: 1.1              # Pitch 0.1-2; default 1, independent of the pet's voice pitch.
+  #   at: [0, 1]                # Sound times after starting in seconds (0-60); scalar valid too, default 0.
 
-limits:
-  max-stored: 20
-  max-out: 4
+# Global items: STICK, mmoitems:TYPE:ID or itemsadder:namespace:id.
+# foods/treats/medicines/brushes/toys also go under species.<id>.items or pets.<id>.items.
+# Local lists replace that category; omitted categories inherit, and [] disables one.
+# kennel, kennel-block and kennel-furniture are global only.
+items:
+  kennel: BARREL                # Item used to place a Pet House.
+  kennel-block: BARREL          # Vanilla block placed for the Pet House; must be a non-air block.
+  # kennel-furniture: itemsadder:companions:pet_house # Optional ItemsAdder furniture; kennel must use the identical ID.
+  treats: [mmoitems:PETS:FISH_SNACK, mmoitems:PETS:BISCUIT_TREAT] # Training rewards; also food when hungry.
+  foods:                        # Each entry restores hunger points using its hunger value.
+    - {item: mmoitems:PETS:MEAT_TREAT, hunger: 35}
+    - {item: mmoitems:PETS:FISH_TREAT, hunger: 35}
+  medicines: [mmoitems:PETS:PET_MEDICINE] # Treat sick/weakened pets and restore health.
+  brushes: [mmoitems:PETS:PET_BRUSH] # Restore cleanliness to full without consuming the brush.
+  toys: [STICK, mmoitems:PETS:PET_BALL, mmoitems:PETS:PET_CHEW_BONE, mmoitems:PETS:PET_TUG_ROPE, mmoitems:PETS:PET_MOUSE_PLUSH, mmoitems:PETS:PET_TEDDY_PLUSH] # Accepted toys for play/fetch.
 
+# Care: needs and bond use 0-100 points; higher means healthier/happier/more attached.
+# Critical needs are below 25; timed need changes use presence.away-rate when away.
+# Care settings are global; species/pets override their interaction item lists only.
+care:
+  hunger-minutes-to-critical: 30 # Minutes for full hunger to reach critical; 0 stops this decay.
+  mood-minutes-to-critical: 30   # Minutes for full mood to reach critical without play; 0 stops this decay.
+  energy-minutes-to-critical: 40 # Minutes for full energy to reach critical walking; idle decay is slower.
+  dirty-every-minutes: 20        # Minutes between cleanliness losses; 0 disables timed dirt.
+  dirty-loss: 30                # Cleanliness points lost each dirty-every-minutes interval.
+  minutes-until-unwell: 3       # Minutes with critical needs before becoming unwell; 0 disables onset.
+  minutes-until-sick: 3         # Additional minutes with critical needs after the unwell threshold before sickness.
+  decay-while-stored: false     # true advances care in the Pet House while the owner is online.
+  death-on-neglect: false       # true kills at zero health from illness; false leaves the pet weakened.
+  play-seconds: 6               # Loaded duration in seconds; currently unused by runtime play.
+  play-mood-gain: 22            # Mood points gained on play completion or when comforting an ill pet.
+  play-energy-cost: 3           # Energy points spent on play completion.
+  favorite-mood-multiplier: 1.5 # Multiplies mood gained from fetch with the pet's favorite toy.
+  favorite-food-mood: 8         # Mood points gained when a hungry pet eats an accepted treat.
+  sleep-minutes-to-full: 8      # Minutes to restore 100 energy points while resting/sleeping.
+  sleeping-hunger-multiplier: 0.5 # Sleeping hunger decay relative to normal (0.5 = half).
+  health-loss-per-minute: 12    # Health points lost per minute with critical physical needs and illness.
+  health-regen-per-minute: 20   # Health points recovered per minute when physical needs allow recovery.
+  medicine-health-bump: 20      # Immediate health points restored by medicine.
+  bond-gain-per-minute: 0.4     # Bond points gained per minute near the owner with stable needs.
+  bond-loss-per-minute: 0.8     # Bond points lost per minute while ill.
+  wake-mood-penalty: 8          # Loaded mood penalty in points; currently unused when waking.
+  critical-sound-seconds: 8     # Seconds between expressions of critical needs or illness.
+  overfeed-mood-penalty: 12     # Mood points lost when fed at full hunger.
+  overfeed-health-penalty: 8    # Health points lost when fed at full hunger.
+  struck-mood-penalty: 6        # Mood points lost when someone strikes the pet.
+  rest-again-seconds: 45        # Seconds after waking to follow before automatic rest is allowed again.
+
+# Training: progress uses 0-100 points; mood and bond boost successful reward gains.
+# Only default-tricks is overridden per species/pet, at their top level (list only).
+training:
+  default-tricks: [follow]      # Global list learned at hatching; automatically allowed too.
+  attempts-before-bored: 6     # Maximum practice attempts per session before a break.
+  reward-gain: 20              # Base progress points for rewarding a successful attempt.
+  fail-gain: 2                 # Progress points for rewarding a failed/partial attempt.
+  reward-window-seconds: 3     # Seconds after an attempt in which a treat counts as its reward.
+  sometimes-at: 40             # Progress threshold for occasional success; at most learned-at.
+  learned-at: 80               # Progress threshold for reliable obedience (greater than 0, at most 100).
+  session-distance: 8          # Maximum trainer-pet distance in blocks before a session ends.
+  attempt-energy-cost: 8       # Energy points spent per practice attempt.
+  attempt-hunger-cost: 5       # Hunger points spent per practice attempt.
+  attempt-mood-cost: 4         # Mood points spent per practice attempt.
+  treat-hunger-gain: 3         # Hunger points restored by a training reward.
+  rest-seconds: 90             # Seconds of recovery after ending a training session.
+
+# Throwing speed depends on aim; sneaking reduces the throw toward the low speed.
+play:
+  fetch-speed-multiplier: 1.2  # Fetch movement relative to normal pace (greater than 0, at most 3).
+  toy-attention-seconds: 20    # Seconds before a held toy becomes boring without renewed play/movement.
+  favorite-toy-attention-seconds: 35 # Same attention time in seconds for the favorite toy.
+  throw-speed-low: 0.6         # Minimum initial projectile speed in blocks/tick; must be greater than 0.
+  throw-speed-high: 1.1        # Maximum initial projectile speed in blocks/tick; at least throw-speed-low.
+
+# Care freezes when the owner is offline; distance changes need decay while online.
 presence:
-  owner-near-radius: 32
-  away-rate: 0.25
-  cry-interval-seconds: 45
+  owner-near-radius: 32        # Distance in blocks within which the owner counts as nearby.
+  away-rate: 0.25              # Away need-change multiplier (0.25 = 25% of normal; 0 stops need changes).
+  cry-interval-seconds: 45     # Seconds between cries when the online owner is beyond owner-near-radius.
 
+# Orders spoken in chat are heard only within this distance.
+orders:
+  hearing-radius: 12           # Maximum hearing distance in blocks (greater than 0, at most 64).
+
+# Owner movement tracking for social encounters, and attention after name calls.
+roaming:
+  stationary-seconds: 2        # Seconds the owner stands still before random social encounters are allowed (0-30).
+  name-attention-seconds: 10   # Seconds looking/waiting after a name call (1-15).
+
+# Spontaneous moments need an available pet following a nearby owner.
+# Random action chances below are base %, adjusted by personality and eligibility.
 moments:
-  greeting:
-    enabled: true
-    absence-seconds: 300
-    near-radius: 8
-    cooldown-seconds: 300
-    duration-seconds: 8
-    circle-radius: 2
-    speed: 1.35
-    sound-interval-seconds: 1.2
-    jump-enabled: true
-    tail-wag-hz: 3
-    cat-circle-radius: 1.4
-    cat-speed: 0.8
-    cat-sound-interval-seconds: 0.65
-  enabled: true
-  belly-up:
-    enabled: true
-    chance: 25                   # Percent chance per eligible petting attempt.
-    idle-seconds: 5               # Seconds without a belly rub before standing up.
-    cooldown-seconds: 60
-    min-mood: 70
-  juvenile-hours: 24
-  initial-delay-min-seconds: 180
-  initial-delay-max-seconds: 420
-  juvenile-interval-min-seconds: 120
-  juvenile-interval-max-seconds: 360
-  adult-interval-min-seconds: 300
-  adult-interval-max-seconds: 720
-  inactive-retry-seconds: 60
-  owner-radius: 8
-  target-radius: 6
-  plant-search-radius: 2
-  low-mood-threshold: 55
-  low-mood-bark-chance: 35
-  mischief-min-energy: 40
-  juvenile-mischief-chance: 40
-  adult-mischief-chance: 8
-  juvenile-bark-chance: 20
-  adult-bark-chance: 47
-  digging-enabled: true
-  juvenile-dig-chance: 15
-  adult-dig-chance: 10
-  dig-min-energy: 40
-  dig-loot:                       # Weight is a relative chance, not the number of items.
+  enabled: true               # Enable spontaneous moments, reunion greetings and belly rubs.
+
+  # Timing: juvenile/adult intervals are seconds between eligible random moments.
+  juvenile-hours: 24          # Hours since hatching during which the pet counts as young.
+  initial-delay-min-seconds: 180 # Minimum seconds before the first random moment after scheduling.
+  initial-delay-max-seconds: 420 # Maximum seconds before the first random moment.
+  juvenile-interval-min-seconds: 120 # Minimum seconds between young-pet moments.
+  juvenile-interval-max-seconds: 360 # Maximum seconds between young-pet moments.
+  adult-interval-min-seconds: 300 # Minimum seconds between adult-pet moments.
+  adult-interval-max-seconds: 720 # Maximum seconds between adult-pet moments.
+  inactive-retry-seconds: 60   # Seconds before retrying when the pet/owner is unavailable.
+  owner-radius: 8              # Maximum owner distance in blocks for random moments.
+
+  # Mischief: playful interactions with nearby creatures or plants.
+  target-radius: 6             # Living-target search radius in blocks for mischief/protest.
+  mischief-min-energy: 40       # Minimum energy points to attempt mischief.
+  juvenile-mischief-chance: 40  # Base % for young-pet mischief per random moment.
+  adult-mischief-chance: 8      # Base % for adult-pet mischief per random moment.
+
+  # Barking/protest: low mood chooses between protest and asking for affection.
+  low-mood-threshold: 55        # Below these mood points, use low-mood reactions instead of random actions.
+  low-mood-bark-chance: 35      # % chance to try protesting when mood is low.
+  juvenile-bark-chance: 20      # Base % for young-pet protest at nearby creatures.
+  adult-bark-chance: 47         # Base % for adult-pet protest at nearby creatures.
+
+  # Digging and gifts: weights are relative chances, not item counts or %.
+  digging-enabled: true        # Allow pets with digging behavior to dig up gifts.
+  juvenile-dig-chance: 15       # Base % for young-pet digging per random moment.
+  adult-dig-chance: 10          # Base % for adult-pet digging per random moment.
+  dig-min-energy: 40            # Minimum energy points for digging.
+  dig-loot:                    # Weighted item selectors; [] disables gift loot.
     - {item: STICK, weight: 45}
     - {item: BONE, weight: 30}
     - {item: RABBIT, weight: 15}
     - {item: LEATHER_BOOTS, weight: 10}
-  plant-breaking-enabled: true
-  respect-mob-griefing: true
-  plants:
+
+  # Plants: only SHORT_GRASS, FERN, DEAD_BUSH, DANDELION and POPPY are supported.
+  plant-breaking-enabled: true # Allow plant breaking during mischief.
+  respect-mob-griefing: true    # Require the world's mobGriefing rule for plant breaking.
+  plant-search-radius: 2       # Horizontal plant search radius in blocks around the pet.
+  plants:                     # Allowed plants from the five supported materials above.
     - SHORT_GRASS
     - FERN
     - DEAD_BUSH
     - DANDELION
     - POPPY
-  affection-particle: SPLASH
-  affection-particle-count: 3
-  bark-particle: ANGRY_VILLAGER
-  bark-particle-count: 2
-  mischief-particle: POOF
-  mischief-particle-count: 5
 
+  # Particles: Bukkit names needing no extra data; counts are particles per burst.
+  affection-particle: SPLASH   # Particle when asking for affection.
+  affection-particle-count: 3  # Particles per affection burst (1-32).
+  bark-particle: ANGRY_VILLAGER # Particle during spontaneous protest.
+  bark-particle-count: 2       # Particles per protest burst (1-32).
+  mischief-particle: POOF      # Particle during mischief.
+  mischief-particle-count: 5   # Particles per mischief burst (1-32).
+
+  # Reunion greetings; cat-* applies to cat character, whatever the body.
+  greeting:
+    enabled: true             # Greet returning owners and recognize familiar carers.
+    absence-seconds: 300       # Minimum owner absence in seconds for a reunion on return.
+    near-radius: 8             # Owner proximity in blocks for tracking returns (2-32).
+    cooldown-seconds: 300      # Minimum seconds between owner reunion greetings.
+    duration-seconds: 8        # Base mobile greeting duration in seconds (2-30); mood scales it.
+    circle-radius: 2           # Circling distance in blocks around the owner (1-4).
+    speed: 1.35                # Greeting pathfinding speed multiplier (0.5-2).
+    sound-interval-seconds: 1.2 # Base seconds between greeting sounds (0.5-10).
+    jump-enabled: true        # Allow greeting jumps for characters that support them.
+    tail-wag-hz: 3             # Tail-wag cycles per second where supported (1-6).
+    cat-circle-radius: 1.4     # Cat-character circling distance in blocks (1-4).
+    cat-speed: 0.8             # Cat-character greeting speed multiplier (0.5-1).
+    cat-sound-interval-seconds: 0.65 # Base seconds between cat-character sounds (0.5-10).
+
+  # Belly rubs need a healthy pet, belly-rub behavior and suitable model clips.
+  belly-up:
+    enabled: true             # Allow rolling over for belly rubs when petted.
+    chance: 25                # % chance per eligible petting attempt.
+    idle-seconds: 5            # Seconds without a belly rub before standing up (1-60).
+    cooldown-seconds: 60       # Seconds between roll-over attempts, including failed attempts.
+    min-mood: 70               # Minimum mood points for a belly rub.
+
+# Pet encounters build mutual friendship (0-100); friends protest less often.
 social:
-  enabled: true
-  encounter-radius: 8
-  greeting-radius: 5
-  greeting-seconds: 3
-  separation-seconds: 10
-  greeting-friendship-gain: 2
-  sniff-friendship-gain: 6
-  chase-friendship-gain: 8
-  max-friendship-gain-per-minute: 12
-  bark-radius: 6
-  owner-radius: 16
-  search-interval-seconds: 3      # Seconds between searches for new pet encounters.
-  encounter-cooldown-seconds: 60
-  encounter-chance: 20           # Percent chance per eligible search after cooldown; first greetings always happen.
-  bark-seconds: 8
-  calm-cooldown-seconds: 30
-  territorial-bark-chance: 80
-  same-owner-bark-chance: 10
-  chase-chance: 50
-  calm-clicks: 3
+  enabled: true               # Enable encounters between active pets.
+  encounter-radius: 8         # Search distance in blocks for other pets (2-32).
+  greeting-radius: 5          # Distance in blocks for initial greetings (2 to encounter-radius).
+  greeting-seconds: 3         # Initial greeting duration in seconds (2-4).
+  separation-seconds: 10      # Seconds apart before a pair can greet again.
+  greeting-friendship-gain: 2  # Mutual friendship points for a positive greeting/observation.
+  sniff-friendship-gain: 6     # Mutual friendship points for a positive sniff encounter.
+  chase-friendship-gain: 8     # Mutual friendship points for sustained play in a chase.
+  max-friendship-gain-per-minute: 12 # Maximum points gained per pet pair in a rolling minute.
+  bark-radius: 6              # Maximum territorial protest distance in blocks (1 to encounter-radius).
+  owner-radius: 16            # Owner proximity for encounters in blocks; one online owner can cover both pets.
+  search-interval-seconds: 3   # Seconds between searches for new encounters (0.5-30).
+  encounter-cooldown-seconds: 60 # Seconds before the same pair can have another random encounter.
+  encounter-chance: 20        # % per eligible search after cooldown; initial greetings bypass this roll.
+  bark-seconds: 8             # Maximum territorial protest duration in seconds (2-60).
+  calm-cooldown-seconds: 30    # Seconds without new encounters after calming a protest.
+  territorial-bark-chance: 80  # Base % for unfamiliar territorial pets with different owners to protest.
+  same-owner-bark-chance: 10   # Base % for unfamiliar territorial pets sharing an owner to protest.
+  chase-chance: 50            # Base % for chase instead of sniffing; personality/friendship adjust it.
+  calm-clicks: 3              # Petting clicks to calm protest (2-8), less than 8 s between clicks.
 
-roaming:
-  stationary-seconds: 2
-  name-attention-seconds: 10
-
-orders:
-  hearing-radius: 12
-
-# Configuration guide and examples: README.md. Built-in species: dog, cat.
-items:
-  kennel: BARREL
-  kennel-block: BARREL
-  treats: [mmoitems:PETS:FISH_SNACK, mmoitems:PETS:BISCUIT_TREAT]
-  foods:
-    - {item: mmoitems:PETS:MEAT_TREAT, hunger: 35}
-    - {item: mmoitems:PETS:FISH_TREAT, hunger: 35}
-  medicines: [mmoitems:PETS:PET_MEDICINE]
-  brushes: [mmoitems:PETS:PET_BRUSH]
-  toys: [STICK, mmoitems:PETS:PET_BALL, mmoitems:PETS:PET_CHEW_BONE, mmoitems:PETS:PET_TUG_ROPE, mmoitems:PETS:PET_MOUSE_PLUSH, mmoitems:PETS:PET_TEDDY_PLUSH]
-
-# Built-in species: dog, cat. Define shared overrides or custom species here.
-# Guide: https://github.com/TF-Minecraft/CompanionPets#pet-configuration
-species: {}
-
-# Example pet: {species: dog, model: beagle, egg: 'mmoitems:PETS:PET_BEAGLE_EGG'}
-# Optional character: behavior: dog | cat | basic (defaults to the body).
-pets:
-  wolf:
-    species: dog
-    egg: WOLF_SPAWN_EGG
-  cat:
-    species: cat
-    egg: CAT_SPAWN_EGG
+# Per-owner quotas; zero prevents additional pets in that category.
+limits:
+  max-stored: 20              # Maximum pets stored in the Pet House per owner; excludes pets currently out.
+  max-out: 4                  # Maximum pets simultaneously out in the world per owner.
