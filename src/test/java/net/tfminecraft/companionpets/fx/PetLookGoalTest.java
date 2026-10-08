@@ -14,6 +14,7 @@ import org.junit.jupiter.api.*;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.WolfMock;
+import net.tfminecraft.companionpets.testutil.GoalServerMock;
 
 class PetLookGoalTest {
     private ServerMock server;
@@ -22,7 +23,7 @@ class PetLookGoalTest {
     private PetLookGoal look;
 
     @BeforeEach void mock() {
-        server = MockBukkit.mock();
+        server = MockBukkit.mock(new GoalServerMock());
         var world = server.addSimpleWorld("world");
         body = new WatchingWolf(server);
         body.teleport(new Location(world, 0, 64, 0));
@@ -34,6 +35,31 @@ class PetLookGoalTest {
     @AfterEach void unmock() { MockBukkit.unmock(); }
 
     private PetLookGoal goal() { return look; }
+
+    @Test void repeatedLooksAndReleasesReuseTheRegisteredGoalWithoutSearches() {
+        PetFx.stopLooking(body);
+        int lookups = ((GoalServerMock) server).goalLookups();
+        PetFx.stopLooking(body);
+        assertEquals(lookups, ((GoalServerMock) server).goalLookups());
+        PetFx.look(body, target);
+        var key = look.getKey();
+        var registered = server.getMobGoals().getGoal(body, key);
+        lookups = ((GoalServerMock) server).goalLookups();
+        for (int tick = 0; tick < 20; tick++) {
+            PetFx.look(body, target);
+            PetFx.look(body, target.getLocation());
+            assertTrue(registered.shouldActivate());
+            PetFx.stopLooking(body);
+            PetFx.releaseLooking(body);
+            assertFalse(registered.shouldActivate());
+        }
+        assertEquals(lookups, ((GoalServerMock) server).goalLookups());
+        assertSame(registered, server.getMobGoals().getGoal(body, key));
+        var replacement = new WatchingWolf(server);
+        replacement.teleport(body.getLocation());
+        PetFx.look(replacement, target);
+        assertNotSame(registered, server.getMobGoals().getGoal(replacement, key));
+    }
 
     @Test void tracksMovingTargetBetweenBehaviorDecisionsUsingNativeController() {
         look.track(target);

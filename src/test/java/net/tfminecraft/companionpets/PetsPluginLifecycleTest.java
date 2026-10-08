@@ -169,6 +169,23 @@ class PetsPluginLifecycleTest {
         assertTrue(reopened.close());
     }
 
+    @Test void reloadRecreatesTheLookGoalForTheSameLoadedBody() throws Exception {
+        prepare(); var owner = server.addPlayer(); var pet = pet(owner.getUniqueId());
+        var body = body(pet, new Location(world, 4, 65, 8)); saveBeforeEnable(pet);
+        enable();
+        var key = GoalKey.of(Mob.class, new NamespacedKey("companionpets", "look"));
+        PetFx.look(body, owner);
+        var previous = server.getMobGoals().getGoal(body, key);
+        assertNotNull(previous);
+        server.getPluginManager().disablePlugin(plugin);
+        enable();
+        PetFx.look(body, owner);
+        var current = server.getMobGoals().getGoal(body, key);
+        assertNotNull(current);
+        assertNotSame(previous, current);
+        assertTrue(current.shouldActivate());
+    }
+
     @Test void failedShutdownSaveRetainsTheRecoveryGuardAndPreviousSnapshot() throws Exception {
         prepare(); enable();
         var pet = pet(UUID.randomUUID()); pet.stored(true); runtime().store().add(pet);

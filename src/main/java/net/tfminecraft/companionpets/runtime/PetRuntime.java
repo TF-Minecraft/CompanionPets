@@ -34,6 +34,7 @@ public final class PetRuntime {
     private final java.util.Map<String, net.tfminecraft.companionpets.visual.PetCapabilities> capabilities = new java.util.HashMap<>();
     private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
     private final java.util.Map<UUID, Location> lastGround = new java.util.HashMap<>();
+    private final java.util.Map<org.bukkit.entity.Mob, WaterNavigationGoal> waterGoals = new java.util.HashMap<>();
 
     public PetRuntime(
             JavaPlugin plugin,
@@ -130,11 +131,15 @@ public final class PetRuntime {
     }
 
     void forgetMissingGround() {
+        waterGoals.keySet().removeIf(body -> !body.isValid() || body.isDead() || byEntity(body) == null);
         lastGround.keySet().removeIf(id -> {
             Pet pet = store.get(id);
             return pet == null || pet.stored() || pet.dead() || entity(pet) == null;
         });
     }
+
+    WaterNavigationGoal waterGoal(org.bukkit.entity.Mob body) { return waterGoals.get(body); }
+    void waterGoal(org.bukkit.entity.Mob body, WaterNavigationGoal goal) { waterGoals.put(body, goal); }
 
     public boolean behaves(Pet pet, net.tfminecraft.companionpets.config.PetBehavior behavior) {
         var type = config.type(pet.typeId());

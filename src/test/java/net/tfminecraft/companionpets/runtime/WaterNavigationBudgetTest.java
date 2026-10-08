@@ -124,6 +124,25 @@ class WaterNavigationBudgetTest {
         MockBukkit.unmock();
     }
 
+    @Test void shoreRouteChecksUseTheRememberedGoalAndForgetRemovedBodies() {
+        swimming = false;
+        runtime.rememberGround(pet, body);
+        body.teleport(body.getLocation().add(1.5, 0, 0));
+        swimming = true; nativeRoute = true;
+        goal.tick(NOW);
+        swimming = false;
+        int lookups = server.goalLookups();
+        for (int tick = 0; tick < 20; tick++) assertTrue(WaterNavigationGoal.finishing(runtime, body));
+        hasPath = false;
+        assertFalse(WaterNavigationGoal.finishing(runtime, body));
+        assertEquals(lookups, server.goalLookups());
+        assertSame(goal, runtime.waterGoal(body));
+        body.remove();
+        runtime.forgetMissingGround();
+        assertNull(runtime.waterGoal(body));
+        assertFalse(WaterNavigationGoal.finishing(runtime, body));
+    }
+
     @Test void walledCanalBudgetsAllPathsAndDoesNotScanAgainDuringBackoff() {
         goal.tick(NOW);
         assertEquals(WaterNavigationGoal.PATH_SEARCH_BUDGET, searches);

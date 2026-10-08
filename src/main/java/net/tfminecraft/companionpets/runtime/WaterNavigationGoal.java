@@ -37,13 +37,20 @@ final class WaterNavigationGoal implements Goal<Mob> {
 
     static void ensure(PetRuntime runtime, Pet pet, Mob body, PetActions actions) {
         GoalKey<Mob> key = key(runtime);
-        if (!(Bukkit.getMobGoals().getGoal(body, key) instanceof WaterNavigationGoal))
-            Bukkit.getMobGoals().addGoal(body, 0, new WaterNavigationGoal(key, runtime, pet, body, actions));
+        var existing = Bukkit.getMobGoals().getGoal(body, key);
+        WaterNavigationGoal goal;
+        if (existing instanceof WaterNavigationGoal registered) goal = registered;
+        else {
+            goal = new WaterNavigationGoal(key, runtime, pet, body, actions);
+            Bukkit.getMobGoals().addGoal(body, 0, goal);
+        }
+        runtime.waterGoal(body, goal);
     }
 
     /** A held pet that just left the water keeps walking its shore route until the native path ends. */
     static boolean finishing(PetRuntime runtime, Mob body) {
-        return Bukkit.getMobGoals().getGoal(body, key(runtime)) instanceof WaterNavigationGoal goal && goal.finishing();
+        WaterNavigationGoal goal = runtime.waterGoal(body);
+        return goal != null && goal.finishing();
     }
 
     private static GoalKey<Mob> key(PetRuntime runtime) {

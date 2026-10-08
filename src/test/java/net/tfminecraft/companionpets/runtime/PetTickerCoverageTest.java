@@ -236,6 +236,35 @@ class PetTickerCoverageTest {
         loaded.close();
     }
 
+    @Test void postureAndSleepingLookNeverSearchGoalsAndSeeTrainingAndListeningChanges() throws Exception {
+        pet.order(PetOrder.SIT);
+        move(now);
+        var posture = server.getMobGoals().getGoal(body, GoalKey.of(Mob.class,
+                new NamespacedKey(runtime.plugin(), "posture_navigation")));
+        var look = server.getMobGoals().getGoal(body, GoalKey.of(Mob.class,
+                new NamespacedKey(runtime.plugin(), "sleeping_look")));
+        int lookups = server.goalLookups();
+        for (int tick = 0; tick < 20; tick++) {
+            assertTrue(posture.shouldActivate());
+            assertTrue(posture.shouldStayActive());
+            posture.tick();
+            assertFalse(look.shouldActivate());
+        }
+        runtime.sessions().training(owner.getUniqueId(), new TrainingSession(pet.id()));
+        assertFalse(posture.shouldActivate());
+        pet.activity(Activity.SLEEPING);
+        assertTrue(posture.shouldActivate());
+        assertTrue(look.shouldStayActive());
+        pet.listeningUntilMillis(System.currentTimeMillis() + 10_000);
+        assertFalse(look.shouldActivate());
+        pet.listeningUntilMillis(0);
+        assertTrue(look.shouldActivate());
+        pet.stored(true);
+        assertFalse(posture.shouldActivate());
+        assertFalse(look.shouldActivate());
+        assertEquals(lookups, server.goalLookups());
+    }
+
     @Test void postureStopsASlideOnceAndLeavesAStillBodyAloneOnRepeatedPasses() throws Exception {
         pet.order(PetOrder.SIT);
         body.setVelocity(new org.bukkit.util.Vector(.3, -.2, .4));
