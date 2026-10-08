@@ -7,6 +7,8 @@ import net.tfminecraft.companionpets.pet.*;
 
 /** Individual destinations avoid converging on the same player's coordinates. */
 final class PetSpacing {
+    private static final double POSITION_MARGIN = 4;
+
     private PetSpacing() { }
     static Location toyFront(PetRuntime runtime, Pet pet, Player owner) {
         int slot = Math.max(0, formation(runtime, pet, owner).slot());
@@ -26,8 +28,14 @@ final class PetSpacing {
     static boolean free(PetRuntime runtime, Pet self, Location at) {
         Mob body = runtime.entity(self) instanceof Mob mob ? mob : null;
         double width = body == null ? 0.6 : body.getWidth();
+        String worldName = at.getWorld() == null ? null : at.getWorld().getName();
+        // Remembered positions can lag by 10 ticks; keep nearby movers in the exact check.
+        double searchRadius = Math.max(0.9, width + 0.25) + POSITION_MARGIN;
         for (Pet other : runtime.store().active()) {
-            if (other.id().equals(self.id()) || other.stored() || !(runtime.entity(other) instanceof Mob entity)
+            if (other.id().equals(self.id()) || other.stored() || !other.worldName().equals(worldName)) continue;
+            double recordedDx = other.x() - at.getX(), recordedDz = other.z() - at.getZ();
+            if (recordedDx * recordedDx + recordedDz * recordedDz > searchRadius * searchRadius) continue;
+            if (!(runtime.entity(other) instanceof Mob entity)
                     || !entity.getWorld().equals(at.getWorld()) || Math.abs(entity.getLocation().getY() - at.getY()) > 1.5) continue;
             double clearance = Math.max(0.9, (width + entity.getWidth()) * 0.5 + 0.25);
             Location there = entity.getLocation();
@@ -41,7 +49,7 @@ final class PetSpacing {
     private static Formation formation(PetRuntime runtime, Pet pet, Player owner) {
         int count = 0, slot = 0;
         boolean included = false;
-        for (Pet other : runtime.store().active()) {
+        for (Pet other : runtime.store().of(pet.ownerId())) {
             if (!other.ownerId().equals(pet.ownerId()) || other.stored() || other.dead()
                     || other.activity() != Activity.TOY_FOCUS
                     || !(runtime.entity(other) instanceof Mob body) || !body.getWorld().equals(owner.getWorld())) continue;
