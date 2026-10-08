@@ -1874,14 +1874,14 @@ class PetInteractionTest {
             assertTrue(actions.roaming().tickAttention(pet, body, now));
             assertEquals(player.getLocation(), navigationTarget);
             player.teleport(player.getLocation().add(1, 0, 1));
-            assertTrue(actions.roaming().tickAttention(pet, body, now + 1));
+            assertTrue(actions.roaming().tickAttention(pet, body, now + 500));
             assertEquals(player.getLocation(), navigationTarget, "A name call uses the owner's current position");
             body.setVelocity(new org.bukkit.util.Vector(0.4, -0.2, 0.3));
             actions.onChat(player, "Toby " + posture.name().toLowerCase());
             assertEquals(posture.name(), pet.order().name()); assertTrue(postureHeld());
             assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
             assertEquals(-0.2, body.getVelocity().getY(), "Holding keeps gravity");
-            assertFalse(actions.roaming().tickAttention(pet, body, now + 2), "The previous call must be cancelled");
+            assertFalse(actions.roaming().tickAttention(pet, body, now + 501), "The previous call must be cancelled");
             var goal = org.bukkit.Bukkit.getMobGoals().getGoal(body,
                     com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
                             new NamespacedKey(runtime.plugin(), "call_navigation")));
@@ -1904,16 +1904,16 @@ class PetInteractionTest {
             long now = System.currentTimeMillis();
             assertTrue(actions.roaming().tickAttention(pet, body, now)); assertEquals(player.getLocation(), navigationTarget);
             player.teleport(player.getLocation().add(1, 0, 1));
-            assertTrue(actions.roaming().tickAttention(pet, body, now + 1)); assertEquals(player.getLocation(), navigationTarget);
+            assertTrue(actions.roaming().tickAttention(pet, body, now + 500)); assertEquals(player.getLocation(), navigationTarget);
             assertEquals(PetOrder.FOLLOW, pet.order(), "The old posture must not return while walking");
             body.teleport(player.getLocation().add(1, 0, 0)); body.setVelocity(new org.bukkit.util.Vector(0.3, 0, 0.2));
-            assertTrue(actions.roaming().tickAttention(pet, body, now + 2));
+            assertTrue(actions.roaming().tickAttention(pet, body, now + 501));
             assertEquals(previous, pet.order()); assertEquals(previous == PetOrder.STAY, pet.staying());
             assertEquals(Activity.NONE, pet.activity());
             assertTrue(body.isAware()); assertEquals(previous != PetOrder.FOLLOW, postureHeld());
             assertEquals(previous == PetOrder.SIT || previous == PetOrder.LAY, body.isSitting());
             assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
-            assertFalse(actions.roaming().tickAttention(pet, body, now + 3));
+            assertFalse(actions.roaming().tickAttention(pet, body, now + 502));
         }
     }
 

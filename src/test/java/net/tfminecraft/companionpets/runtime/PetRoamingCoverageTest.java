@@ -147,6 +147,47 @@ class PetRoamingCoverageTest {
         assertTrue(reloaded.close());
     }
 
+    @Test void callsReplanAtHalfSecondIntervalsOrWhenTheOwnerMovesTwoBlocks() {
+        roaming.attend(pet, owner, NOW);
+        for (int tick = 0; tick < 10; tick++) assertTrue(roaming.tickAttention(pet, body, NOW + tick * 50));
+        assertEquals(1, paths.size());
+        owner.teleport(owner.getLocation().add(1, 0, 0));
+        roaming.tickAttention(pet, body, NOW + 499);
+        assertEquals(1, paths.size());
+        roaming.tickAttention(pet, body, NOW + 500);
+        assertEquals(2, paths.size());
+        assertEquals(owner.getLocation(), paths.getLast());
+        owner.teleport(owner.getLocation().add(2.1, 0, 0));
+        roaming.tickAttention(pet, body, NOW + 550);
+        assertEquals(3, paths.size());
+        assertEquals(owner.getLocation(), paths.getLast());
+        roaming.tickAttention(pet, body, NOW + 1049);
+        assertEquals(3, paths.size());
+        roaming.tickAttention(pet, body, NOW + 1050);
+        assertEquals(4, paths.size());
+        var other = server.addSimpleWorld("other");
+        owner.teleport(new Location(other, 0, 64, 0));
+        body.teleport(new Location(other, 8, 64, 0));
+        roaming.tickAttention(pet, body, NOW + 1100);
+        assertEquals(5, paths.size());
+        assertEquals(owner.getLocation(), paths.getLast());
+    }
+
+    @Test void fetchReturnsKeepTheSameRouteBetweenReplansAndCancelOnWorldChanges() {
+        roaming.returnFromFetch(pet, owner, 1.8);
+        long at = System.currentTimeMillis();
+        roaming.tickAttention(pet, body, at + 100);
+        roaming.tickAttention(pet, body, at + 400);
+        assertEquals(1, paths.size());
+        roaming.tickAttention(pet, body, at + 600);
+        assertEquals(2, paths.size());
+        assertEquals(List.of(1.8, 1.8), speeds);
+        owner.teleport(new Location(server.addSimpleWorld("other"), 0, 64, 0));
+        assertTrue(roaming.tickAttention(pet, body, at + 650));
+        assertFalse(roaming.returningFromFetch(pet));
+        assertEquals(2, paths.size());
+    }
+
     @Test void destinationTracksTheCurrentCallerAndExpiresOnDisconnectOrCancellation() {
         assertNull(roaming.destination(pet));
         roaming.attend(pet, owner, NOW);
