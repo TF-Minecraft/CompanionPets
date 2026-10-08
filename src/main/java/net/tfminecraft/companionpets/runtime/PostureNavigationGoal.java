@@ -53,7 +53,8 @@ final class PostureNavigationGoal implements Goal<Mob> {
     }
 
     @Override public boolean shouldActivate() {
-        if (!body.isValid() || body.isDead() || pet.stored() || pet.dead() || WaterEscape.needed(body)) return false;
+        if (!body.isValid() || body.isDead() || pet.stored() || pet.dead() || WaterEscape.needed(body)
+                || WaterNavigationGoal.finishing(runtime, body)) return false;
         var training = Bukkit.getMobGoals().getGoal(body, trainingKey);
         if (training instanceof TrainingNavigationGoal focus && focus.shouldActivate()) return false;
         if (runtime.visual().belly(body)) return true;

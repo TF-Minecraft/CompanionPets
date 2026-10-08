@@ -223,6 +223,7 @@ public final class PetTicker implements Runnable {
     }
 
     private void move(long now) {
+        runtime.forgetMissingGround();
         for (Pet pet : runtime.store().active()) {
             Entity body = runtime.entity(pet);
             if (!(body instanceof Mob mob)) {
@@ -244,6 +245,7 @@ public final class PetTicker implements Runnable {
                 WaterNavigationGoal.ensure(runtime, pet, mob, actions);
                 continue;
             }
+            runtime.rememberGround(pet, mob);
             if (TrainingNavigationGoal.hold(runtime, pet, mob)) continue;
             if (actions.greeting(pet) || actions.anticipation().active(pet)) continue;
             Locomotion.Mode mode = Locomotion.choose(
@@ -272,6 +274,8 @@ public final class PetTicker implements Runnable {
             }
             boolean held = mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.STAY
                     || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP;
+            // The posture waits until the pet reaches the bank it swam towards.
+            if (held && WaterNavigationGoal.finishing(runtime, mob)) continue;
             if (!held && runtime.visual().holdsMovement(mob)) {
                 net.tfminecraft.companionpets.integration.PetMotion.settle(mob);
                 continue;

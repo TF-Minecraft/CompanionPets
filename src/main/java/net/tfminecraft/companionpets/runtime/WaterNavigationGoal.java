@@ -11,6 +11,9 @@ import net.tfminecraft.companionpets.pet.Pet;
 
 /** Floats land pets while preserving fetch and call destinations across water. */
 final class WaterNavigationGoal implements Goal<Mob> {
+    static final int PATH_SEARCH_BUDGET = 4;
+    private static final long ROUTE_RETRY_MILLIS = 2_000L;
+    private static final long MAX_SEARCH_DELAY_MILLIS = 16_000L;
     private final GoalKey<Mob> key;
     private final PetRuntime runtime;
     private final Pet pet;
@@ -18,6 +21,14 @@ final class WaterNavigationGoal implements Goal<Mob> {
     private final PetActions actions;
     private Location exit;
     private long searchAt;
+    private Location routeTarget;
+    private long routeAt;
+    private com.destroystokyo.paper.entity.Pathfinder.PathResult route;
+    private boolean preferredExit;
+    private Location searchFrom;
+    private long retryAt;
+    private long retryDelay = 1_000L;
+    private int pathsRemaining;
     private double speed = 1.1;
 
     private WaterNavigationGoal(GoalKey<Mob> key, PetRuntime runtime, Pet pet, Mob body, PetActions actions) {
@@ -25,19 +36,38 @@ final class WaterNavigationGoal implements Goal<Mob> {
     }
 
     static void ensure(PetRuntime runtime, Pet pet, Mob body, PetActions actions) {
-        GoalKey<Mob> key = GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation"));
+        GoalKey<Mob> key = key(runtime);
         if (!(Bukkit.getMobGoals().getGoal(body, key) instanceof WaterNavigationGoal))
             Bukkit.getMobGoals().addGoal(body, 0, new WaterNavigationGoal(key, runtime, pet, body, actions));
+    }
+
+    /** A held pet that just left the water keeps walking its shore route until the native path ends. */
+    static boolean finishing(PetRuntime runtime, Mob body) {
+        return Bukkit.getMobGoals().getGoal(body, key(runtime)) instanceof WaterNavigationGoal goal && goal.finishing();
+    }
+
+    private static GoalKey<Mob> key(PetRuntime runtime) {
+        return GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation"));
+    }
+
+    // Only the shore route itself counts; a fetch or call destination yields to a new posture order.
+    private boolean finishing() {
+        if (exit == null || preferredExit || WaterEscape.needed(body)) return false;
+        var current = body.getPathfinder().getCurrentPath();
+        return current != null && near(current.getFinalPoint(), exit);
     }
 
     @Override public boolean shouldActivate() { return !pet.stored() && !pet.dead() && WaterEscape.needed(body); }
     @Override public boolean shouldStayActive() { return shouldActivate(); }
     @Override public void start() { searchAt = 0; tick(); }
     @Override public void tick() {
+        tick(System.currentTimeMillis());
+    }
+
+    void tick(long now) {
         if (!shouldActivate()) return;
         if (pet.fetch() != null && body instanceof org.bukkit.entity.Wolf wolf)
             net.tfminecraft.companionpets.integration.WolfShake.defer(wolf);
-        long now = System.currentTimeMillis();
         if (now >= searchAt) {
             if (pet.fetch() != null) actions.fetchActions().step(pet, body);
             else if (pet.activity() == net.tfminecraft.companionpets.pet.Activity.ATTENDING)
@@ -47,16 +77,74 @@ final class WaterNavigationGoal implements Goal<Mob> {
                     : pet.activity() == net.tfminecraft.companionpets.pet.Activity.ATTENDING ? actions.roaming().destination(pet)
                     : pet.order() == net.tfminecraft.companionpets.pet.PetOrder.FOLLOW && !pet.staying()
                     && runtime.followingAllowed(pet, owner) ? owner.getLocation() : null;
-            exit = WaterEscape.reachable(body, preferred) ? preferred
-                    : WaterEscape.exit(body.getLocation(), preferred, candidate -> WaterEscape.reachable(body, candidate));
             speed = pet.fetch() != null ? actions.fetchActions().movementSpeed(pet)
                     : actions.roaming().returningFromFetch(pet) ? actions.roaming().movementSpeed(pet) : 1.1;
-            if (exit != null) body.getPathfinder().moveTo(exit, speed);
+            navigate(preferred, now);
             searchAt = now + 500L;
         }
         WaterEscape.swim(body, exit, speed);
     }
-    @Override public void stop() { exit = null; body.getPathfinder().stopPathfinding(); }
+    private void navigate(Location preferred, long now) {
+        Location from = body.getLocation();
+        pathsRemaining = PATH_SEARCH_BUDGET;
+        if (exit != null) {
+            if (!exit.getWorld().equals(from.getWorld()) || exit.distanceSquared(from) <= 1
+                    || (preferredExit ? !near(routeTarget, preferred) : !WaterEscape.safe(exit))) exit = null;
+            else {
+                if (body.getPathfinder().hasPath() || now < routeAt + ROUTE_RETRY_MILLIS) return;
+                if (reachable(exit)) { follow(now); return; }
+                exit = null;
+            }
+            if (exit == null) body.getPathfinder().stopPathfinding();
+        }
+        if (now < retryAt && near(searchFrom, from)) return;
+        if (!near(searchFrom, from)) retryDelay = 1_000L;
+        searchFrom = from.clone();
+        Location ground = runtime.lastGround(pet);
+        preferredExit = false;
+        // Fetch and calls keep their destination; the remembered bank is an escape fallback.
+        if (reachable(preferred)) { exit = preferred.clone(); preferredExit = true; }
+        else if (ground != null && WaterEscape.safe(ground) && reachable(ground)) exit = ground;
+        else exit = WaterEscape.exit(from, preferred, candidate -> !candidate.equals(preferred) && reachable(candidate));
+        if (exit != null) {
+            follow(now);
+            retryAt = 0;
+            retryDelay = 1_000L;
+        } else {
+            retryAt = now + retryDelay;
+            retryDelay = Math.min(MAX_SEARCH_DELAY_MILLIS, retryDelay * 2);
+        }
+    }
+
+    private boolean reachable(Location target) {
+        route = null;
+        return WaterEscape.reachable(body, target, at -> {
+            if (pathsRemaining == 0) return false;
+            pathsRemaining--;
+            var path = body.getPathfinder().findPath(at);
+            if (path == null || !path.canReachFinalPoint()) return false;
+            route = path;
+            return true;
+        });
+    }
+
+    private void follow(long now) {
+        routeTarget = exit.clone();
+        routeAt = now;
+        if (route != null) body.getPathfinder().moveTo(route, speed);
+        else body.getPathfinder().stopPathfinding();
+    }
+
+    private static boolean near(Location first, Location second) {
+        return first != null && second != null && first.getWorld().equals(second.getWorld())
+                && first.distanceSquared(second) < 4;
+    }
+
+    // Let the shore route finish after leaving the water, and preserve it across goal restarts.
+    @Override public void stop() {
+        searchAt = 0;
+        if (pet.stored() || pet.dead()) { exit = null; body.getPathfinder().stopPathfinding(); }
+    }
     @Override public GoalKey<Mob> getKey() { return key; }
     @Override public EnumSet<GoalType> getTypes() { return EnumSet.of(GoalType.MOVE); }
 }

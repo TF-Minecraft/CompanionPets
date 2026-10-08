@@ -33,6 +33,7 @@ public final class PetRuntime {
     private final PetVoice voice = new PetVoice(this);
     private final java.util.Map<String, net.tfminecraft.companionpets.visual.PetCapabilities> capabilities = new java.util.HashMap<>();
     private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
+    private final java.util.Map<UUID, Location> lastGround = new java.util.HashMap<>();
 
     public PetRuntime(
             JavaPlugin plugin,
@@ -117,6 +118,23 @@ public final class PetRuntime {
     }
 
     public PetVoice voice() { return voice; }
+
+    void rememberGround(Pet pet, org.bukkit.entity.Mob body) {
+        if (body.isOnGround() && !body.isInWater() && net.tfminecraft.companionpets.behavior.WaterEscape.safe(body.getLocation()))
+            lastGround.put(pet.id(), body.getLocation().getBlock().getLocation().add(0.5, 0, 0.5));
+    }
+
+    Location lastGround(Pet pet) {
+        Location at = lastGround.get(pet.id());
+        return at == null ? null : at.clone();
+    }
+
+    void forgetMissingGround() {
+        lastGround.keySet().removeIf(id -> {
+            Pet pet = store.get(id);
+            return pet == null || pet.stored() || pet.dead() || entity(pet) == null;
+        });
+    }
 
     public boolean behaves(Pet pet, net.tfminecraft.companionpets.config.PetBehavior behavior) {
         var type = config.type(pet.typeId());
