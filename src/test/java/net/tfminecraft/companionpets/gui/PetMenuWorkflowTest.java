@@ -266,10 +266,10 @@ class PetMenuWorkflowTest {
                 .getPersistentDataContainer().has(runtime.petKey(), PersistentDataType.STRING));
     }
 
-    @Test void directProfileHasFourCenteredActionsAndTricksKeepItsNavigation() {
+    @Test void directProfileKeepsActionPositionsAndTricksKeepItsNavigation() {
         Pet pet = pet("wolf", player.getUniqueId()); pet.stored(false); menus.openCare(player, pet);
         var inventory = holder().getInventory();
-        assertEquals(Material.COMPASS, inventory.getItem(37).getType());
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, inventory.getItem(37).getType());
         assertEquals(Material.BOOK, inventory.getItem(39).getType());
         assertEquals(Material.BARREL, inventory.getItem(41).getType());
         assertEquals(Material.BARRIER, inventory.getItem(43).getType());
@@ -324,7 +324,7 @@ class PetMenuWorkflowTest {
     @Test void menusCancelItemTransfersAndRejectManagementOfSomeoneElsesPet() {
         Pet pet = pet("wolf", UUID.randomUUID()); menus.openCare(player, pet);
         var view = player.getOpenInventory();
-        var click = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, PetMenus.careSlot(PetMenus.CALL_SLOT, false),
+        var click = new InventoryClickEvent(view, InventoryType.SlotType.CONTAINER, PetMenus.careSlot(PetMenus.BRING_OUT_SLOT, false),
                 ClickType.LEFT, InventoryAction.PICKUP_ALL);
         listener.onClick(click);
         assertTrue(click.isCancelled()); assertTrue(pet.stored()); assertNull(pet.entityId());
