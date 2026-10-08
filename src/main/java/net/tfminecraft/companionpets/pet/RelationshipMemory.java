@@ -18,14 +18,17 @@ public final class RelationshipMemory {
         }
     }
     private final Map<UUID, Memory> entries = new LinkedHashMap<>();
+    private final Runnable changed;
+    public RelationshipMemory() { this(() -> { }); }
+    RelationshipMemory(Runnable changed) { this.changed = changed; }
     public Map<UUID, Memory> entries() { return Collections.unmodifiableMap(entries); }
     public Memory get(UUID id) { return entries.get(id); }
     public double trust(UUID id) { var memory = get(id); return memory == null ? 0 : memory.trust(); }
     public boolean familiar(UUID id) { return trust(id) >= FAMILIAR_AT; }
-    public void clear() { entries.clear(); }
+    public void clear() { if (!entries.isEmpty()) { entries.clear(); changed.run(); } }
     public void restore(UUID id, Memory memory) {
         if (memory.trust() <= 0) return;
-        entries.put(id, memory);
+        if (!memory.equals(entries.put(id, memory))) changed.run();
         while (entries.size() > LIMIT) {
             UUID oldest = entries.entrySet().stream().min(Comparator.comparingLong(e -> e.getValue().reinforcedAt())).orElseThrow().getKey();
             entries.remove(oldest);
@@ -40,10 +43,10 @@ public final class RelationshipMemory {
     }
     public void nearby(UUID id, long now) {
         var memory = get(id);
-        if (memory != null) entries.put(id, new Memory(memory.trust(), memory.reinforcedAt(), Math.max(memory.nearbyAt(), now), memory.greetedAt()));
+        if (memory != null) restore(id, new Memory(memory.trust(), memory.reinforcedAt(), Math.max(memory.nearbyAt(), now), memory.greetedAt()));
     }
     public void greeted(UUID id, long now) {
         var memory = get(id);
-        if (memory != null) entries.put(id, new Memory(memory.trust(), memory.reinforcedAt(), Math.max(memory.nearbyAt(), now), Math.max(memory.greetedAt(), now)));
+        if (memory != null) restore(id, new Memory(memory.trust(), memory.reinforcedAt(), Math.max(memory.nearbyAt(), now), Math.max(memory.greetedAt(), now)));
     }
 }

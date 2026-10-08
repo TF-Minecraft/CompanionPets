@@ -12,6 +12,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -52,6 +53,8 @@ public final class PetStore {
     private final File session;
     private final Set<UUID> deleted = new LinkedHashSet<>();
     private final Map<UUID, Pet> pets = new LinkedHashMap<>();
+    private record CachedRow(long revision, Map<String, Object> values) { }
+    private final Map<UUID, CachedRow> cachedRows = new HashMap<>();
     private Index index;
     private final Runnable invalidate = () -> index = null;
     private final Map<String, UUID> kennels = new LinkedHashMap<>();
@@ -74,6 +77,7 @@ public final class PetStore {
     }
 
     public boolean load() {
+        cachedRows.clear();
         loaded = false;
         deletionLogHealthy = false;
         if (session.exists()) {
@@ -228,7 +232,12 @@ public final class PetStore {
         }
         Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
         for (Pet pet : pets.values()) {
-            rows.put(pet.id().toString(), row(pet));
+            CachedRow cached = cachedRows.get(pet.id());
+            if (cached == null || cached.revision() != pet.revision()) {
+                cached = new CachedRow(pet.revision(), row(pet));
+                cachedRows.put(pet.id(), cached);
+            }
+            rows.put(pet.id().toString(), cached.values());
         }
         List<Map<String, Object>> kennelRows = new ArrayList<>();
         for (Map.Entry<String, UUID> entry : kennels.entrySet()) {
@@ -250,7 +259,7 @@ public final class PetStore {
             row.put("owner", entry.getValue().toString());
             kennelRows.add(row);
         }
-        return new Snapshot(rows, kennelRows);
+        return new Snapshot(Collections.unmodifiableMap(rows), kennelRows);
     }
 
     private static Map<String, Object> row(Pet pet) {
@@ -288,23 +297,23 @@ public final class PetStore {
         for (Need need : pet.announcedLowView()) {
             announced.add(need.name());
         }
-        put(row, "announced", announced);
+        put(row, "announced", List.copyOf(announced));
         List<Map<String, Object>> wordRows = new ArrayList<>();
         for (Map.Entry<String, Trick> entry : pet.words().entrySet()) {
             Map<String, Object> word = new LinkedHashMap<>();
             word.put("word", entry.getKey());
             word.put("trick", entry.getValue().name());
-            wordRows.add(word);
+            wordRows.add(Collections.unmodifiableMap(word));
         }
-        put(row, "words", wordRows);
+        put(row, "words", List.copyOf(wordRows));
         Map<String, Object> progress = new LinkedHashMap<>();
         for (Trick trick : pet.progressView().keySet()) {
             if (pet.progress(trick) > 0.0) {
                 progress.put(trick.name(), pet.progress(trick));
             }
         }
-        put(row, "progress", progress);
-        return row;
+        put(row, "progress", Collections.unmodifiableMap(progress));
+        return Collections.unmodifiableMap(row);
     }
 
     /** Mirrors YamlConfiguration.set: no key for null values or empty sections. */
@@ -496,9 +505,9 @@ public final class PetStore {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("trust", entry.trust()); row.put("reinforced-at", entry.reinforcedAt());
             row.put("nearby-at", entry.nearbyAt()); row.put("greeted-at", entry.greetedAt());
-            rows.put(id.toString(), row);
+            rows.put(id.toString(), Collections.unmodifiableMap(row));
         });
-        return rows;
+        return Collections.unmodifiableMap(rows);
     }
 
     private static void readMemories(ConfigurationSection section, net.tfminecraft.companionpets.pet.RelationshipMemory memory) {
@@ -549,6 +558,7 @@ public final class PetStore {
     public void add(Pet pet) {
         if (deleted.contains(pet.id())) throw new IllegalArgumentException("Cannot reuse a deleted pet ID");
         Pet previous = pets.put(pet.id(), pet);
+        cachedRows.remove(pet.id());
         if (previous != null && previous != pet) previous.indexChanged(null);
         pet.indexChanged(invalidate);
         index = null;
@@ -572,6 +582,7 @@ public final class PetStore {
         }
         deleted.add(id);
         pets.remove(id).indexChanged(null);
+        cachedRows.remove(id);
         index = null;
         return true;
     }
