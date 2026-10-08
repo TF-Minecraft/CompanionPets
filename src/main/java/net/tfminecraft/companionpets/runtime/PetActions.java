@@ -752,6 +752,7 @@ public final class PetActions {
     private void perform(Player player, Pet pet, Entity entity, Trick trick, boolean partial) {
         if (!training.checkTrick(player, pet, trick)) return;
         long now = System.currentTimeMillis();
+        anticipation.ownerCommanded(pet, now);
         if (pet.activity() == Activity.SLEEPING && trick != Trick.LAY && trick != Trick.FOLLOW && trick != Trick.COME && trick != Trick.SIT && trick != Trick.STAY) {
             PetFx.bar(player, pet.name() + " is resting. Tell " + PetTexts.him(pet.sex()) + " to follow");
             return;
@@ -1072,6 +1073,7 @@ public final class PetActions {
 
     private void call(Player player, Pet pet) {
         if (callsClosed) return;
+        anticipation.ownerCommanded(pet, System.currentTimeMillis());
         World world = Bukkit.getWorld(pet.worldName());
         int chunkX = ((int) Math.floor(pet.x())) >> 4;
         int chunkZ = ((int) Math.floor(pet.z())) >> 4;

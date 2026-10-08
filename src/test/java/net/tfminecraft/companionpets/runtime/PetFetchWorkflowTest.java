@@ -183,6 +183,7 @@ class PetFetchWorkflowTest {
     private Snowball throwToy() {
         var before = world.getEntities().stream().map(org.bukkit.entity.Entity::getUniqueId).toList();
         owner.getInventory().setItemInMainHand(toy.clone());
+        actions.anticipation().tick(System.currentTimeMillis());
         actions.useWorld(owner, owner.getInventory().getItemInMainHand(), null, null, false, true);
         return world.getEntities().stream().filter(Snowball.class::isInstance).map(Snowball.class::cast)
                 .filter(ball -> !before.contains(ball.getUniqueId())).findFirst().orElseThrow();
@@ -380,8 +381,10 @@ class PetFetchWorkflowTest {
     }
 
     @Test void ownAndForeignPetsRaceAndOnlyFirstArrivalCanCarryAndReturnToThrower() {
-        var foreignOwner = server.addPlayer(); foreignOwner.teleport(new Location(world, 20, 64, 0));
+        var foreignOwner = server.addPlayer(); foreignOwner.teleport(new Location(world, 10, 64, 0));
         Pet other = outsidePet(foreignOwner.getUniqueId(), "Luna", 2);
+        other.carers().reinforce(owner.getUniqueId(), 40, System.currentTimeMillis(), 0);
+        runtime.random().setSeed(4096);
         Snowball ball = throwToy(); var job = pet.fetch();
         assertNotNull(job); assertSame(job, other.fetch()); assertEquals(owner.getUniqueId(), job.throwerId());
         land(ball);
@@ -407,7 +410,7 @@ class PetFetchWorkflowTest {
     }
 
     @Test void everyParticipantStandsUpAndNavigatesToTheSameAirAndGroundToy() {
-        Pet other = outsidePet(UUID.randomUUID(), "Luna", -2);
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", -2);
         var firstBody = (WolfMock) runtime.entity(pet);
         var otherBody = (WolfMock) runtime.entity(other);
         // A stale native posture must not block the callback that clears it.
@@ -619,9 +622,9 @@ class PetFetchWorkflowTest {
     }
 
     @Test void onlyFollowingPetsChaseWhileAwakeSittingAndStayingPetsRemainInPlace() {
-        Pet sitting = outsidePet(UUID.randomUUID(), "Sit", -2); sitting.order(PetOrder.SIT);
-        Pet staying = outsidePet(UUID.randomUUID(), "Stay", 2); staying.order(PetOrder.STAY);
-        Pet anchored = outsidePet(UUID.randomUUID(), "Anchored", -3); anchored.staying(true);
+        Pet sitting = outsidePet(owner.getUniqueId(), "Sit", -2); sitting.order(PetOrder.SIT);
+        Pet staying = outsidePet(owner.getUniqueId(), "Stay", 2); staying.order(PetOrder.STAY);
+        Pet anchored = outsidePet(owner.getUniqueId(), "Anchored", -3); anchored.staying(true);
         var sittingBody = (WolfMock) runtime.entity(sitting);
         sittingBody.setSitting(true); sittingBody.setAware(false);
         ((WolfMock) runtime.entity(staying)).setAware(false);
@@ -652,7 +655,7 @@ class PetFetchWorkflowTest {
     }
 
     @Test void normalTickerReturnGoesToThrowerAndRewardsOnlyWinningPet() throws Exception {
-        Pet other = outsidePet(UUID.randomUUID(), "Luna", 2);
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
         pet.need(Need.MOOD, 10); other.need(Need.MOOD, 10); other.favoriteToy("STICK");
         land(throwToy()); var job = other.fetch();
         assertFalse(job.favorite(pet.id())); assertTrue(job.favorite(other.id()));
@@ -698,7 +701,7 @@ class PetFetchWorkflowTest {
     }
 
     @Test void droppingOutOfRaceDoesNotRemoveToyOrDetachRemainingPet() {
-        Pet other = outsidePet(UUID.randomUUID(), "Luna", 2);
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
         Snowball ball = throwToy(); var job = pet.fetch(); land(ball);
         actions.releaseFetch(pet, owner, true);
         assertSame(job, other.fetch()); assertEquals(1, items().size());
@@ -709,7 +712,7 @@ class PetFetchWorkflowTest {
     }
 
     @Test void repeatedThrowsCanSplitFocusWithoutDestroyingOldToy() {
-        Pet other = outsidePet(UUID.randomUUID(), "Luna", 2);
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
         Snowball first = throwToy(); var firstJob = pet.fetch();
         runtime.random().setSeed(4096); // First roll switches, second roll stays.
         Snowball second = throwToy();
@@ -746,7 +749,7 @@ class PetFetchWorkflowTest {
     }
 
     @Test void shutdownWithSeveralChasersPreservesExactlyOneToy() {
-        Pet other = outsidePet(UUID.randomUUID(), "Luna", 2);
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
         throwToy(); actions.stashLooseToys(); actions.stashLooseToys();
         assertNull(pet.fetch()); assertNull(other.fetch());
         assertEquals(1, items().size()); assertTrue(toy.isSimilar(items().getFirst().getItemStack()));
@@ -754,9 +757,9 @@ class PetFetchWorkflowTest {
     }
 
     @Test void distantStoredRestingAndIncompatiblePetsDoNotChase() throws Exception {
-        Pet distant = outsidePet(UUID.randomUUID(), "Far", 100);
-        Pet resting = outsidePet(UUID.randomUUID(), "Rest", 2); resting.order(PetOrder.LAY);
-        Pet stored = outsidePet(UUID.randomUUID(), "Stored", 2); stored.stored(true);
+        Pet distant = outsidePet(owner.getUniqueId(), "Far", 100);
+        Pet resting = outsidePet(owner.getUniqueId(), "Rest", 2); resting.order(PetOrder.LAY);
+        Pet stored = outsidePet(owner.getUniqueId(), "Stored", 2); stored.stored(true);
         var yaml = new YamlConfiguration();
         yaml.loadFromString("items: {toys: [STICK]}\npets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}, cat: {entity: CAT, egg: CAT_SPAWN_EGG, items: {toys: []}}}\n");
         runtime.config(CompanionConfig.load(runtime.plugin(), yaml));
@@ -766,4 +769,78 @@ class PetFetchWorkflowTest {
         assertNotNull(pet.fetch()); assertNull(distant.fetch()); assertNull(resting.fetch());
         assertNull(stored.fetch()); assertNull(cat.fetch());
     }
-}
+    private Snowball throwWithoutBehaviorPass(PlayerMock thrower) {
+        var before = world.getEntities().stream().map(org.bukkit.entity.Entity::getUniqueId).toList();
+        thrower.getInventory().setItemInMainHand(toy.clone());
+        actions.useWorld(thrower, thrower.getInventory().getItemInMainHand(), null, null, false, true);
+        return world.getEntities().stream().filter(Snowball.class::isInstance).map(Snowball.class::cast)
+                .filter(ball -> !before.contains(ball.getUniqueId())).findFirst().orElseThrow();
+    }
+
+    @Test void throwingRecruitsOnlyAttentionAndRecentFocusWithNoRadiusBystanders() {
+        Pet bystander = outsidePet(owner.getUniqueId(), "Luna", 2);
+        bystander.order(PetOrder.SIT);
+        owner.getInventory().setItemInMainHand(toy.clone()); long now = System.currentTimeMillis();
+        actions.anticipation().tick(now); assertTrue(actions.anticipation().active(pet));
+        bystander.order(PetOrder.FOLLOW);
+        actions.anticipation().cancel(pet, now);
+        assertTrue(actions.anticipation().attentive(pet, owner, now + 1500));
+        assertFalse(actions.anticipation().attentive(pet, owner, now + 1501));
+        Snowball ball = throwWithoutBehaviorPass(owner);
+        assertNotNull(pet.fetch()); assertNull(bystander.fetch()); land(ball);
+        assertEquals(1, pet.fetch().chasers().size());
+    }
+
+    @Test void expiredFocusAndOwnerCommandsCannotRecruitNearbyPets() {
+        owner.getInventory().setItemInMainHand(toy.clone()); long now = System.currentTimeMillis();
+        actions.anticipation().tick(now);
+        actions.anticipation().cancel(pet, now - 2000);
+        land(throwWithoutBehaviorPass(owner)); assertNull(pet.fetch()); assertEquals(1, items().size());
+        owner.getInventory().setItemInMainHand(toy.clone()); actions.anticipation().tick(now);
+        actions.anticipation().ownerCommanded(pet, now);
+        land(throwWithoutBehaviorPass(owner)); assertNull(pet.fetch()); assertEquals(2, items().size());
+        assertTrue(items().stream().noneMatch(item -> item.getPersistentDataContainer().has(runtime.toyKey())));
+    }
+
+    @Test void foreignThrowerReceivesToyAndGainsTrustOnlyWhenItIsDelivered() {
+        PlayerMock visitor = server.addPlayer(); visitor.teleport(new Location(world, 0, 64, 0));
+        owner.teleport(new Location(world, 10, 64, 0)); pet.personality(PetPersonality.PLAYFUL);
+        visitor.getInventory().setItemInMainHand(toy.clone()); runtime.random().setSeed(4096);
+        long now = System.currentTimeMillis(); actions.anticipation().tick(now);
+        assertTrue(actions.anticipation().attentive(pet, visitor, now));
+        assertEquals(0, pet.carers().trust(visitor.getUniqueId()));
+        land(throwWithoutBehaviorPass(visitor));
+        assertEquals(visitor.getUniqueId(), pet.fetch().throwerId());
+        var body = (org.bukkit.entity.Mob) runtime.entity(pet);
+        body.teleport(items().getFirst().getLocation()); assertTrue(actions.fetchActions().claim(pet));
+        assertEquals(0, pet.carers().trust(visitor.getUniqueId()));
+        body.teleport(visitor.getLocation()); actions.fetchActions().step(pet, body, now + 1000);
+        assertNull(pet.fetch()); assertEquals(3, pet.carers().trust(visitor.getUniqueId()));
+        assertEquals(1, items().size()); assertTrue(toy.isSimilar(items().getFirst().getItemStack()));
+        assertTrue(items().getFirst().getLocation().distanceSquared(visitor.getLocation()) < 9);
+        assertTrue(items().getFirst().getLocation().distanceSquared(owner.getLocation()) > 50);
+        visitor.getInventory().setItemInMainHand(toy.clone()); runtime.random().setSeed(4096);
+        actions.anticipation().tick(now + 2000); land(throwWithoutBehaviorPass(visitor));
+        body.teleport(org.bukkit.Bukkit.getEntity(pet.fetch().itemId()).getLocation()); assertTrue(actions.fetchActions().claim(pet));
+        body.teleport(visitor.getLocation()); actions.fetchActions().step(pet, body, now + 3000);
+        assertEquals(3, pet.carers().trust(visitor.getUniqueId()), "Existing care cooldown also applies to deliveries");
+    }
+
+    @Test void longForeignFetchUsesOwnerToThrowerLeashAndDropsCarriedToyWhenOwnerLeaves() {
+        PlayerMock visitor = server.addPlayer(); visitor.teleport(new Location(world, 0, 64, 0));
+        owner.teleport(new Location(world, 10, 64, 0)); pet.personality(PetPersonality.PLAYFUL);
+        visitor.getInventory().setItemInMainHand(toy.clone()); runtime.random().setSeed(4096);
+        long now = System.currentTimeMillis(); actions.anticipation().tick(now);
+        land(throwWithoutBehaviorPass(visitor)); var job = pet.fetch();
+        items().getFirst().teleport(new Location(world, 40, 64, 0));
+        var body = (org.bukkit.entity.Mob) runtime.entity(pet);
+        body.teleport(items().getFirst().getLocation()); actions.fetchActions().tick(now + 500);
+        assertSame(job, pet.fetch(), "Forty blocks to the toy do not break the owner-to-thrower leash");
+        assertTrue(actions.fetchActions().claim(pet)); assertTrue(items().isEmpty());
+        Location dropAt = body.getLocation(); owner.teleport(new Location(world, 13, 64, 0));
+        actions.fetchActions().tick(now + 1000); actions.fetchActions().tick(now + 1500);
+        assertNull(pet.fetch()); assertNull(pet.carriedToy()); assertEquals(1, items().size());
+        assertEquals(dropAt, items().getFirst().getLocation());
+        assertTrue(toy.isSimilar(items().getFirst().getItemStack())); assertEquals(0, items().getFirst().getPickupDelay());
+        assertFalse(items().getFirst().getPersistentDataContainer().has(runtime.toyKey()));
+    }}
