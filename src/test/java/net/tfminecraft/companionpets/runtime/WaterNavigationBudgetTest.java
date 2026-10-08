@@ -99,6 +99,8 @@ class WaterNavigationBudgetTest {
             return nullPath ? null : result;
         });
         when(path.hasPath()).thenAnswer(invocation -> hasPath);
+        when(path.getCurrentPath()).thenAnswer(invocation -> hasPath ? result : null);
+        when(result.getFinalPoint()).thenAnswer(invocation -> routedTo);
         when(path.moveTo(any(Pathfinder.PathResult.class), anyDouble())).thenAnswer(invocation -> {
             moves++; hasPath = true; return true;
         });
@@ -240,6 +242,19 @@ class WaterNavigationBudgetTest {
         assertEquals(1, searches); assertEquals(before, stops);
         assertEquals(PetOrder.SIT, pet.order());
         assertFalse(body.isSitting());
+        var posture = server.getMobGoals().getGoal(body,
+                GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "posture_navigation")));
+        Location ground = runtime.lastGround(pet);
+        body.teleport(ground.clone().add(0.8, 0, 0)); swimming = false;
+        goal.stop();
+        move.invoke(ticker, NOW + 1_500);
+        assertFalse(posture.shouldActivate(), "The posture goal must not cancel the unfinished shore route");
+        assertEquals(before, stops); assertTrue(hasPath);
+        assertFalse(body.isSitting());
+        body.teleport(ground); hasPath = false;
+        move.invoke(ticker, NOW + 2_000);
+        assertTrue(posture.shouldActivate());
+        assertTrue(body.isSitting(), "The pet sits down once its native route ends on the bank");
     }
 
     @Test void comeInWaterRestoresTheLayOrderButSwimsToLandBeforeLyingDown() throws Exception {
@@ -264,7 +279,7 @@ class WaterNavigationBudgetTest {
         assertTrue(body.getVelocity().getX() < 0);
         assertTrue(body.getVelocity().getY() > 0);
         assertTrue(goal.shouldStayActive());
-        body.teleport(ground); swimming = false;
+        body.teleport(ground); swimming = false; hasPath = false;
         assertFalse(goal.shouldStayActive());
         goal.stop();
         var ticker = new PetTicker(runtime, actions);

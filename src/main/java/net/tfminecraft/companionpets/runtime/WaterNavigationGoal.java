@@ -36,9 +36,25 @@ final class WaterNavigationGoal implements Goal<Mob> {
     }
 
     static void ensure(PetRuntime runtime, Pet pet, Mob body, PetActions actions) {
-        GoalKey<Mob> key = GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation"));
+        GoalKey<Mob> key = key(runtime);
         if (!(Bukkit.getMobGoals().getGoal(body, key) instanceof WaterNavigationGoal))
             Bukkit.getMobGoals().addGoal(body, 0, new WaterNavigationGoal(key, runtime, pet, body, actions));
+    }
+
+    /** A held pet that just left the water keeps walking its shore route until the native path ends. */
+    static boolean finishing(PetRuntime runtime, Mob body) {
+        return Bukkit.getMobGoals().getGoal(body, key(runtime)) instanceof WaterNavigationGoal goal && goal.finishing();
+    }
+
+    private static GoalKey<Mob> key(PetRuntime runtime) {
+        return GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation"));
+    }
+
+    // Only the shore route itself counts; a fetch or call destination yields to a new posture order.
+    private boolean finishing() {
+        if (exit == null || preferredExit || WaterEscape.needed(body)) return false;
+        var current = body.getPathfinder().getCurrentPath();
+        return current != null && near(current.getFinalPoint(), exit);
     }
 
     @Override public boolean shouldActivate() { return !pet.stored() && !pet.dead() && WaterEscape.needed(body); }
