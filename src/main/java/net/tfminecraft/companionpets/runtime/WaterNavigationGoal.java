@@ -20,6 +20,7 @@ final class WaterNavigationGoal implements Goal<Mob> {
     private final Mob body;
     private Location exit;
     private long routeAt;
+    private final java.util.Set<Location> failedExits = new java.util.HashSet<>();
 
     private WaterNavigationGoal(GoalKey<Mob> key, PetRuntime runtime, Pet pet, Mob body) {
         this.key = key; this.runtime = runtime; this.pet = pet; this.body = body;
@@ -49,15 +50,27 @@ final class WaterNavigationGoal implements Goal<Mob> {
         if (now < routeAt) return;
         routeAt = now + 500L;
         Location target = runtime.lastGround(pet);
-        if (target == null || !target.getWorld().equals(body.getWorld()) || !WaterEscape.safe(target))
+        if (target == null || !target.getWorld().equals(body.getWorld()) || !WaterEscape.safe(target)
+                || failedExits.contains(target))
             target = exit != null && exit.getWorld().equals(body.getWorld()) && WaterEscape.safe(exit)
-                    ? exit : WaterEscape.exit(body.getLocation());
-        if (target != null && (!target.equals(exit) || !body.getPathfinder().hasPath()))
-            PetMotion.moveTo(body, target, 1.1);
-        exit = target;
+                    ? exit : WaterEscape.exit(body.getLocation(), failedExits);
+        if (target == null) {
+            // Retry the candidates after a full round, so changed terrain/routes can recover.
+            failedExits.clear();
+            exit = null;
+            return;
+        }
+        if (target.equals(exit) && body.getPathfinder().hasPath()) return;
+        // Test one bank per cycle; never run native A* for every safe block in the shore scan.
+        var route = PetMotion.findPath(body, target);
+        if (route != null && route.canReachFinalPoint() && PetMotion.moveTo(body, route, 1.1)) exit = target;
+        else {
+            failedExits.add(target);
+            exit = null;
+        }
     }
 
-    @Override public void stop() { exit = null; routeAt = 0; }
+    @Override public void stop() { exit = null; routeAt = 0; failedExits.clear(); }
     @Override public GoalKey<Mob> getKey() { return key; }
     @Override public EnumSet<GoalType> getTypes() { return EnumSet.of(GoalType.MOVE); }
 }

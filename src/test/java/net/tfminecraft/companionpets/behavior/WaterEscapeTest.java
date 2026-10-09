@@ -3,6 +3,7 @@ package net.tfminecraft.companionpets.behavior;
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -39,10 +40,11 @@ class WaterEscapeTest {
         block(7, 63, 2, Material.STONE);
         Location shore = new Location(world, 4.5, 64, 2.5);
         Location owner = new Location(world, 7.5, 64, 2.5);
-        assertEquals(shore, WaterEscape.exit(from));
-        assertEquals(shore, WaterEscape.exit(from));
+        assertEquals(shore, WaterEscape.exit(from, Set.of()));
+        assertEquals(owner, WaterEscape.exit(from, Set.of(shore)));
+        assertNull(WaterEscape.exit(from, Set.of(shore, owner)));
         block(7, 64, 2, Material.WATER);
-        assertEquals(shore, WaterEscape.exit(from));
+        assertEquals(shore, WaterEscape.exit(from, Set.of()));
     }
 
     @Test void rejectsHazardsLowCeilingsAndUnloadedOrUnsupportedPositions() {
@@ -56,7 +58,7 @@ class WaterEscapeTest {
         assertFalse(WaterEscape.safe(at)); block(4, 65, 2, Material.AIR);
         block(4, 63, 2, Material.MAGMA_BLOCK); assertFalse(WaterEscape.safe(at));
         block(20, 63, 2, Material.STONE); assertFalse(WaterEscape.safe(new Location(world, 20.5, 64, 2.5)));
-        assertNull(WaterEscape.exit(new Location(world, 2.5, 62, 2.5)));
+        assertNull(WaterEscape.exit(new Location(world, 2.5, 62, 2.5), Set.of()));
     }
 
 }

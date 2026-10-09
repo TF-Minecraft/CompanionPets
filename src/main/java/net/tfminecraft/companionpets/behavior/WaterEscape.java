@@ -27,7 +27,7 @@ public final class WaterEscape {
         PetFx.lie(body, false);
     }
 
-    public static Location exit(Location from) {
+    public static Location exit(Location from, java.util.Set<Location> excluded) {
         World world = from.getWorld();
         Location nearest = null;
         double distance = Double.POSITIVE_INFINITY;
@@ -38,7 +38,7 @@ public final class WaterEscape {
                         y <= Math.min(world.getMaxHeight() - 2, from.getBlockY() + 8); y++) {
                     Location candidate = new Location(world, x + 0.5, y, z + 0.5);
                     double candidateDistance = candidate.distanceSquared(from);
-                    if (candidateDistance < distance && safe(candidate)) {
+                    if (candidateDistance < distance && !excluded.contains(candidate) && safe(candidate)) {
                         nearest = candidate;
                         distance = candidateDistance;
                     }

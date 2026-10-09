@@ -5,6 +5,10 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import com.destroystokyo.paper.entity.Pathfinder;
 import com.destroystokyo.paper.entity.ai.GoalKey;
 import net.tfminecraft.companionpets.body.Bodies;
@@ -22,6 +26,8 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Mob;
 import org.bukkit.util.Vector;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.block.BlockMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
@@ -42,6 +48,8 @@ class WaterNavigationGoalTest {
     private boolean swimming = true, hasPath;
     private boolean floor = true;
     private Location routedTo;
+    private final List<Location> searchedTargets = new ArrayList<>();
+    private final Set<Location> missingRoutes = new HashSet<>(), partialRoutes = new HashSet<>(), refusedRoutes = new HashSet<>();
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
@@ -77,10 +85,21 @@ class WaterNavigationGoalTest {
         pet.order(PetOrder.SIT);
         store.add(pet);
         path = mock(Pathfinder.class);
-        when(path.findPath(any(Location.class))).thenAnswer(invocation -> { searches++; return null; });
+        when(path.findPath(any(Location.class))).thenAnswer(invocation -> {
+            searches++;
+            Location target = invocation.getArgument(0, Location.class).clone();
+            searchedTargets.add(target);
+            if (missingRoutes.contains(target)) return null;
+            var route = mock(Pathfinder.PathResult.class);
+            when(route.getFinalPoint()).thenReturn(target);
+            when(route.canReachFinalPoint()).thenReturn(!partialRoutes.contains(target));
+            return route;
+        });
         when(path.hasPath()).thenAnswer(invocation -> hasPath);
-        when(path.moveTo(any(Location.class), anyDouble())).thenAnswer(invocation -> {
-            moves++; routedTo = invocation.getArgument(0, Location.class).clone(); hasPath = true; return true;
+        when(path.moveTo(any(Pathfinder.PathResult.class), anyDouble())).thenAnswer(invocation -> {
+            moves++; routedTo = invocation.getArgument(0, Pathfinder.PathResult.class).getFinalPoint().clone();
+            hasPath = !refusedRoutes.contains(routedTo);
+            return hasPath;
         });
         doAnswer(invocation -> { stops++; hasPath = false; return null; }).when(path).stopPathfinding();
         body = new WolfMock(server, UUID.randomUUID()) {
@@ -125,9 +144,10 @@ class WaterNavigationGoalTest {
         goal.tick(NOW);
         assertEquals(ground, routedTo); assertEquals(velocity, body.getVelocity());
         assertTrue(body.isAware()); assertFalse(body.isSitting());
-        assertEquals(1, moves); assertEquals(0, searches); assertEquals(0, stops);
+        assertEquals(1, moves); assertEquals(1, searches); assertEquals(0, stops);
         goal.tick(NOW + 499); goal.tick(NOW + 500);
         assertEquals(1, moves, "A live route is preserved");
+        assertEquals(1, searches);
         hasPath = false; goal.tick(NOW + 999); assertEquals(1, moves);
         goal.tick(NOW + 1000); assertEquals(2, moves);
         swimming = false; assertFalse(goal.shouldStayActive());
@@ -150,7 +170,54 @@ class WaterNavigationGoalTest {
         goal.tick(NOW); assertNotNull(routedTo); assertEquals(1, moves);
         floor = false; goal.tick(NOW + 500); assertEquals(1, moves);
         assertTrue(body.isAware()); assertEquals(new Vector(), body.getVelocity());
-        assertEquals(0, searches); assertEquals(0, stops);
+        assertEquals(1, searches); assertEquals(0, stops);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true,missing", "true,partial", "true,refused", "false,missing", "false,partial", "false,refused"})
+    void failedRememberedOrNearestBankYieldsToAnotherCandidateOnTheNextCycle(boolean remembered, String failure) {
+        Location first;
+        if (remembered) {
+            swimming = false; runtime.rememberGround(pet, body);
+            first = runtime.lastGround(pet);
+            swimming = true; body.teleport(first.clone().add(3, 0, 0));
+        } else first = net.tfminecraft.companionpets.behavior.WaterEscape.exit(body.getLocation(), Set.of());
+        switch (failure) {
+            case "missing" -> missingRoutes.add(first);
+            case "partial" -> partialRoutes.add(first);
+            case "refused" -> refusedRoutes.add(first);
+            default -> fail("Unknown routing failure");
+        }
+        var velocity = new Vector(.12, -.04, .03); body.setVelocity(velocity);
+        goal.tick(NOW);
+        assertEquals(List.of(first), searchedTargets); assertFalse(hasPath);
+        if (!failure.equals("refused")) assertEquals(0, moves);
+        goal.tick(NOW + 499); assertEquals(1, searches);
+        goal.tick(NOW + 500);
+        assertEquals(2, searches); assertNotEquals(first, searchedTargets.getLast());
+        assertEquals(searchedTargets.getLast(), routedTo); assertTrue(hasPath);
+        goal.tick(NOW + 1000); assertEquals(2, searches, "Preserve the replacement route");
+        assertEquals(velocity, body.getVelocity()); assertEquals(0, stops);
+    }
+
+    @Test void aFailedCachedRouteDoesNotPinThePetToItsOriginalBank() {
+        goal.tick(NOW); Location first = routedTo;
+        hasPath = false; missingRoutes.add(first);
+        goal.tick(NOW + 500); assertEquals(2, searches); assertEquals(1, moves);
+        goal.tick(NOW + 1000);
+        assertEquals(3, searches); assertEquals(2, moves); assertNotEquals(first, routedTo);
+        assertEquals(0, stops);
+    }
+
+    @Test void exhaustedCandidatesAndGoalRestartsAllowRecoveredRoutesToBeRetried() {
+        Location first = net.tfminecraft.companionpets.behavior.WaterEscape.exit(body.getLocation(), Set.of());
+        missingRoutes.add(first); goal.tick(NOW); assertFalse(hasPath);
+        floor = false; goal.tick(NOW + 500); assertEquals(1, searches);
+        floor = true; missingRoutes.clear(); goal.tick(NOW + 1000);
+        assertEquals(first, routedTo); assertEquals(2, searches); assertTrue(hasPath);
+        hasPath = false; missingRoutes.add(first); goal.tick(NOW + 1500);
+        goal.stop(); missingRoutes.clear(); goal.tick(NOW + 1501);
+        assertEquals(first, routedTo); assertEquals(4, searches); assertTrue(hasPath);
     }
 
     @Test void fetchAndCallOwnMoveInWaterWithoutTheWaterGoalReplacingTheirRoutes() {
