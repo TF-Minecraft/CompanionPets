@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Mob;
@@ -75,6 +77,7 @@ final class PetFetchActions {
             return;
         }
         register(job, ball);
+        player.getWorld().playSound(eye, Sound.ENTITY_SNOWBALL_THROW, SoundCategory.PLAYERS, .6F, 1F);
         actions.anticipation().threw(player);
         long now = System.currentTimeMillis();
         for (Pet pet : runtime.store().active()) {

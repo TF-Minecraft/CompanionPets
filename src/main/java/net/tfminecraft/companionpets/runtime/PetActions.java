@@ -503,7 +503,7 @@ public final class PetActions {
         Pet pet = runtime.store().get(holder.petId());
         if (pet == null) return;
         boolean owner = pet.ownerId().equals(player.getUniqueId());
-        int tricksSlot = owner ? PetMenus.careSlot(PetMenus.TRICKS_SLOT, holder.petHouseBack()) : PetMenus.TRICKS_SLOT;
+        int tricksSlot = owner ? PetMenus.careSlot(PetMenus.TRICKS_SLOT, holder.petHouseBack(), pet.stored()) : PetMenus.TRICKS_SLOT;
         if (slot == tricksSlot) {
             menus.openLearned(player, pet);
             return;
@@ -518,16 +518,16 @@ public final class PetActions {
             if (holder.petHouseBack()) menus.openKennel(player, holder.petHousePage(), holder.house());
             return;
         }
-        if (slot == PetMenus.careSlot(PetMenus.RELEASE_SLOT, holder.petHouseBack())) {
+        if (slot == PetMenus.careSlot(PetMenus.RELEASE_SLOT, holder.petHouseBack(), pet.stored())) {
             beginRelease(player, pet);
             return;
         }
-        if (slot == PetMenus.careSlot(PetMenus.BRING_OUT_SLOT, holder.petHouseBack()) && pet.stored()) {
+        if (slot == PetMenus.careSlot(PetMenus.BRING_OUT_SLOT, holder.petHouseBack(), pet.stored()) && pet.stored()) {
             takeOut(player, pet, holder.house());
             menus.openCare(player, pet, holder.petHouseBack(), holder.petHousePage(), holder.house());
             return;
         }
-        if (slot == PetMenus.careSlot(PetMenus.STORE_SLOT, holder.petHouseBack()) && !pet.stored()) {
+        if (slot == PetMenus.careSlot(PetMenus.STORE_SLOT, holder.petHouseBack(), pet.stored()) && !pet.stored()) {
             storePet(player, pet);
             player.closeInventory();
         }

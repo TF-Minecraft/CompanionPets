@@ -1874,7 +1874,7 @@ class PetInteractionTest {
         pet.progress(Trick.FOLLOW, 73); pet.bindWord("here", Trick.FOLLOW); pet.need(Need.HUNGER, 55);
         var holder = new net.tfminecraft.companionpets.gui.MenuHolder(net.tfminecraft.companionpets.gui.MenuHolder.Kind.CARE, pet.id(), null);
         actions.clickMenu(player, holder, net.tfminecraft.companionpets.gui.PetMenus.careSlot(
-                net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, false), null, false, false, false);
+                net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, false, pet.stored()), null, false, false, false);
         assertEquals(1, bodyRemovals, "Pet House must not detach by revealing the vanilla mob");
         assertFalse(body.isValid());
         assertTrue(pet.stored()); assertNull(pet.entityId());
@@ -2140,8 +2140,8 @@ class PetInteractionTest {
     @Test void profileHasNoDedicatedFollowButton() {
         actions.menus().openCare(player, pet);
         var holder = (net.tfminecraft.companionpets.gui.MenuHolder) player.getOpenInventory().getTopInventory().getHolder();
-        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder.getInventory().getItem(40).getType());
-        pet.order(PetOrder.SIT); actions.clickMenu(player, holder, 40, null, false, false, false);
+        assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, holder.getInventory().getItem(39).getType());
+        pet.order(PetOrder.SIT); actions.clickMenu(player, holder, 39, null, false, false, false);
         assertEquals(PetOrder.SIT, pet.order());
     }
 
