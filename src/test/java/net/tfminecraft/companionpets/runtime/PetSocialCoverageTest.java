@@ -158,6 +158,21 @@ class PetSocialCoverageTest {
         assertEquals(6, restored.get(second.id()).friends().trust(first.id()));
     }
 
+    @Test void boundedMeetingEndsInNoneAndReleasesVanillaTeleport() {
+        assertTrue(social().trigger(owner, first, "sniff", now));
+        var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
+        var before = new org.bukkit.event.entity.EntityTeleportEvent(a, a.getLocation(), owner.getLocation());
+        listener.onTeleport(before); assertTrue(before.isCancelled());
+        social().advance(first, now + 100); social().advance(first, now + 60_000);
+        assertEnded();
+        for (Pet pet : List.of(first, second)) {
+            assertEquals(Activity.NONE, pet.activity()); assertEquals(PetOrder.FOLLOW, pet.order());
+            var body = runtime.entity(pet);
+            var after = new org.bukkit.event.entity.EntityTeleportEvent(body, body.getLocation(), owner.getLocation());
+            listener.onTeleport(after); assertFalse(after.isCancelled());
+        }
+    }
+
     @Test void ownerCalmsBarkingPetsWithRepeatedActualInteractions() {
         territorial(); assertTrue(social().trigger(owner, first, "bark", now));
         assertNotNull(social().status(first)); assertNotNull(social().status(second));

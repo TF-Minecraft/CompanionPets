@@ -957,10 +957,12 @@ class PetInteractionTest {
         var key = com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
                 new NamespacedKey(runtime.plugin(), "toy_navigation"));
         var goal = org.bukkit.Bukkit.getMobGoals().getGoal(body, key); assertTrue(goal.shouldActivate());
+        assertVanillaTeleportBlocked(true);
         actions.anticipation().advance(pet, now + 19_999); assertTrue(actions.anticipation().active(pet));
         actions.anticipation().tick(now + 20_000);
         assertFalse(actions.anticipation().active(pet)); assertEquals(Activity.NONE, pet.activity());
         assertFalse(goal.shouldActivate()); assertEquals(0, tailHz); assertEquals(0, pet.toyExcitedUntilMillis());
+        assertEquals(PetOrder.FOLLOW, pet.order()); assertVanillaTeleportBlocked(false);
         for (int i = 1; i <= 10; i++) actions.anticipation().tick(now + 20_000 + i * 500);
         assertFalse(actions.anticipation().active(pet), "The next manager ticks cannot reacquire the boring toy");
         assertTrue(body.isAware(), "Native exploration can resume");
@@ -1364,6 +1366,13 @@ class PetInteractionTest {
         actions.greetings().tick(now + 310_000);
         assertFalse(actions.greeting(pet)); assertEquals(Activity.NONE, pet.activity());
         assertEquals(PetOrder.FOLLOW, pet.order());
+        assertVanillaTeleportBlocked(false);
+    }
+
+    private void assertVanillaTeleportBlocked(boolean blocked) {
+        var event = new org.bukkit.event.entity.EntityTeleportEvent(body, body.getLocation(), player.getLocation());
+        new net.tfminecraft.companionpets.listen.PetListener(runtime, actions).onTeleport(event);
+        assertEquals(blocked, event.isCancelled());
     }
 
     @Test void shortAbsencesAndCooldownDoNotCauseRepeatedGreetings() {

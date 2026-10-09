@@ -198,6 +198,204 @@ class PetFetchWorkflowTest {
         return world.getEntities().stream().filter(Item.class::isInstance).map(Item.class::cast).toList();
     }
 
+    private void move(PetTicker ticker, long now) throws Exception {
+        var method = PetTicker.class.getDeclaredMethod("move", long.class);
+        method.setAccessible(true);
+        try { method.invoke(ticker, now); }
+        catch (java.lang.reflect.InvocationTargetException ex) {
+            if (ex.getCause() instanceof Exception cause) throw cause;
+            throw (Error) ex.getCause();
+        }
+    }
+
+    private void assertTeleport(Pet target, boolean blocked) {
+        var body = runtime.entity(target);
+        var event = new org.bukkit.event.entity.EntityTeleportEvent(body, body.getLocation(), owner.getLocation());
+        listener.onTeleport(event);
+        assertEquals(blocked, event.isCancelled());
+    }
+
+    private void assertReleased(Pet target) {
+        assertNull(target.fetch());
+        assertEquals(PetOrder.FOLLOW, target.order());
+        assertEquals(Activity.NONE, target.activity());
+        assertFalse(actions.fetchingOrReturning(target));
+        assertTeleport(target, false);
+    }
+
+    private Snowball throwFor(boolean foreign) {
+        if (!foreign) return throwToy();
+        var visitor = server.addPlayer(); visitor.teleport(owner.getLocation());
+        pet.personality(PetPersonality.PLAYFUL);
+        visitor.getInventory().setItemInMainHand(toy.clone()); runtime.random().setSeed(4096);
+        actions.anticipation().tick(System.currentTimeMillis());
+        return throwWithoutBehaviorPass(visitor);
+    }
+
+    @Test void longThrowAndReturnKeepMovingBeyondTwelveBlocks() throws Exception {
+        Snowball ball = throwToy(); ball.teleport(new Location(world, 40, 64, 0));
+        listener.onToyHit(new ProjectileHitEvent(ball)); var job = pet.fetch();
+        var body = (FetchWolf) runtime.entity(pet); var ticker = new PetTicker(runtime, actions);
+        long now = System.currentTimeMillis();
+        for (int x = 1; x <= 40; x++) {
+            body.teleport(new Location(world, x, 64, 0)); move(ticker, now + x * 500L);
+            assertSame(job, pet.fetch()); assertTeleport(pet, true);
+        }
+        assertEquals(FetchPhase.CARRY, job.phase());
+        for (int x = 39; x >= 3; x--) {
+            body.teleport(new Location(world, x, 64, 0)); move(ticker, now + (80 - x) * 500L);
+            assertSame(job, pet.fetch());
+        }
+        body.teleport(owner.getLocation()); move(ticker, now + 40_000L);
+        assertReleased(pet); assertEquals(1, items().size());
+        assertTrue(toy.isSimilar(items().getFirst().getItemStack()));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void stuckCarrierReturnsExactlyOneToyToItsThrower(boolean foreign) throws Exception {
+        land(throwFor(foreign)); var job = pet.fetch();
+        var thrower = org.bukkit.Bukkit.getPlayer(job.throwerId());
+        var body = (FetchWolf) runtime.entity(pet);
+        body.teleport(items().getFirst().getLocation()); assertTrue(actions.fetchActions().claim(pet));
+        thrower.teleport(new Location(world, 0, 80, 0));
+        var ticker = new PetTicker(runtime, actions); long now = System.currentTimeMillis();
+        move(ticker, now); move(ticker, now + 9_999L); assertSame(job, pet.fetch()); assertTeleport(pet, true);
+        move(ticker, now + 10_000L); assertReleased(pet);
+        move(ticker, now + 20_000L); actions.fetchActions().tick(now + 130_000L);
+        assertEquals(1, items().size()); assertNull(pet.carriedToy());
+        assertEquals(PetRuntime.inFront(thrower), items().getFirst().getLocation());
+        assertTrue(toy.isSimilar(items().getFirst().getItemStack()));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void movingCarrierExpiresAtTwoMinutesFromPickup(boolean foreign) throws Exception {
+        land(throwFor(foreign)); var body = (FetchWolf) runtime.entity(pet);
+        var job = pet.fetch(); var thrower = org.bukkit.Bukkit.getPlayer(job.throwerId());
+        long now = System.currentTimeMillis();
+        // Time spent on the ground must not shorten the carry deadline.
+        body.teleport(items().getFirst().getLocation()); assertTrue(actions.fetchActions().claim(pet, now + 50_000L));
+        var ticker = new PetTicker(runtime, actions);
+        for (int second = 0; second < 120; second++) {
+            body.teleport(new Location(world, 30 + second % 2 * 2, 64, 0));
+            move(ticker, now + 50_000L + second * 1000L);
+            actions.fetchActions().tick(now + 50_000L + second * 1000L);
+            assertSame(job, pet.fetch());
+        }
+        actions.fetchActions().tick(now + 169_999L); assertSame(job, pet.fetch());
+        actions.fetchActions().tick(now + 170_000L); assertReleased(pet);
+        actions.fetchActions().tick(now + 180_000L);
+        assertEquals(1, items().size()); assertNull(pet.carriedToy());
+        assertEquals(PetRuntime.inFront(thrower), items().getFirst().getLocation());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void stuckGroundChaserLeavesTheSameToyPickable(boolean foreign) throws Exception {
+        land(throwFor(foreign)); Item original = items().getFirst();
+        original.teleport(new Location(world, 30, 80, 0));
+        var ticker = new PetTicker(runtime, actions); long now = System.currentTimeMillis();
+        move(ticker, now); move(ticker, now + 10_000L); assertReleased(pet);
+        actions.fetchActions().tick(now + 100_000L);
+        assertEquals(java.util.List.of(original), items()); assertEquals(0, original.getPickupDelay());
+        assertFalse(original.getPersistentDataContainer().has(runtime.toyKey()));
+        assertTrue(toy.isSimilar(original.getItemStack()));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void stuckAirChaserLeavesOneToyToLand(boolean foreign) throws Exception {
+        Snowball ball = throwFor(foreign); ball.teleport(new Location(world, 30, 80, 0));
+        var ticker = new PetTicker(runtime, actions); long now = System.currentTimeMillis();
+        move(ticker, now); move(ticker, now + 10_000L); assertReleased(pet);
+        listener.onToyHit(new ProjectileHitEvent(ball)); actions.fetchActions().tick(now + 100_000L);
+        assertEquals(1, items().size()); assertTrue(toy.isSimilar(items().getFirst().getItemStack()));
+    }
+
+    @Test void stalkingPouncingAndWaitingAtTheToyDoNotCountAsStuck() throws Exception {
+        land(throwToy()); var job = pet.fetch(); var ticker = new PetTicker(runtime, actions);
+        long now = System.currentTimeMillis(); move(ticker, now);
+        var stalk = job.stalk(pet.id(), now + 9000L);
+        move(ticker, now + 10_000L); assertSame(job, pet.fetch());
+        stalk.pounceAt = now + 10_000L;
+        move(ticker, now + 30_000L); assertSame(job, pet.fetch());
+        stalk.finished = true;
+        move(ticker, now + 30_001L); move(ticker, now + 40_000L); assertSame(job, pet.fetch());
+        // At the pickup destination there is no immobility timeout, including a waiting chaser.
+        runtime.entity(pet).teleport(items().getFirst().getLocation().clone().add(-1.9, 0, 0));
+        move(ticker, now + 40_001L); move(ticker, now + 55_000L); assertSame(job, pet.fetch());
+        runtime.entity(pet).teleport(new Location(world, 1, 64, 0));
+        move(ticker, now + 55_001L); move(ticker, now + 65_001L); assertReleased(pet);
+    }
+
+    @Test void stuckFollowerDetachesWithoutTouchingTheCarriersToy() throws Exception {
+        Pet other = outsidePet(owner.getUniqueId(), "Luna", 2); land(throwToy());
+        var carrier = (FetchWolf) runtime.entity(pet); carrier.teleport(items().getFirst().getLocation());
+        assertTrue(actions.fetchActions().claim(pet)); var job = pet.fetch();
+        runtime.entity(other).teleport(new Location(world, 40, 64, 0));
+        var ticker = new PetTicker(runtime, actions); long now = System.currentTimeMillis();
+        for (int second = 0; second <= 10; second++) {
+            carrier.teleport(new Location(world, 20 + second % 2 * 2, 64, 0));
+            move(ticker, now + second * 1000L);
+        }
+        assertReleased(other); assertSame(job, pet.fetch()); assertTrue(items().isEmpty());
+        carrier.teleport(owner.getLocation()); actions.fetchActions().step(pet, carrier);
+        assertReleased(pet); assertEquals(1, items().size());
+    }
+
+    @Test void stuckFetchReturnCancelsAfterTenSecondsEvenIfOwnerWalks() throws Exception {
+        var body = (FetchWolf) runtime.entity(pet); body.teleport(new Location(world, 30, 64, 0));
+        actions.roaming().returnFromFetch(pet, owner, 1.3);
+        var ticker = new PetTicker(runtime, actions); long now = System.currentTimeMillis();
+        move(ticker, now); assertTeleport(pet, true);
+        for (int second = 1; second < 10; second++) {
+            owner.teleport(new Location(world, -second, 64, 0)); move(ticker, now + second * 1000L);
+            assertTrue(actions.roaming().returningFromFetch(pet));
+        }
+        move(ticker, now + 10_000L); assertReleased(pet); assertEquals(30, body.getLocation().getX());
+    }
+
+    @Test void distantFetchReturnKeepsMovingUntilArrival() throws Exception {
+        var body = (FetchWolf) runtime.entity(pet); body.teleport(new Location(world, 40, 64, 0));
+        actions.roaming().returnFromFetch(pet, owner, 1.3);
+        var ticker = new PetTicker(runtime, actions); long now = System.currentTimeMillis();
+        for (int x = 40; x > 2; x--) {
+            body.teleport(new Location(world, x, 64, 0)); move(ticker, now + (40 - x) * 1000L);
+            assertTrue(actions.roaming().returningFromFetch(pet));
+        }
+        body.teleport(owner.getLocation()); move(ticker, now + 40_000L); assertReleased(pet);
+    }
+
+    @Test void slowHorizontalMovementCountsButVerticalMovementDoesNot() throws Exception {
+        var body = (FetchWolf) runtime.entity(pet); body.teleport(new Location(world, 30, 64, 0));
+        actions.roaming().returnFromFetch(pet, owner, 1.3);
+        var ticker = new PetTicker(runtime, actions); long now = System.currentTimeMillis();
+        for (int second = 0; second <= 30; second++) {
+            body.teleport(new Location(world, 30 + second * .25, 64, 0));
+            move(ticker, now + second * 1000L); assertTrue(actions.roaming().returningFromFetch(pet));
+        }
+        double x = body.getLocation().getX();
+        for (int second = 31; second < 39; second++) {
+            body.teleport(new Location(world, x, 64 + second % 2, 0)); move(ticker, now + second * 1000L);
+        }
+        assertReleased(pet);
+    }
+
+    @Test void motionWatchResetsOnPhaseTargetAndBodyChanges() throws Exception {
+        Snowball ball = throwToy(); ball.teleport(new Location(world, 30, 64, 0));
+        var ticker = new PetTicker(runtime, actions); long now = System.currentTimeMillis();
+        move(ticker, now); land(ball); items().getFirst().teleport(new Location(world, 30, 64, 0));
+        move(ticker, now + 9000L); move(ticker, now + 10_000L); assertNotNull(pet.fetch());
+        Item previous = items().getFirst(); Item replacement = world.dropItem(previous.getLocation(), toy.clone());
+        pet.fetch().itemId(replacement.getUniqueId()); previous.remove();
+        move(ticker, now + 18_000L); move(ticker, now + 20_000L); assertNotNull(pet.fetch());
+        var oldBody = runtime.entity(pet); var newBody = new FetchWolf(server, UUID.randomUUID(), navigationTargets, navigationSpeeds);
+        server.registerEntity(newBody); newBody.teleport(oldBody.getLocation()); oldBody.remove(); runtime.remember(pet, newBody);
+        move(ticker, now + 27_000L); move(ticker, now + 30_000L); assertNotNull(pet.fetch());
+        move(ticker, now + 37_000L); assertReleased(pet); assertEquals(1, items().size());
+    }
+
     @Test void oneConfiguredPaceAppliesToCarrierAndFollowersWithoutFavoriteBonus() {
         var yaml = new YamlConfiguration();
         yaml.set("items.toys", java.util.List.of("STICK")); yaml.set("pets.wolf.entity", "WOLF");

@@ -262,6 +262,23 @@ class PetFetchActionsCoverageTest {
         actions.stashLooseToys(); assertTrue(items().isEmpty());
     }
 
+    @Test void catsStalkingAndPouncingAreExcludedFromTheMotionWatch() throws Exception {
+        pet.order(PetOrder.STAY); var cat = cat(false); var body = (Cat) runtime.entity(cat);
+        Item item = land(throwToy()); body.teleport(item.getLocation());
+        actions.fetchActions().step(cat, body, 1000);
+        var job = cat.fetch(); assertTrue(job.stalking(cat.id()));
+        body.teleport(new Location(world, 30, 64, 0));
+        var ticker = new PetTicker(runtime, actions);
+        var watch = PetTicker.class.getDeclaredMethod("watchFetchMotion", Pet.class, Mob.class, long.class);
+        watch.setAccessible(true);
+        watch.invoke(ticker, cat, body, 1000L); watch.invoke(ticker, cat, body, 11_000L);
+        assertSame(job, cat.fetch()); assertTrue(body.isSneaking());
+        actions.fetchActions().step(cat, body, 2500);
+        assertTrue(job.pouncing(cat.id()));
+        watch.invoke(ticker, cat, body, 12_000L); watch.invoke(ticker, cat, body, 22_000L);
+        assertSame(job, cat.fetch()); assertEquals(FetchPhase.GROUND, job.phase());
+    }
+
     @Test void catInspectionRestoresItsPreviousCrouchWhenItClaimsOrLeavesTheRace() {
         pet.order(PetOrder.STAY); var cat = cat(false); var body = (Cat) runtime.entity(cat);
         var item = land(throwToy()); body.teleport(item.getLocation());

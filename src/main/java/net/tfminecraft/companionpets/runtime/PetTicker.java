@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import net.tfminecraft.companionpets.item.ItemRef;
 import net.tfminecraft.companionpets.item.HeldItem;
 import org.bukkit.Particle;
@@ -32,6 +33,8 @@ import net.tfminecraft.companionpets.pet.Need;
 import net.tfminecraft.companionpets.pet.Pet;
 import net.tfminecraft.companionpets.pet.Presence;
 import net.tfminecraft.companionpets.play.FavoriteToy;
+import net.tfminecraft.companionpets.play.FetchJob;
+import net.tfminecraft.companionpets.play.FetchPhase;
 import net.tfminecraft.companionpets.session.TrainingSession;
 import net.tfminecraft.companionpets.text.PetTexts;
 
@@ -44,6 +47,7 @@ public final class PetTicker implements Runnable {
     private final Map<UUID, Long> missingBodyDelay = new HashMap<>();
     private long lastCareAt;
     private final Map<UUID, Locomotion.Mode> previousModes = new HashMap<>();
+    private final Map<UUID, FetchMotion> fetchMotion = new HashMap<>();
 
     public PetTicker(PetRuntime runtime, PetActions actions) {
         this.runtime = runtime;
@@ -235,6 +239,11 @@ public final class PetTicker implements Runnable {
 
     private void move(long now) {
         runtime.forgetMissingGround();
+        fetchMotion.keySet().removeIf(id -> {
+            Pet pet = runtime.store().get(id);
+            return pet == null || pet.stored() || pet.dead() || runtime.entity(pet) == null
+                    || !actions.fetchingOrReturning(pet);
+        });
         for (Pet pet : runtime.store().active()) {
             Entity body = runtime.entity(pet);
             if (!(body instanceof Mob mob)) {
@@ -245,6 +254,7 @@ public final class PetTicker implements Runnable {
                 continue;
             }
             Player owner = Bukkit.getPlayer(pet.ownerId());
+            watchFetchMotion(pet, mob, now);
             if (WaterEscape.needed(mob)) {
                 if (pet.fetch() == null && pet.activity() != Activity.ATTENDING) {
                     actions.roaming().cancelWithPosture(pet);
@@ -319,6 +329,46 @@ public final class PetTicker implements Runnable {
             actions.moments().tick(pet, mob, owner, mode, now);
         }
     }
+
+    private void watchFetchMotion(Pet pet, Mob body, long now) {
+        FetchJob job = pet.fetch();
+        boolean returning = actions.roaming().returningFromFetch(pet);
+        if (job == null && !returning || job != null && (job.stalking(pet.id()) || job.pouncing(pet.id()))) {
+            fetchMotion.remove(pet.id());
+            return;
+        }
+        Location destination = job == null ? actions.roaming().destination(pet) : actions.fetchActions().destination(pet);
+        Location at = body.getLocation();
+        // Nearby chasers may intentionally wait while another pet picks up the toy.
+        double arrival = job != null && job.phase() == FetchPhase.CARRY
+                ? pet.id().equals(job.carrierId()) ? 2.2 : 1.0 : 2.0;
+        if (destination == null || at.getWorld().equals(destination.getWorld()) && at.distanceSquared(destination) <= arrival * arrival) {
+            fetchMotion.remove(pet.id());
+            return;
+        }
+        UUID targetId = job == null ? pet.ownerId() : actions.fetchActions().destinationId(pet);
+        FetchPhase phase = job == null ? null : job.phase();
+        FetchMotion previous = fetchMotion.get(pet.id());
+        // Track destination identity, so a walking owner does not reset a stuck pet's clock.
+        if (previous == null || previous.job != job || previous.phase != phase
+                || !java.util.Objects.equals(previous.targetId, targetId) || !previous.bodyId.equals(body.getUniqueId())
+                || !previous.at.getWorld().equals(at.getWorld()) || !previous.destinationWorld.equals(destination.getWorld())
+                || horizontalDistanceSquared(previous.at, at) >= 1.0) {
+            fetchMotion.put(pet.id(), new FetchMotion(job, phase, targetId, body.getUniqueId(), at.clone(), destination.getWorld(), now));
+        } else if (now - previous.since >= 10_000L) {
+            if (job != null) actions.fetchActions().releaseFetch(pet, true);
+            else actions.roaming().cancel(pet);
+            fetchMotion.remove(pet.id());
+        }
+    }
+
+    private static double horizontalDistanceSquared(Location from, Location to) {
+        double dx = to.getX() - from.getX(), dz = to.getZ() - from.getZ();
+        return dx * dx + dz * dz;
+    }
+
+    private record FetchMotion(FetchJob job, FetchPhase phase, UUID targetId, UUID bodyId,
+                               Location at, World destinationWorld, long since) { }
 
     private void stepMode(Pet pet, Mob mob, Player owner, Locomotion.Mode mode, long now) {
         boolean sameWorld = owner != null && owner.isOnline() && mob.getWorld().equals(owner.getWorld());
