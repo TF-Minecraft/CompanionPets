@@ -47,8 +47,9 @@ class CommandLifecycleTest {
         assertTrue(player.nextMessage().contains("staff only"));
         player.setOp(true);
         assertEquals(List.of("testpet"), complete("testpet"));
-        assertEquals(List.of("beagle", "cat", "catblack", "catfunny", "catorange", "chihuahua", "corgi",
-                "fox", "frog", "golden", "husky", "mainecoon", "wolf"), complete("testpet", ""));
+        assertEquals(List.of("beagle", "bernesse", "bordercollie", "cat", "catblack", "catfunny",
+                "catgray", "catorange", "cattabby", "chihuahua", "corgi", "fox", "frog", "golden",
+                "husky", "lagottoromagnolo", "mainecoon", "wolf", "yorkshire"), complete("testpet", ""));
     }
 
 

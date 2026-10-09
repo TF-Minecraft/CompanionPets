@@ -67,6 +67,43 @@ pets:
     model: frog                 # Visible frog supplied by ModelEngine.
     egg: mmoitems:PETS:PET_FROG_EGG # Registered MMOItems hatching item.
 
+  bernesse:
+    species: dog
+    model: bernesse
+    egg: mmoitems:PETS:PET_BERNESSE_EGG
+    sounds:
+      preset: wolf
+      pitch: 0.9
+  bordercollie:
+    species: dog
+    model: bordercollie
+    egg: mmoitems:PETS:PET_BORDERCOLLIE_EGG
+    sounds:
+      preset: wolf
+      pitch: 1.0
+  catgray:
+    species: cat
+    model: catgray
+    egg: mmoitems:PETS:PET_CATGRAY_EGG
+  cattabby:
+    species: cat
+    model: cattabby
+    egg: mmoitems:PETS:PET_CATTABBY_EGG
+  lagottoromagnolo:
+    species: dog
+    model: lagottoromagnolo
+    egg: mmoitems:PETS:PET_LAGOTTOROMAGNOLO_EGG
+    sounds:
+      preset: wolf
+      pitch: 1.05
+  yorkshire:
+    species: dog
+    model: yorkshire
+    egg: mmoitems:PETS:PET_YORKSHIRE_EGG
+    sounds:
+      preset: wolf
+      pitch: 1.2
+
   # Minimal pet example: uncomment this block inside pets to add a modeled rabbit.
   # rabbit:
   #   species: dog              # Supplies the WOLF body; does not restrict the model.
