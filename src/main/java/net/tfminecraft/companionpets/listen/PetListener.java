@@ -207,6 +207,13 @@ public final class PetListener implements Listener {
         actions.lostBody(pet);
     }
 
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onEnvironmentalDamage(EntityDamageEvent event) {
+        if ((event.getCause() == EntityDamageEvent.DamageCause.DROWNING
+                || event.getCause() == EntityDamageEvent.DamageCause.SUFFOCATION)
+                && runtime.byEntity(event.getEntity()) != null) event.setCancelled(true);
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onVisualDamage(EntityDamageEvent event) {
         if (event.getFinalDamage() <= 0) return;

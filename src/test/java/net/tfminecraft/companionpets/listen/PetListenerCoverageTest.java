@@ -54,11 +54,13 @@ class PetListenerCoverageTest {
     private PetListener listener;
     private final List<String> animations = new ArrayList<>();
     private final List<UUID> cancelledAnimations = new ArrayList<>();
+    private final List<Sound> sounds = new ArrayList<>();
     private boolean attached;
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
         world = new CollisionWorldMock() {
+            @Override public void playSound(Location at, Sound sound, float volume, float pitch) { sounds.add(sound); }
             private final Map<String, BlockMock> blocks = new HashMap<>();
             @Override public BlockMock getBlockAt(int x, int y, int z) {
                 return blocks.computeIfAbsent(x + ":" + y + ":" + z, unused -> new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
@@ -327,6 +329,28 @@ class PetListenerCoverageTest {
         animations.clear();
         fire(attack(owner, server.addPlayer(), 2));
         assertTrue(animations.isEmpty());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = EntityDamageEvent.DamageCause.class,
+            names = {"DROWNING", "SUFFOCATION"})
+    void drowningAndSuffocationAreCancelledBeforeOtherPluginsAndVisualDamage(EntityDamageEvent.DamageCause cause) {
+        body.setSilent(true);
+        var observed = new ArrayList<Boolean>();
+        server.getPluginManager().registerEvent(EntityDamageEvent.class, new Listener() { }, EventPriority.LOW,
+                (unused, event) -> observed.add(((EntityDamageEvent) event).isCancelled()), runtime.plugin());
+        double health = body.getHealth();
+        for (int tick = 0; tick < 40; tick++) {
+            var event = fire(new EntityDamageEvent(body, cause, 1_000));
+            assertTrue(event.isCancelled());
+            if (!event.isCancelled()) body.setHealth(Math.max(0, body.getHealth() - event.getFinalDamage()));
+        }
+        assertTrue(observed.stream().allMatch(Boolean::booleanValue));
+        assertEquals(health, body.getHealth()); assertFalse(body.isDead()); assertFalse(pet.dead());
+        assertSame(pet, runtime.store().get(pet.id())); assertFalse(runtime.store().isDeleted(pet.id()));
+        assertTrue(animations.isEmpty()); assertTrue(cancelledAnimations.isEmpty()); assertTrue(sounds.isEmpty());
+        var ordinary = fire(new EntityDamageEvent(wolf(owner.getLocation()), cause, 1));
+        assertFalse(ordinary.isCancelled()); assertFalse(observed.getLast());
     }
 
     @Test void toyProjectileDamageIsCancelledBeforeMoodOrVisualEffects() {
