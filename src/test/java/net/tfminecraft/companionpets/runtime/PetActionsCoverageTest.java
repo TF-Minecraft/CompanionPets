@@ -360,7 +360,7 @@ class PetActionsCoverageTest {
         pet.carriedToy("STICK");
         pet.order(PetOrder.STAY);
         pet.staying(true);
-        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false, pet.stored()));
         assertTrue(pet.stored());
         assertNull(pet.entityId());
         assertFalse(body.isValid());
@@ -398,7 +398,7 @@ class PetActionsCoverageTest {
         assertNull(runtime.entity(pet));
         assertFalse(world.isChunkLoaded(20, 0));
         forbidDistantChunkLoads = true;
-        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false, pet.stored()));
         assertTrue(pet.stored()); assertNull(pet.entityId());
         assertFalse(body.isValid()); assertFalse(body.isDead());
         care(PetMenus.careSlot(PetMenus.BRING_OUT_SLOT, false));
@@ -430,7 +430,7 @@ class PetActionsCoverageTest {
         Pet stored = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
         stored.stored(true); runtime.store().add(stored);
         assertEquals(2, runtime.store().countPets(owner.getUniqueId()));
-        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false, pet.stored()));
         assertTrue(pet.stored()); assertNull(pet.entityId()); assertFalse(body.isValid());
         assertEquals(2, runtime.store().countPets(owner.getUniqueId()));
         assertEquals(0, runtime.store().countOut(owner.getUniqueId()));
@@ -463,7 +463,7 @@ class PetActionsCoverageTest {
     }
 
     @Test void bringingOutAPetWithoutSafeRoomKeepsItStoredWithItsIdentityAndNeeds() {
-        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false, pet.stored()));
         assertTrue(pet.stored()); assertNull(pet.entityId());
         for (int x=-8; x<=8; x++) for (int y=60; y<=68; y++) for (int z=-8; z<=8; z++)
             world.getBlockAt(x,y,z).setType(Material.STONE);
@@ -475,7 +475,7 @@ class PetActionsCoverageTest {
     }
 
     @Test void bringingOutAnUnavailableTypeRetainsSavedIdentityAndNeeds() {
-        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.STORE_SLOT, false, pet.stored()));
         configure("pets.wolf", null);
         care(PetMenus.careSlot(PetMenus.BRING_OUT_SLOT, false));
         assertTrue(pet.stored());
@@ -532,7 +532,7 @@ class PetActionsCoverageTest {
     }
 
     @Test void releaseRequiresConfirmationAndSupportsExpiryRetryAndCancellation() {
-        care(PetMenus.careSlot(PetMenus.RELEASE_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.RELEASE_SLOT, false, pet.stored()));
         assertNotNull(runtime.sessions().release(owner.getUniqueId()));
         actions.onChat(owner, "maybe");
         assertSame(pet, runtime.store().get(pet.id()));
@@ -545,7 +545,7 @@ class PetActionsCoverageTest {
         assertSame(pet, runtime.store().get(pet.id()));
         assertTrue(messages().contains("expired"));
         pet.carriedToy("STICK");
-        care(PetMenus.careSlot(PetMenus.RELEASE_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.RELEASE_SLOT, false, pet.stored()));
         actions.onChat(owner, "yes");
         assertNull(runtime.store().get(pet.id()));
         assertFalse(body.isValid());
@@ -555,7 +555,7 @@ class PetActionsCoverageTest {
 
     @Test void releaseJournalFailureKeepsThePetAndBodyAvailable() throws Exception {
         Files.createDirectory(runtime.plugin().getDataFolder().toPath().resolve("pet-deletions.log"));
-        care(PetMenus.careSlot(PetMenus.RELEASE_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.RELEASE_SLOT, false, pet.stored()));
         actions.onChat(owner, "yes");
         assertSame(pet, runtime.store().get(pet.id()));
         assertTrue(body.isValid());
@@ -870,7 +870,7 @@ class PetActionsCoverageTest {
         body.remove();
         assertEquals(unloadedId, pet.entityId());
         assertNull(Bukkit.getEntity(unloadedId));
-        care(PetMenus.careSlot(PetMenus.RELEASE_SLOT, false));
+        care(PetMenus.careSlot(PetMenus.RELEASE_SLOT, false, pet.stored()));
         actions.onChat(owner, "yes");
         assertNull(runtime.store().get(pet.id()));
         assertTrue(runtime.store().isDeleted(pet.id()));

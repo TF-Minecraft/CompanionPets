@@ -266,22 +266,48 @@ class PetMenuWorkflowTest {
                 .getPersistentDataContainer().has(runtime.petKey(), PersistentDataType.STRING));
     }
 
-    @Test void directProfileKeepsActionPositionsAndTricksKeepItsNavigation() {
+    @Test void directProfileCentersVisibleActionsAndTricksKeepItsNavigation() {
         Pet pet = pet("wolf", player.getUniqueId()); pet.stored(false); menus.openCare(player, pet);
         var inventory = holder().getInventory();
         assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, inventory.getItem(37).getType());
-        assertEquals(Material.BOOK, inventory.getItem(39).getType());
-        assertEquals(Material.BARREL, inventory.getItem(41).getType());
-        assertEquals(Material.BARRIER, inventory.getItem(43).getType());
-        for (int slot : new int[]{36, 38, 40, 42, 44})
+        assertEquals(Material.BOOK, inventory.getItem(38).getType());
+        assertEquals(Material.BARREL, inventory.getItem(40).getType());
+        assertEquals(Material.BARRIER, inventory.getItem(42).getType());
+        for (int slot : new int[]{36, 37, 39, 41, 43, 44})
             assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, inventory.getItem(slot).getType());
         actions.clickMenu(player, holder(), PetMenus.BACK_SLOT, null, false, false, false);
         assertEquals(MenuHolder.Kind.CARE, holder().kind());
-        actions.clickMenu(player, holder(), 39, inventory.getItem(39), false, false, false);
+        actions.clickMenu(player, holder(), 38, inventory.getItem(38), false, false, false);
         assertEquals(MenuHolder.Kind.LEARNED, holder().kind());
         actions.clickMenu(player, holder(), PetMenus.TRICKS_BACK_SLOT, null, false, false, false);
         assertEquals(MenuHolder.Kind.CARE, holder().kind()); assertFalse(holder().petHouseBack());
-        assertEquals(Material.BOOK, holder().getInventory().getItem(39).getType());
+        assertEquals(Material.BOOK, holder().getInventory().getItem(38).getType());
+    }
+
+    @Test void centeredDirectProfileButtonsReleaseAndStoreTheSelectedPet() {
+        Pet pet = pet("wolf", player.getUniqueId()); pet.stored(false);
+        menus.openCare(player, pet);
+        actions.clickMenu(player, holder(), 42, null, false, false, false);
+        assertEquals(pet.id(), runtime.sessions().release(player.getUniqueId()).petId());
+        runtime.sessions().clearRelease(player.getUniqueId());
+        menus.openCare(player, pet);
+        actions.clickMenu(player, holder(), 40, null, false, false, false);
+        assertTrue(pet.stored());
+    }
+
+    @Test void directProfileRefreshCentersBothStoredAndOutsideLayouts() {
+        Pet pet = pet("wolf", player.getUniqueId()); menus.openCare(player, pet);
+        var inventory = holder().getInventory();
+        for (int slot : new int[]{37, 39, 41, 43})
+            assertNotEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, inventory.getItem(slot).getType());
+        pet.stored(false); menus.refreshCare(player, pet);
+        for (int slot : new int[]{37, 39, 41, 43})
+            assertEquals(Material.LIGHT_GRAY_STAINED_GLASS_PANE, inventory.getItem(slot).getType());
+        pet.stored(true); menus.refreshCare(player, pet);
+        assertEquals(Material.LEAD, inventory.getItem(37).getType());
+        assertEquals(Material.BOOK, inventory.getItem(39).getType());
+        assertEquals(Material.GRAY_DYE, inventory.getItem(41).getType());
+        assertEquals(Material.BARRIER, inventory.getItem(43).getType());
     }
 
     @Test void profilesReachedFromPetHouseRetainTheirBackButtonAndTrickParent() {

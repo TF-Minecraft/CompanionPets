@@ -199,8 +199,19 @@ class PetFetchActionsCoverageTest {
         assertFalse(items().getFirst().getPersistentDataContainer().has(runtime.toyKey()));
     }
 
+    @Test void successfulToyThrowPlaysOneLaunchSoundForThrowerAndNearbyPlayers() {
+        var nearby = server.addPlayer(); nearby.teleport(owner.getLocation());
+        throwToy();
+        for (var player : List.of(owner, nearby)) {
+            assertEquals(1, player.getHeardSounds().stream()
+                    .filter(sound -> sound.getSound().equals(Sound.ENTITY_SNOWBALL_THROW.getKey().getKey())).count());
+        }
+    }
+
     @Test void failedProjectileSpawnRefundsExactlyTheConsumedItemWithItsMetadata() {
         failSpawn = true; useToy(7);
+        assertTrue(owner.getHeardSounds().stream()
+                .noneMatch(sound -> sound.getSound().equals(Sound.ENTITY_SNOWBALL_THROW.getKey().getKey())), "Failed launches are silent");
         assertEquals(7, owner.getInventory().getItemInMainHand().getAmount());
         assertTrue(toy.isSimilar(owner.getInventory().getItemInMainHand()));
         assertTrue(items().isEmpty()); assertNull(pet.fetch());
