@@ -10,6 +10,7 @@ import org.bukkit.Sound;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
+import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.behavior.GreetingMood;
 import net.tfminecraft.companionpets.config.PetBehavior;
@@ -223,7 +224,7 @@ final class PetGreetings {
             greeting.angle += greeting.direction * Math.PI / 4;
             return;
         }
-        var path = body.getPathfinder().findPath(ground);
+        var path = PetMotion.findPath(body, ground);
         if (path == null || !path.canReachFinalPoint()) {
             body.getPathfinder().stopPathfinding();
             greeting.angle += greeting.direction * Math.PI / 4;
@@ -238,7 +239,7 @@ final class PetGreetings {
         double speed = cat ? runtime.config().greeting().catSpeed()
                 : runtime.config().greeting().speed() * (0.65 + 0.35 * excitement);
         if (!runtime.behaves(pet, PetBehavior.GREETING_TAIL_WAG)) speed = Math.min(1, speed);
-        body.getPathfinder().moveTo(path, speed);
+        PetMotion.moveTo(body, path, speed);
     }
 
     private long circleMillis() {
@@ -277,7 +278,7 @@ final class PetGreetings {
                 else offset.zero();
                 Location landing = safeGround(center.clone().add(offset));
                 if (landing == null || !free(pet, greeting, landing) || !safeHop(body.getLocation(), landing)) return;
-                var path = body.getPathfinder().findPath(landing);
+                var path = PetMotion.findPath(body, landing);
                 if (path == null || !path.canReachFinalPoint()) return;
                 Vector toward = center.toVector().subtract(body.getLocation().toVector()).setY(0);
                 double length = toward.length();
@@ -289,11 +290,11 @@ final class PetGreetings {
             }
             return;
         }
-        var path = body.getPathfinder().findPath(front);
+        var path = PetMotion.findPath(body, front);
         double speed = runtime.behaves(pet, PetBehavior.GREETING_MEOWS) ? runtime.config().greeting().catSpeed()
                 : runtime.config().greeting().speed() * (0.65 + 0.35 * mood(pet, greeting).intensity());
         if (!runtime.behaves(pet, PetBehavior.GREETING_TAIL_WAG)) speed = Math.min(1, speed);
-        if (path != null && path.canReachFinalPoint()) body.getPathfinder().moveTo(path, speed);
+        if (path != null && path.canReachFinalPoint()) PetMotion.moveTo(body, path, speed);
         PetFx.look(body, greeting.owner.getEyeLocation());
     }
 

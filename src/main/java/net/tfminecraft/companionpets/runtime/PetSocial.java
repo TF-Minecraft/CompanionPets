@@ -322,8 +322,8 @@ final class PetSocial {
         if (ground == null || pet != null && !PetSpacing.free(runtime, pet, ground)) {
             body.getPathfinder().stopPathfinding(); return;
         }
-        var path = body.getPathfinder().findPath(ground);
-        if (path != null && path.canReachFinalPoint()) body.getPathfinder().moveTo(path, speed);
+        var path = PetMotion.findPath(body, ground);
+        if (path != null && path.canReachFinalPoint()) PetMotion.moveTo(body, path, speed);
         else body.getPathfinder().stopPathfinding();
     }
     private void bark(Encounter e, Mob a, Mob b) {

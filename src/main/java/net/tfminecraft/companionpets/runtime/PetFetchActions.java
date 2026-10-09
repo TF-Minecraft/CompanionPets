@@ -18,6 +18,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
+import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.behavior.Locomotion;
 import net.tfminecraft.companionpets.behavior.WaterEscape;
 import net.tfminecraft.companionpets.config.PetTypeDef;
@@ -251,7 +252,7 @@ final class PetFetchActions {
                 && previous.target.getWorld().equals(target.getWorld()) && previous.target.distanceSquared(target) < 16) return;
         // Keep pickup and delivery checks on every AI tick, but avoid recalculating
         // paths every tick. Phase changes and distant target jumps refresh immediately.
-        body.getPathfinder().moveTo(target, speed);
+        PetMotion.moveTo(body, target, speed);
         routes.put(pet.id(), new Route(job, job.phase(), target.clone(), now + 250));
     }
     private record Route(FetchJob job, FetchPhase phase, Location target, long refreshAt) { }

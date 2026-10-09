@@ -281,9 +281,9 @@ final class PetToyAnticipation {
         if (!moving) {
             PetMotion.settle(body);
         } else if (now >= focus.nextMoveAt) {
-            var path = body.getPathfinder().findPath(target);
+            var path = PetMotion.findPath(body, target);
             if (path != null && path.canReachFinalPoint())
-                body.getPathfinder().moveTo(path, Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), false));
+                PetMotion.moveTo(body, path, Locomotion.speed(pet.illness(), pet.bond(), pet.need(Need.CLEANLINESS), false));
             else PetMotion.stop(body);
         }
         if (now >= focus.nextMoveAt) focus.nextMoveAt = now + 250;

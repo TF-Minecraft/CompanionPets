@@ -142,7 +142,7 @@ final class PetRoaming {
         if (job.waitUntil == 0 && body.getLocation().distanceSquared(target) > 4.0) {
             if (job.routeTarget == null || now - job.routeAt >= 500L
                     || !job.routeTarget.getWorld().equals(target.getWorld()) || job.routeTarget.distanceSquared(target) > 4.0) {
-                body.getPathfinder().moveTo(target, job.speed);
+                PetMotion.moveTo(body, target, job.speed);
                 job.routeTarget = target;
                 job.routeAt = now;
             }

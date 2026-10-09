@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.item.ItemRef;
 import net.tfminecraft.companionpets.item.HeldItem;
 import org.bukkit.Particle;
@@ -396,7 +397,7 @@ public final class PetTicker implements Runnable {
                 }
                 double distance = mob.getLocation().distance(owner.getLocation());
                 if (distance > 3.5) {
-                    mob.getPathfinder().moveTo(owner.getLocation(), speed);
+                    PetMotion.moveTo(mob, owner.getLocation(), speed);
                 } else {
                     mob.getPathfinder().stopPathfinding();
                     if (mob.getTicksLived() % 30 < 10) {
