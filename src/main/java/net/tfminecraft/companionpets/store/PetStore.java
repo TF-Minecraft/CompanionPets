@@ -257,9 +257,9 @@ public final class PetStore {
                 continue;
             }
             row.put("owner", entry.getValue().toString());
-            kennelRows.add(row);
+            kennelRows.add(Collections.unmodifiableMap(row));
         }
-        return new Snapshot(Collections.unmodifiableMap(rows), kennelRows);
+        return new Snapshot(Collections.unmodifiableMap(rows), List.copyOf(kennelRows));
     }
 
     private static Map<String, Object> row(Pet pet) {

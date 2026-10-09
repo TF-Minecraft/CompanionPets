@@ -131,6 +131,8 @@ class SnapshotReuseTest {
     }
 
     @Test void cachedRowsAndAllTheirCollectionsAreImmutable() {
+        String kennel = PetStore.kennelKey("world", 1, 64, 3);
+        store.kennel(kennel, OWNER);
         var snapshot = store.snapshot(); var row = snapshot.pets().get(ID.toString());
         assertThrows(UnsupportedOperationException.class, () -> snapshot.pets().clear());
         assertThrows(UnsupportedOperationException.class, () -> row.put("name", "Changed"));
@@ -141,6 +143,14 @@ class SnapshotReuseTest {
         }
         for (String field : List.of("words", "announced")) assertThrows(UnsupportedOperationException.class, ((List<?>) row.get(field))::clear);
         assertThrows(UnsupportedOperationException.class, ((Map<?, ?>) ((List<?>) row.get("words")).getFirst())::clear);
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.kennels().clear());
+        var kennelRow = snapshot.kennels().getFirst();
+        assertThrows(UnsupportedOperationException.class, () -> kennelRow.put("owner", NEXT_OWNER.toString()));
+        assertThrows(UnsupportedOperationException.class, () -> kennelRow.put("x", 20));
+        store.kennel(kennel, NEXT_OWNER);
+        assertEquals(OWNER.toString(), kennelRow.get("owner"));
+        assertEquals(1, kennelRow.get("x"));
+        assertEquals(NEXT_OWNER.toString(), store.snapshot().kennels().getFirst().get("owner"));
     }
 
     @Test void replacingRemovingAndReloadingPetsForgetCachedRows() {
