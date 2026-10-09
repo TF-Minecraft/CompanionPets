@@ -1,6 +1,9 @@
 package net.tfminecraft.companionpets.fx;
 
 import java.util.EnumSet;
+import java.lang.ref.WeakReference;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -20,6 +23,7 @@ import com.destroystokyo.paper.entity.ai.GoalType;
 final class PetLookGoal implements Goal<Mob> {
     private static final GoalKey<Mob> KEY = GoalKey.of(Mob.class, new NamespacedKey("companionpets", "look"));
     private static final int HOLD_TICKS = 14;
+    private static final Map<Mob, WeakReference<PetLookGoal>> GOALS = new WeakHashMap<>();
     private final Mob body;
     private Entity target;
     private Location point;
@@ -69,15 +73,29 @@ final class PetLookGoal implements Goal<Mob> {
     }
 
     static void release(Mob body) {
-        Goal<Mob> registered = Bukkit.getMobGoals().getGoal(body, KEY);
-        if (registered instanceof PetLookGoal goal) goal.stop();
+        PetLookGoal goal = registered(body);
+        if (goal != null) goal.stop();
+    }
+
+    static void forget(Mob body) { release(body); GOALS.remove(body); }
+
+    private static PetLookGoal registered(Mob body) {
+        var cached = GOALS.get(body);
+        if (cached != null && cached.get() != null) return cached.get();
+        if (cached == null && GOALS.containsKey(body)) return null;
+        var registered = Bukkit.getMobGoals().getGoal(body, KEY);
+        PetLookGoal goal = registered instanceof PetLookGoal look ? look : null;
+        // Weak values prevent the goal's body reference from retaining the weak map key.
+        GOALS.put(body, goal == null ? null : new WeakReference<>(goal));
+        return goal;
     }
 
     private static PetLookGoal ensure(Mob body) {
-        Goal<Mob> registered = Bukkit.getMobGoals().getGoal(body, KEY);
-        if (registered instanceof PetLookGoal goal) return goal;
-        PetLookGoal goal = new PetLookGoal(body);
+        PetLookGoal goal = registered(body);
+        if (goal != null) return goal;
+        goal = new PetLookGoal(body);
         Bukkit.getMobGoals().addGoal(body, 0, goal);
+        GOALS.put(body, new WeakReference<>(goal));
         return goal;
     }
 

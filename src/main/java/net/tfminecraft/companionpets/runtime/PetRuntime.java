@@ -32,8 +32,9 @@ public final class PetRuntime {
     private final Random random = new Random();
     private final PetVoice voice = new PetVoice(this);
     private final java.util.Map<String, net.tfminecraft.companionpets.visual.PetCapabilities> capabilities = new java.util.HashMap<>();
-    private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
+    private final java.util.Map<String, Long> capabilityRetryAt = new java.util.HashMap<>();
     private final java.util.Map<UUID, Location> lastGround = new java.util.HashMap<>();
+    private final java.util.Map<org.bukkit.entity.Mob, WaterNavigationGoal> waterGoals = new java.util.HashMap<>();
 
     public PetRuntime(
             JavaPlugin plugin,
@@ -52,8 +53,6 @@ public final class PetRuntime {
         this.visual = visual;
         this.petKey = petKey;
         this.toyKey = toyKey;
-        // Loading a saved Follow order must not summon distant pets into a new session.
-        for (Pet pet : store.all()) suspendedFollowing.add(pet.id());
         applyDefaultTricks();
     }
 
@@ -69,6 +68,7 @@ public final class PetRuntime {
         this.config = java.util.Objects.requireNonNull(config);
         voice.clear();
         capabilities.clear();
+        capabilityRetryAt.clear();
         for (Pet pet : store.all()) {
             Entity entity = entity(pet);
             var type = config.type(pet.typeId());
@@ -130,10 +130,24 @@ public final class PetRuntime {
     }
 
     void forgetMissingGround() {
+        waterGoals.entrySet().removeIf(entry -> {
+            var body = entry.getKey();
+            Pet pet = byEntity(body);
+            boolean missing = !body.isValid() || body.isDead() || pet == null || entity(pet) != body;
+            if (missing) entry.getValue().resetStuck();
+            return missing;
+        });
         lastGround.keySet().removeIf(id -> {
             Pet pet = store.get(id);
             return pet == null || pet.stored() || pet.dead() || entity(pet) == null;
         });
+    }
+
+    WaterNavigationGoal waterGoal(org.bukkit.entity.Mob body) { return waterGoals.get(body); }
+    void waterGoal(org.bukkit.entity.Mob body, WaterNavigationGoal goal) { waterGoals.put(body, goal); }
+    public void forgetWaterGoal(Entity body) {
+        WaterNavigationGoal goal = waterGoals.remove(body);
+        if (goal != null) goal.resetStuck();
     }
 
     public boolean behaves(Pet pet, net.tfminecraft.companionpets.config.PetBehavior behavior) {
@@ -143,10 +157,12 @@ public final class PetRuntime {
 
     public net.tfminecraft.companionpets.visual.PetCapabilities capabilities(net.tfminecraft.companionpets.config.PetTypeDef type) {
         var cached = capabilities.get(type.id());
-        if (cached != null) return cached;
+        if (cached != null && System.currentTimeMillis() < capabilityRetryAt.getOrDefault(type.id(), Long.MAX_VALUE)) return cached;
         var result = net.tfminecraft.companionpets.visual.PetCapabilities.inspect(type, visual);
-        // ModelEngine registers blueprints asynchronously; retry unavailable models on the next query.
-        if (!type.appearance().modeled() || result.modelAvailable()) capabilities.put(type.id(), result);
+        // ModelEngine registers blueprints asynchronously; retry unavailable models after five seconds.
+        capabilities.put(type.id(), result);
+        if (type.appearance().modeled() && !result.modelAvailable()) capabilityRetryAt.put(type.id(), System.currentTimeMillis() + 5_000L);
+        else capabilityRetryAt.remove(type.id());
         return result;
     }
 
@@ -156,18 +172,8 @@ public final class PetRuntime {
             pet.carers().reinforce(player.getUniqueId(), gain, now, 60_000);
     }
 
-    public void suspendFollowing(UUID ownerId) {
-        for (Pet pet : store.of(ownerId)) suspendedFollowing.add(pet.id());
-    }
-
-    public void resumeFollowing(Pet pet) { suspendedFollowing.remove(pet.id()); }
-
     public boolean followingAllowed(Pet pet, Player owner) {
-        if (owner == null || !owner.isOnline() || distance(owner, pet) == Double.POSITIVE_INFINITY) return false;
-        if (suspendedFollowing.contains(pet.id())
-                && distance(owner, pet) <= Math.min(config.ownerNearRadius(), 12))
-            suspendedFollowing.remove(pet.id());
-        return !suspendedFollowing.contains(pet.id());
+        return owner != null && owner.isOnline() && Double.isFinite(distance(owner, pet));
     }
 
     public Entity entity(Pet pet) {

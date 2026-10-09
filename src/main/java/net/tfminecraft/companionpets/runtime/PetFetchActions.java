@@ -205,7 +205,7 @@ final class PetFetchActions {
                 }
             }
             restoreCat(pet);
-            if (claim(pet)) {
+            if (claim(pet, now)) {
                 mob.getPathfinder().stopPathfinding();
             } else {
                 moveTo(pet, mob, item.getLocation(), speed, now);
@@ -281,6 +281,10 @@ final class PetFetchActions {
     }
 
     boolean claim(Pet pet) {
+        return claim(pet, System.currentTimeMillis());
+    }
+
+    boolean claim(Pet pet, long now) {
         FetchJob job = pet.fetch();
         Entity item = job == null || job.itemId() == null ? null : Bukkit.getEntity(job.itemId());
         Entity body = runtime.entity(pet);
@@ -290,6 +294,7 @@ final class PetFetchActions {
                 || body.getLocation().distance(item.getLocation()) >= 1.7 || !job.claim(pet.id())) return false;
         item.remove();
         job.itemId(null);
+        expiresAt.put(job.id(), now + 120_000L);
         // Keep the race participants in this job: they follow the winner until
         // delivery, and finish together when the one physical toy is returned.
         for (Pet other : chasers(job)) if (other != pet && runtime.entity(other) instanceof Mob mob) step(other, mob);
@@ -320,6 +325,19 @@ final class PetFetchActions {
             case CARRY -> Bukkit.getPlayer(job.throwerId());
         };
         return target == null ? null : target.getLocation();
+    }
+
+    UUID destinationId(Pet pet) {
+        FetchJob job = pet.fetch();
+        return switch (job.phase()) {
+            case AIR -> job.projectileId();
+            case GROUND -> job.itemId();
+            case CARRY -> {
+                if (pet.id().equals(job.carrierId())) yield job.throwerId();
+                Entity carrier = runtime.entity(runtime.store().get(job.carrierId()));
+                yield carrier == null ? null : carrier.getUniqueId();
+            }
+        };
     }
 
     private Location carrierDestination(Pet pet, FetchJob job, Player thrower) {
@@ -384,7 +402,10 @@ final class PetFetchActions {
             if (job.phase() == FetchPhase.CARRY) {
                 Pet carryingPet = runtime.store().get(job.carrierId());
                 Entity carrier = runtime.entity(carryingPet);
-                if (carrier != null) lastLocations.put(job.id(), carrier.getLocation().clone());
+                if (carrier != null) {
+                    lastLocations.put(job.id(), carrier.getLocation().clone());
+                    if (now >= expiresAt.get(job.id())) releaseFetch(carryingPet, true);
+                }
                 else finish(job, lastLocations.get(job.id()));
                 continue;
             }

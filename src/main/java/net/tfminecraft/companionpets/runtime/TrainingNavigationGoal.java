@@ -82,7 +82,7 @@ final class TrainingNavigationGoal implements Goal<Mob> {
             PetFx.holdLooking(body, runtime.visual());
         } else if (restingLook) {
             PetFx.lie(body, false);
-            PetFx.sit(body, false);
+            PetFx.sit(body, pet.order() == PetOrder.STAY || pet.staying());
             PetFx.releaseLooking(body);
         }
         restingLook = resting;

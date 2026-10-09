@@ -16,14 +16,12 @@ import net.tfminecraft.companionpets.pet.*;
  */
 final class PostureNavigationGoal implements Goal<Mob> {
     private final GoalKey<Mob> key;
-    private final GoalKey<Mob> trainingKey;
     private final PetRuntime runtime;
     private final Pet pet;
     private final Mob body;
 
     private PostureNavigationGoal(GoalKey<Mob> key, PetRuntime runtime, Pet pet, Mob body) {
         this.key = key; this.runtime = runtime; this.pet = pet; this.body = body;
-        trainingKey = GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "training_navigation"));
     }
 
     static void hold(PetRuntime runtime, Pet pet, Mob body) {
@@ -36,8 +34,8 @@ final class PostureNavigationGoal implements Goal<Mob> {
             Bukkit.getMobGoals().addGoal(body, 0, goal);
             Bukkit.getMobGoals().addGoal(body, 0, new SleepingLook(
                     GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "sleeping_look")), goal));
+            PetMotion.resetNative(body);
         }
-        PetMotion.stop(body);
         body.setAware(true);
         goal.tick();
     }
@@ -52,21 +50,20 @@ final class PostureNavigationGoal implements Goal<Mob> {
         return mode;
     }
 
-    @Override public boolean shouldActivate() {
+    private Locomotion.Mode posture() {
         if (!body.isValid() || body.isDead() || pet.stored() || pet.dead() || WaterEscape.needed(body)
-                || WaterNavigationGoal.finishing(runtime, body)) return false;
-        var training = Bukkit.getMobGoals().getGoal(body, trainingKey);
-        if (training instanceof TrainingNavigationGoal focus && focus.shouldActivate()) return false;
-        if (runtime.visual().belly(body)) return true;
+                || WaterNavigationGoal.finishing(runtime, body) || runtime.trainingFocused(pet, body)) return null;
         var mode = mode();
-        return mode == Locomotion.Mode.STAY || mode == Locomotion.Mode.SIT
-                || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP;
+        return runtime.visual().belly(body) || mode == Locomotion.Mode.STAY || mode == Locomotion.Mode.SIT
+                || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP ? mode : null;
     }
+    @Override public boolean shouldActivate() { return posture() != null; }
     // A sleeping pet still turns its head to whoever just said its name.
     boolean asleep() {
-        return System.currentTimeMillis() >= pet.listeningUntilMillis() && shouldActivate() && mode() == Locomotion.Mode.SLEEP;
+        return System.currentTimeMillis() >= pet.listeningUntilMillis() && posture() == Locomotion.Mode.SLEEP;
     }
     @Override public boolean shouldStayActive() { return shouldActivate(); }
+    @Override public void start() { PetMotion.resetNative(body); }
     @Override public void tick() {
         if (!shouldActivate()) return;
         PetMotion.settle(body);

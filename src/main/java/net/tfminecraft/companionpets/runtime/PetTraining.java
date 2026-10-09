@@ -76,12 +76,6 @@ final class PetTraining {
         }
     }
 
-    void handleTrainingChat(Player player, String text, long now) {
-        Entity looked = PetActions.lookingAt(player, 6.0);
-        Pet pet = runtime.byEntity(looked);
-        handleTrainingChat(player, text, now, pet, looked);
-    }
-
     void handleTrainingChat(Player player, String text, long now, Pet pet, Entity looked) {
         if (pet == null || !pet.ownerId().equals(player.getUniqueId()) || pet.stored()) {
             return;

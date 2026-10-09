@@ -32,8 +32,11 @@ public final class Pet {
     private long bornAt;
     private long lastOwnerNearbyMillis;
     private long lastGreetingMillis;
-    private final RelationshipMemory carers = new RelationshipMemory();
-    private final RelationshipMemory friends = new RelationshipMemory();
+    private long revision;
+    public long revision() { return revision; }
+    private void changed() { revision++; }
+    private final RelationshipMemory carers = new RelationshipMemory(this::changed);
+    private final RelationshipMemory friends = new RelationshipMemory(this::changed);
     public RelationshipMemory carers() { return carers; }
     public RelationshipMemory friends() { return friends; }
     private long criticalMillis;
@@ -91,6 +94,7 @@ public final class Pet {
     public void ownerId(UUID ownerId) {
         boolean changed = !this.ownerId.equals(ownerId);
         if (changed) {
+            changed();
             lastOwnerNearbyMillis = 0;
             lastGreetingMillis = 0;
             carers.clear(); friends.clear();
@@ -110,9 +114,9 @@ public final class Pet {
     }
 
     public long lastOwnerNearbyMillis() { return lastOwnerNearbyMillis; }
-    public void lastOwnerNearbyMillis(long value) { lastOwnerNearbyMillis = Math.max(0, value); }
+    public void lastOwnerNearbyMillis(long value) { if (lastOwnerNearbyMillis != Math.max(0, value)) changed(); lastOwnerNearbyMillis = Math.max(0, value); }
     public long lastGreetingMillis() { return lastGreetingMillis; }
-    public void lastGreetingMillis(long value) { lastGreetingMillis = Math.max(0, value); }
+    public void lastGreetingMillis(long value) { if (lastGreetingMillis != Math.max(0, value)) changed(); lastGreetingMillis = Math.max(0, value); }
 
     public String typeId() {
         return typeId;
@@ -123,6 +127,7 @@ public final class Pet {
     }
 
     public void name(String name) {
+        if (!java.util.Objects.equals(this.name, name)) changed();
         this.name = name;
     }
 
@@ -131,6 +136,7 @@ public final class Pet {
     }
 
     public void sex(PetSex sex) {
+        if (this.sex != sex) changed();
         this.sex = sex;
     }
 
@@ -139,7 +145,9 @@ public final class Pet {
     }
 
     public void personality(PetPersonality personality) {
-        this.personality = personality == null ? PetPersonality.forId(id) : personality;
+        var next = personality == null ? PetPersonality.forId(id) : personality;
+        if (this.personality != next) changed();
+        this.personality = next;
     }
 
     public long bornAt() {
@@ -147,6 +155,7 @@ public final class Pet {
     }
 
     public void bornAt(long bornAt) {
+        if (this.bornAt != bornAt) changed();
         this.bornAt = bornAt;
     }
 
@@ -155,6 +164,7 @@ public final class Pet {
     }
 
     public void order(PetOrder order) {
+        if (this.order != order) changed();
         this.order = order;
     }
 
@@ -171,6 +181,7 @@ public final class Pet {
     }
 
     public void staying(boolean staying) {
+        if (this.staying != staying) changed();
         this.staying = staying;
     }
 
@@ -181,6 +192,7 @@ public final class Pet {
     public void stored(boolean stored) {
         if (this.stored == stored) return;
         this.stored = stored;
+        changed();
         reindex();
     }
 
@@ -205,6 +217,9 @@ public final class Pet {
     }
 
     public void place(String worldName, double x, double y, double z, float yaw) {
+        if (!java.util.Objects.equals(this.worldName, worldName == null ? "" : worldName)
+                || Double.compare(this.x, x) != 0 || Double.compare(this.y, y) != 0 || Double.compare(this.z, z) != 0
+                || Float.compare(this.yaw, yaw) != 0) changed();
         this.worldName = worldName == null ? "" : worldName;
         this.x = x;
         this.y = y;
@@ -219,6 +234,7 @@ public final class Pet {
     public void entityId(UUID entityId) {
         if (java.util.Objects.equals(this.entityId, entityId)) return;
         this.entityId = entityId;
+        changed();
         reindex();
     }
 
@@ -227,6 +243,7 @@ public final class Pet {
     }
 
     public void need(Need need, double value) {
+        if (Double.compare(need(need), clamp(value)) != 0) changed();
         needs.put(need, clamp(value));
     }
 
@@ -235,6 +252,7 @@ public final class Pet {
     }
 
     public void bond(double bond) {
+        if (Double.compare(this.bond, clamp(bond)) != 0) changed();
         this.bond = clamp(bond);
     }
 
@@ -243,11 +261,12 @@ public final class Pet {
     }
 
     public void criticalMillis(long criticalMillis) {
+        if (this.criticalMillis != Math.max(0L, criticalMillis)) changed();
         this.criticalMillis = Math.max(0L, criticalMillis);
     }
 
     public void addCriticalMillis(long elapsed) {
-        this.criticalMillis = Math.max(0L, this.criticalMillis + elapsed);
+        criticalMillis(this.criticalMillis + elapsed);
     }
 
     public long dirtyMillis() {
@@ -255,11 +274,12 @@ public final class Pet {
     }
 
     public void dirtyMillis(long dirtyMillis) {
+        if (this.dirtyMillis != Math.max(0L, dirtyMillis)) changed();
         this.dirtyMillis = Math.max(0L, dirtyMillis);
     }
 
     public void addDirtyMillis(long elapsed) {
-        this.dirtyMillis = Math.max(0L, this.dirtyMillis + elapsed);
+        dirtyMillis(this.dirtyMillis + elapsed);
     }
 
     public boolean announcedLow(Need need) {
@@ -267,11 +287,13 @@ public final class Pet {
     }
 
     public boolean markAnnouncedLow(Need need) {
-        return announcedLow.add(need);
+        boolean added = announcedLow.add(need);
+        if (added) changed();
+        return added;
     }
 
     public void clearAnnouncedLow(Need need) {
-        announcedLow.remove(need);
+        if (announcedLow.remove(need)) changed();
     }
 
     public EnumSet<Need> announcedLowView() {
@@ -279,6 +301,8 @@ public final class Pet {
     }
 
     public void announcedLow(EnumSet<Need> needs) {
+        if (needs == null ? announcedLow.isEmpty() : announcedLow.equals(needs)) return;
+        changed();
         announcedLow.clear();
         if (needs != null) {
             announcedLow.addAll(needs);
@@ -290,7 +314,9 @@ public final class Pet {
     }
 
     public void illness(Illness illness) {
-        this.illness = illness == null ? Illness.NONE : illness;
+        var next = illness == null ? Illness.NONE : illness;
+        if (this.illness != next) changed();
+        this.illness = next;
     }
 
     public boolean treated() {
@@ -298,6 +324,7 @@ public final class Pet {
     }
 
     public void treated(boolean treated) {
+        if (this.treated != treated) changed();
         this.treated = treated;
     }
 
@@ -316,6 +343,7 @@ public final class Pet {
     }
 
     public void favoriteToy(String favoriteToy) {
+        if (!java.util.Objects.equals(this.favoriteToy, favoriteToy)) changed();
         this.favoriteToy = favoriteToy;
     }
 
@@ -324,7 +352,9 @@ public final class Pet {
     }
 
     public void carriedToy(String carriedToy) {
-        this.carriedToy = carriedToy == null || carriedToy.isBlank() ? null : carriedToy;
+        String next = carriedToy == null || carriedToy.isBlank() ? null : carriedToy;
+        if (!java.util.Objects.equals(this.carriedToy, next)) changed();
+        this.carriedToy = next;
     }
 
     public Map<String, Trick> words() {
@@ -332,7 +362,9 @@ public final class Pet {
     }
 
     public void bindWord(String word, Trick trick) {
-        words.put(SpokenOrder.key(word), trick);
+        String key = SpokenOrder.key(word);
+        if (!words.containsKey(key) || !java.util.Objects.equals(words.get(key), trick)) changed();
+        words.put(key, trick);
     }
 
     public Trick trickFor(String word) {
@@ -352,6 +384,7 @@ public final class Pet {
     }
 
     public void progress(Trick trick, double value) {
+        if (Double.compare(progress(trick), Math.max(0.0, Math.min(100.0, value))) != 0) changed();
         progress.put(trick, Math.max(0.0, Math.min(100.0, value)));
     }
 

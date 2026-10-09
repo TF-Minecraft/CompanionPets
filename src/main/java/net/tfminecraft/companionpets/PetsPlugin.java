@@ -155,6 +155,7 @@ public class PetsPlugin extends JavaPlugin {
         for (var goal : List.copyOf(goals.getAllGoals(body))) {
             if (goal.getKey().getNamespacedKey().getNamespace().equals(namespace)) goals.removeGoal(body, goal.getKey());
         }
+        PetFx.forgetLooking(body);
     }
 
     @Override

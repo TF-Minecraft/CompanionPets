@@ -138,8 +138,14 @@ final class PetRoaming {
         }
         PetFx.sit(body, false);
         PetFx.lie(body, false);
-        if (job.waitUntil == 0 && body.getLocation().distanceSquared(owner.getLocation()) > 4.0) {
-            body.getPathfinder().moveTo(owner.getLocation(), job.speed);
+        Location target = owner.getLocation();
+        if (job.waitUntil == 0 && body.getLocation().distanceSquared(target) > 4.0) {
+            if (job.routeTarget == null || now - job.routeAt >= 500L
+                    || !job.routeTarget.getWorld().equals(target.getWorld()) || job.routeTarget.distanceSquared(target) > 4.0) {
+                body.getPathfinder().moveTo(target, job.speed);
+                job.routeTarget = target;
+                job.routeAt = now;
+            }
         } else {
             if (job.returnOrder != null) {
                 attention.remove(pet.id());
@@ -166,7 +172,7 @@ final class PetRoaming {
         // The saved order must survive cleanup while its body is in an unloaded chunk.
         if (body != null) {
             PetFx.lie(body, order == PetOrder.LAY);
-            if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT);
+            if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT || order == PetOrder.STAY);
             sleep.accept(body, false);
             if (order == PetOrder.FOLLOW) { PetMotion.stop(body); body.setAware(true); }
             else PostureNavigationGoal.hold(runtime, pet, body);
@@ -224,6 +230,8 @@ final class PetRoaming {
         private final PetOrder returnOrder;
         private long waitUntil;
         private boolean greeted;
+        private Location routeTarget;
+        private long routeAt;
         private Attention(UUID ownerId, long until, PetOrder returnOrder) { this.ownerId = ownerId; this.until = until; this.returnOrder = returnOrder; }
     }
 }

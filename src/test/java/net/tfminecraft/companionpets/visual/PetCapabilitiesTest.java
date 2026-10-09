@@ -19,10 +19,11 @@ class PetCapabilitiesTest {
     private org.bukkit.plugin.java.JavaPlugin plugin;
     private CompanionConfig config;
     private boolean available = true, tail;
+    private int inspections;
     private Set<String> clips = Set.of("idle", "walk", "sleep", "lie_back", "belly_up");
     private final PetVisual visual = new PetVisual() {
         public void apply(Entity entity, PetTypeDef type) { }
-        public boolean modelAvailable(PetTypeDef type) { return available; }
+        public boolean modelAvailable(PetTypeDef type) { inspections++; return available; }
         public boolean hasTail(PetTypeDef type) { return tail; }
         public Set<String> clips(PetTypeDef type) { return clips; }
     };
@@ -75,7 +76,7 @@ class PetCapabilitiesTest {
         assertTrue(missing.behaviors(remapped).contains(PetBehavior.FETCH));
     }
 
-    @Test void runtimeRetriesUnavailableModelsWithoutReload() {
+    @Test void runtimeRetriesUnavailableModelsAfterTheDelayWithoutReload() throws Exception {
         available = false; tail = true;
         clips = Set.of("lie_back", "belly_up", "get_up");
         var key = new NamespacedKey(plugin, "pet");
@@ -83,16 +84,49 @@ class PetCapabilitiesTest {
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
         var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "dog", "Toby", PetSex.MALE);
         var type = config.type("dog");
-        assertFalse(runtime.capabilities(type).modelAvailable());
+        long before = System.currentTimeMillis();
+        var missing = runtime.capabilities(type);
+        assertFalse(missing.modelAvailable());
+        var retries = retries(runtime);
+        assertTrue(retries.get(type.id()) >= before + 5000);
+        assertTrue(retries.get(type.id()) <= System.currentTimeMillis() + 5000);
         assertFalse(runtime.behaves(pet, PetBehavior.GREETING_TAIL_WAG));
         assertFalse(runtime.behaves(pet, PetBehavior.BELLY_RUB));
         available = true;
+        assertSame(missing, runtime.capabilities(type));
+        assertFalse(runtime.behaves(pet, PetBehavior.GREETING_TAIL_WAG));
+        assertEquals(1, inspections);
+        // Advance only the retry deadline, without sleeping or changing the inspected model.
+        retries.put(type.id(), 0L);
         assertTrue(runtime.behaves(pet, PetBehavior.GREETING_TAIL_WAG));
         assertTrue(runtime.behaves(pet, PetBehavior.TOY_TAIL_WAG));
         assertTrue(runtime.behaves(pet, PetBehavior.SOCIAL_TAIL_WAG));
         assertTrue(runtime.behaves(pet, PetBehavior.BELLY_RUB));
         assertTrue(runtime.capabilities(type).modelAvailable());
         assertSame(runtime.capabilities(type), runtime.capabilities(type), "Available models remain cached");
+        assertEquals(2, inspections);
+        assertFalse(retries.containsKey(type.id()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.Map<String, Long> retries(PetRuntime runtime) throws Exception {
+        var field = PetRuntime.class.getDeclaredField("capabilityRetryAt");
+        field.setAccessible(true);
+        return (java.util.Map<String, Long>) field.get(runtime);
+    }
+
+    @Test void reloadClearsUnavailableCapabilitiesAndTheirRetryDelay() throws Exception {
+        available = false;
+        var key = new NamespacedKey(plugin, "pet");
+        var runtime = new PetRuntime(plugin, config, new PetStore(plugin), new Sessions(),
+                new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
+        var type = config.type("dog");
+        assertFalse(runtime.capabilities(type).modelAvailable());
+        available = true;
+        runtime.config(config);
+        assertTrue(retries(runtime).isEmpty());
+        assertTrue(runtime.capabilities(type).modelAvailable());
+        assertEquals(2, inspections);
     }
 
     @Test void runtimeUsesInspectionCapabilitiesAndRefreshesThemOnReload() {

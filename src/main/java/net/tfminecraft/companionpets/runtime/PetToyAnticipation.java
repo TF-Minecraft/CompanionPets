@@ -248,12 +248,12 @@ final class PetToyAnticipation {
         if (now >= focus.nextMoveAt) {
             focus.playerMoving = playerMoving;
             focus.playerAt = playerAt;
+            double extraDistance = pet.ownerId().equals(player.getUniqueId()) ? 0 : focus.invitation.extraDistance();
+            focus.front = PetSpacing.toyFront(runtime, pet, player, slot(pet, player), extraDistance);
         }
-        double extraDistance = pet.ownerId().equals(player.getUniqueId()) ? 0 : focus.invitation.extraDistance();
-        Location front = PetSpacing.toyFront(runtime, pet, player, slot(pet, player), extraDistance);
+        Location front = focus.front;
         boolean approachingPlayer = front == null || horizontalDistance(body.getLocation(), front) > 1
                 || Math.abs(body.getLocation().getY() - front.getY()) > 1;
-        Location target = front;
         boolean wiggle = (pet.ownerId().equals(player.getUniqueId()) || focus.invitation.exuberant()) && runtime.behaves(pet, PetBehavior.TOY_WIGGLE);
         if (wiggle && front != null && !approachingPlayer && !focus.playerMoving && now >= focus.nextWiggleAt) {
             focus.wiggleStartedAt = now;
@@ -262,16 +262,20 @@ final class PetToyAnticipation {
             focus.wiggleSide = runtime.random().nextBoolean() ? 1 : -1;
         }
         boolean playful = !focus.playerMoving && wiggle && now < focus.wiggleUntil;
-        if (playful && front != null) {
-            int step = (int) ((now - focus.wiggleStartedAt) / 850);
-            double offset = (step == 0 ? 0.85 : step == 1 ? -0.75 : 0.15) * focus.wiggleSide * (focus.favorite ? 1 : 0.7);
-            double approach = step == 1 ? -0.45 : 0;
-            double yaw = Math.toRadians(playerAt.getYaw());
-            Location fidget = PetGreetings.safeGround(front.clone().add(
-                    Math.cos(yaw) * offset - Math.sin(yaw) * approach, 0,
-                    Math.sin(yaw) * offset + Math.cos(yaw) * approach));
-            if (fidget != null && PetSpacing.free(runtime, pet, fidget)) target = fidget;
+        if (now >= focus.nextMoveAt) {
+            focus.target = front;
+            if (playful && front != null) {
+                int step = (int) ((now - focus.wiggleStartedAt) / 850);
+                double offset = (step == 0 ? 0.85 : step == 1 ? -0.75 : 0.15) * focus.wiggleSide * (focus.favorite ? 1 : 0.7);
+                double approach = step == 1 ? -0.45 : 0;
+                double yaw = Math.toRadians(playerAt.getYaw());
+                Location fidget = PetGreetings.safeGround(front.clone().add(
+                        Math.cos(yaw) * offset - Math.sin(yaw) * approach, 0,
+                        Math.sin(yaw) * offset + Math.cos(yaw) * approach));
+                if (fidget != null && PetSpacing.free(runtime, pet, fidget)) focus.target = fidget;
+            }
         }
+        Location target = focus.target;
         boolean moving = target != null && (horizontalDistance(body.getLocation(), target) > (playful ? 0.3 : 0.65)
                 || Math.abs(body.getLocation().getY() - target.getY()) > 1);
         if (!moving) {
@@ -390,7 +394,7 @@ final class PetToyAnticipation {
         long nextSoundAt, nextJumpAt, nextMoveAt, nextWaitingJumpAt;
         long wiggleStartedAt, wiggleUntil, nextWiggleAt;
         int wiggleSide;
-        Location playerAt;
+        Location playerAt, front, target;
         boolean playerMoving;
         boolean favorite, reactionPending;
         long reactionUntil;

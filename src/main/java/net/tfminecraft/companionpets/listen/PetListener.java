@@ -176,6 +176,7 @@ public final class PetListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onUnload(EntitiesUnloadEvent event) {
         for (Entity entity : event.getEntities()) {
+            runtime.forgetWaterGoal(entity);
             Pet pet = runtime.byEntity(entity);
             if (pet != null && entity.getUniqueId().equals(pet.entityId())) {
                 runtime.remember(pet, entity);
@@ -205,6 +206,13 @@ public final class PetListener implements Listener {
         }
         if (event.getEntity().isSilent()) runtime.voice().play(event.getEntity(), net.tfminecraft.companionpets.config.PetSounds.Event.DEATH);
         actions.lostBody(pet);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onEnvironmentalDamage(EntityDamageEvent event) {
+        if ((event.getCause() == EntityDamageEvent.DamageCause.DROWNING
+                || event.getCause() == EntityDamageEvent.DamageCause.SUFFOCATION)
+                && runtime.byEntity(event.getEntity()) != null) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

@@ -164,7 +164,7 @@ public final class PetFx {
     }
 
     public static void stopLooking(Entity entity) {
-        if (entity instanceof Mob mob) { PetLookGoal.release(mob); PetLookGoal.remove(mob); }
+        if (entity instanceof Mob mob) PetLookGoal.remove(mob);
     }
 
     public static void holdLooking(Mob body, net.tfminecraft.companionpets.visual.PetVisual visual) {
@@ -172,6 +172,7 @@ public final class PetFx {
     }
 
     public static void releaseLooking(Mob body) { PetLookGoal.release(body); }
+    public static void forgetLooking(Mob body) { PetLookGoal.forget(body); }
 
     private record Hold(String text, long at) {
     }

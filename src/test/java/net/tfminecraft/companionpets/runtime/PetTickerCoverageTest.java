@@ -1,6 +1,7 @@
 package net.tfminecraft.companionpets.runtime;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
@@ -26,6 +27,9 @@ import net.tfminecraft.companionpets.store.PetStore;
 import net.tfminecraft.companionpets.testutil.GoalServerMock;
 import net.tfminecraft.companionpets.testutil.CollisionWorldMock;
 import net.tfminecraft.companionpets.visual.PetVisual;
+import net.tfminecraft.companionpets.visual.AnimationController;
+import net.tfminecraft.companionpets.visual.AnimationPlayer;
+import net.tfminecraft.companionpets.config.PetAppearance;
 import org.bukkit.*;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.*;
@@ -54,11 +58,13 @@ class PetTickerCoverageTest {
     private PetActions actions;
     private PetTicker ticker;
     private YamlConfiguration yaml;
+    private AnimationController controller;
+    private AnimationPlayer animations;
     private final List<Emission> particles = new ArrayList<>();
     private final List<Sound> sounds = new ArrayList<>();
     private final List<Location> navigation = new ArrayList<>();
-    private int stops, spawns, removals, lastChunkX, lastChunkZ;
-    private boolean chunksLoaded = true, entitiesLoaded = true, modeled, heldMovement, swimming;
+    private int stops, spawns, removals, lastChunkX, lastChunkZ, velocityUpdates;
+    private boolean chunksLoaded = true, entitiesLoaded = true, safeFloor = true, modeled, heldMovement, swimming;
     private long now;
 
     @BeforeEach void setup() throws Exception {
@@ -82,7 +88,7 @@ class PetTickerCoverageTest {
                 return type.cast(wolf(at));
             }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
-                return new BlockMock(y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
+                return new BlockMock(safeFloor && y == 63 ? Material.STONE : Material.AIR, new Location(this, x, y, z)) {
                     @Override public boolean isPassable() { return !getType().isSolid(); }
                 };
             }
@@ -113,8 +119,17 @@ class PetTickerCoverageTest {
                 pets:
                   wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, default-tricks: []}
                 """);
+        animations = mock(AnimationPlayer.class);
+        when(animations.play(any(), anyBoolean())).thenReturn(true);
+        when(animations.playing(anyString())).thenReturn(true);
+        when(animations.length(anyString())).thenReturn(5.0);
+        controller = new AnimationController(animations, java.util.Map.of(), () -> now);
         var visual = new PetVisual() {
             @Override public void apply(Entity entity, PetTypeDef type) { }
+            @Override public void cancelAction(Entity entity) { controller.cancelAction(); }
+            @Override public boolean playClip(Entity entity, PetTypeDef type, String clip, double duration) {
+                return controller.playCustom(new PetAppearance.Clip(clip, 1, .15), duration);
+            }
             @Override public boolean attached(Entity entity) { return modeled; }
             @Override public boolean holdsMovement(Entity entity) { return heldMovement; }
             @Override public void removeBody(Entity entity) { removals++; PetVisual.super.removeBody(entity); }
@@ -139,6 +154,7 @@ class PetTickerCoverageTest {
 
     private WolfMock wolf(Location at) {
         var wolf = new WolfMock(server, UUID.randomUUID()) {
+            @Override public void setVelocity(org.bukkit.util.Vector velocity) { velocityUpdates++; super.setVelocity(velocity); }
             @Override public boolean isInWater() { return swimming; }
             @Override public boolean isOnGround() { return true; }
             @Override public boolean hasLineOfSight(Entity target) { return true; }
@@ -220,6 +236,68 @@ class PetTickerCoverageTest {
         loaded.close();
     }
 
+    @Test void postureAndSleepingLookNeverSearchGoalsAndSeeTrainingAndListeningChanges() throws Exception {
+        pet.order(PetOrder.SIT);
+        move(now);
+        var posture = server.getMobGoals().getGoal(body, GoalKey.of(Mob.class,
+                new NamespacedKey(runtime.plugin(), "posture_navigation")));
+        var look = server.getMobGoals().getGoal(body, GoalKey.of(Mob.class,
+                new NamespacedKey(runtime.plugin(), "sleeping_look")));
+        int lookups = server.goalLookups();
+        for (int tick = 0; tick < 20; tick++) {
+            assertTrue(posture.shouldActivate());
+            assertTrue(posture.shouldStayActive());
+            posture.tick();
+            assertFalse(look.shouldActivate());
+        }
+        runtime.sessions().training(owner.getUniqueId(), new TrainingSession(pet.id()));
+        assertFalse(posture.shouldActivate());
+        pet.activity(Activity.SLEEPING);
+        assertTrue(posture.shouldActivate());
+        assertTrue(look.shouldStayActive());
+        pet.listeningUntilMillis(System.currentTimeMillis() + 10_000);
+        assertFalse(look.shouldActivate());
+        pet.listeningUntilMillis(0);
+        assertTrue(look.shouldActivate());
+        pet.stored(true);
+        assertFalse(posture.shouldActivate());
+        assertFalse(look.shouldActivate());
+        assertEquals(lookups, server.goalLookups());
+    }
+
+    @Test void postureStopsASlideOnceAndLeavesAStillBodyAloneOnRepeatedPasses() throws Exception {
+        pet.order(PetOrder.SIT);
+        body.setVelocity(new org.bukkit.util.Vector(.3, -.2, .4));
+        velocityUpdates = 0;
+        move(now);
+        assertEquals(1, velocityUpdates);
+        assertEquals(new org.bukkit.util.Vector(0, -.2, 0), body.getVelocity());
+        var goal = server.getMobGoals().getGoal(body, GoalKey.of(Mob.class,
+                new NamespacedKey(runtime.plugin(), "posture_navigation")));
+        goal.start();
+        for (int pass = 0; pass < 6; pass++) {
+            move(now + 500 * pass);
+            goal.tick();
+        }
+        assertEquals(1, velocityUpdates);
+        assertTrue(body.isAware());
+    }
+
+    @Test void sittingPetKeepsItsCustomTrickAcrossRepeatedTickerPasses() throws Exception {
+        pet.order(PetOrder.SIT);
+        move(now);
+        assertTrue(runtime.visual().playClip(body, runtime.config().type(pet.typeId()), "wave", 5));
+        for (int pass = 0; pass < 6; pass++) {
+            now += 500;
+            move(now);
+            assertTrue(controller.holdsMovement());
+        }
+        verify(animations, never()).stop("wave");
+        actions.clearInteractions(pet);
+        assertFalse(controller.holdsMovement());
+        verify(animations).stop("wave");
+    }
+
     @Test void missingBodyFreezesCareUntilLoadedEntitiesAndTheFullGracePeriod() throws Exception {
         configure("care.hunger-minutes-to-critical", 1);
         body.remove();
@@ -249,7 +327,7 @@ class PetTickerCoverageTest {
         assertEquals(1, spawns, "A restored body is reused rather than duplicated");
     }
 
-    @Test void failedSpawnRetriesAfterAnotherGracePeriodAndNeverDecaysAMissingPet() throws Exception {
+    @Test void failedSpawnRetriesWithBackoffAndNeverDecaysAMissingPet() throws Exception {
         body.remove();
         // An enabled provider with an unavailable API is a supported reflective integration failure.
         MockBukkit.createMockPlugin("MythicMobs");
@@ -271,9 +349,48 @@ class PetTickerCoverageTest {
         assertEquals(1, failedAttempts.get());
         configure("pets.wolf.mythic-mob", null);
         care(now + 10_000, 1);
+        assertNull(runtime.entity(pet));
+        care(now + 15_000, 1);
         assertNotNull(runtime.entity(pet));
         assertEquals(1, spawns);
         assertFalse(pet.dead());
+    }
+
+    @Test void unsafePlacementBacksOffToFiveMinutesWarnsOnceAndResetsAfterRecovery() throws Exception {
+        body.remove();
+        safeFloor = false;
+        var warnings = new ArrayList<String>();
+        runtime.plugin().getLogger().addHandler(new java.util.logging.Handler() {
+            @Override public void publish(java.util.logging.LogRecord record) {
+                if (record.getMessage().startsWith("Could not restore body for pet ")) warnings.add(record.getMessage());
+            }
+            @Override public void flush() { }
+            @Override public void close() { }
+        });
+        care(now, 1);
+        long at = now;
+        long[] delays = {5000, 10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000};
+        for (int attempt = 0; attempt < delays.length; attempt++) {
+            at += delays[attempt];
+            care(at - 1, 60_000);
+            assertEquals(attempt, spawns);
+            care(at, 60_000);
+            assertEquals(attempt + 1, spawns);
+            assertEquals(spawns, removals);
+            assertNull(runtime.entity(pet));
+            assertEquals(80, pet.need(Need.HUNGER));
+        }
+        assertEquals(1, warnings.size());
+        assertTrue(warnings.getFirst().contains(pet.id().toString()));
+        safeFloor = true;
+        care(at + 300_000, 1);
+        assertNotNull(runtime.entity(pet));
+        runtime.entity(pet).remove();
+        care(at + 300_001, 1);
+        care(at + 305_001, 1);
+        assertNotNull(runtime.entity(pet));
+        assertEquals(delays.length + 2, spawns);
+        assertEquals(1, warnings.size());
     }
 
     @Test void unloadingEntitiesResetsTheMissingBodyGraceInsteadOfSpawningOnTheFirstReloadedTick() throws Exception {

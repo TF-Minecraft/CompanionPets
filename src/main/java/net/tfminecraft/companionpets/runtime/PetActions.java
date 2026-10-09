@@ -130,10 +130,9 @@ public final class PetActions {
         return roaming;
     }
 
-    private void resumeFollowing(Player player, Pet pet, long now) {
+    private void follow(Player player, Pet pet, long now) {
         clearInteractions(pet); releaseFetch(pet, player, true);
         pet.order(PetOrder.FOLLOW); pet.staying(false); pet.forcedSitUntilMillis(0);
-        runtime.resumeFollowing(pet);
         wakeToFollow(pet, now);
         Entity body = runtime.entity(pet);
         if (body != null) {
@@ -164,13 +163,11 @@ public final class PetActions {
     }
 
     public void ownerSessionChanged(Player player) {
-        runtime.suspendFollowing(player.getUniqueId());
         for (Pet pet : runtime.store().of(player.getUniqueId())) {
             if (pet.fetch() != null) continue;
             roaming.cancelWithPosture(pet);
             clearInteractions(pet);
-            if (runtime.entity(pet) instanceof Mob mob && pet.order() == PetOrder.FOLLOW)
-                PostureNavigationGoal.hold(runtime, pet, mob);
+            pauseRestoredFollowing(pet, runtime.entity(pet));
         }
     }
 
@@ -542,16 +539,14 @@ public final class PetActions {
         if (handleReleaseChat(player, text, now) || hatching.chat(player, text, now) || handleRenameChat(player, text, now)) {
             return;
         }
-        if (respondToName(player, text, now) || addressedOrder(player, text, now)) return;
-        Pet looked = runtime.byEntity(lookingAt(player, 6.0));
         TrainingSession session = runtime.sessions().training(player.getUniqueId());
-        if (looked != null && looked.ownerId().equals(player.getUniqueId()) && !looked.stored()
-                && (looked.trickFor(SpokenOrder.key(text)) != null
-                        || session != null && session.petId().equals(looked.id()))) {
-            training.handleTrainingChat(player, text, now, looked, runtime.entity(looked));
-            return;
-        }
-        training.handleTrainingChat(player, text, now);
+        if (session == null && runtime.store().countOut(player.getUniqueId()) == 0) return;
+        if (respondToName(player, text, now) || addressedOrder(player, text, now)) return;
+        String word = SpokenOrder.key(text);
+        if (session == null && runtime.store().of(player.getUniqueId()).stream()
+                .noneMatch(pet -> !pet.stored() && pet.trickFor(word) != null)) return;
+        Entity looked = lookingAt(player, 6.0);
+        training.handleTrainingChat(player, text, now, runtime.byEntity(looked), looked);
     }
 
     private boolean audible(Player player, Pet pet) {
@@ -581,7 +576,7 @@ public final class PetActions {
 
     private boolean respondToName(Player player, String text, long now) {
         boolean answered = false;
-        for (Pet pet : runtime.store().active()) {
+        for (Pet pet : runtime.store().of(player.getUniqueId())) {
             if (!audible(player, pet)
                     || !SpokenOrder.matches(text, pet.name())) continue;
             Entity entity = runtime.entity(pet);
@@ -775,7 +770,7 @@ public final class PetActions {
                 }
             }
             case FOLLOW -> {
-                resumeFollowing(player, pet, now);
+                follow(player, pet, now);
             }
             case COME -> {
                 PetOrder previous = roaming.returnOrder(pet);
@@ -790,7 +785,7 @@ public final class PetActions {
                 pet.staying(true);
                 pet.order(PetOrder.STAY);
                 pet.forcedSitUntilMillis(0);
-                if (entity instanceof Mob mob) { PostureNavigationGoal.hold(runtime, pet, mob); PetFx.sit(mob, false); PetFx.lie(mob, false); }
+                if (entity instanceof Mob mob) { PostureNavigationGoal.hold(runtime, pet, mob); PetFx.lie(mob, false); PetFx.sit(mob, true); }
             }
             case SPEAK -> {
                 if (entity != null) {
@@ -920,7 +915,6 @@ public final class PetActions {
         // Time in the Pet House is not an absence that earns a welcome.
         pet.lastOwnerNearbyMillis(System.currentTimeMillis());
         runtime.remember(pet, entity);
-        runtime.resumeFollowing(pet);
         runtime.store().requestSave();
     }
 
