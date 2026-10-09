@@ -172,7 +172,7 @@ final class PetRoaming {
         // The saved order must survive cleanup while its body is in an unloaded chunk.
         if (body != null) {
             PetFx.lie(body, order == PetOrder.LAY);
-            if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT);
+            if (order != PetOrder.LAY) PetFx.sit(body, order == PetOrder.SIT || order == PetOrder.STAY);
             sleep.accept(body, false);
             if (order == PetOrder.FOLLOW) { PetMotion.stop(body); body.setAware(true); }
             else PostureNavigationGoal.hold(runtime, pet, body);

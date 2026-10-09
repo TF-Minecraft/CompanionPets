@@ -327,7 +327,7 @@ public final class PetTicker implements Runnable {
             case SIT, STAY -> {
                 mob.getPathfinder().stopPathfinding();
                 PetFx.lie(mob, false);
-                PetFx.sit(mob, mode == Locomotion.Mode.SIT);
+                PetFx.sit(mob, mode == Locomotion.Mode.SIT || pet.order() == net.tfminecraft.companionpets.pet.PetOrder.STAY || pet.staying());
             }
             case LIE, SLEEP -> {
                 mob.getPathfinder().stopPathfinding();

@@ -76,7 +76,7 @@ final class PetMoments {
 
     private boolean startBelly(Pet pet, Mob body, Player owner) {
         if (!runtime.visual().startBelly(body, runtime.config().type(pet.typeId()), Math.round(runtime.config().belly().idleSeconds() * 1000))) return false;
-        PetFx.sit(body, false);
+        PetFx.sit(body, pet.order() == net.tfminecraft.companionpets.pet.PetOrder.STAY || pet.staying());
         body.getPathfinder().stopPathfinding();
         bellyLooking.add(pet);
         PostureNavigationGoal.hold(runtime, pet, body);

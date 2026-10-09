@@ -788,7 +788,7 @@ public final class PetActions {
                 pet.staying(true);
                 pet.order(PetOrder.STAY);
                 pet.forcedSitUntilMillis(0);
-                if (entity instanceof Mob mob) { PostureNavigationGoal.hold(runtime, pet, mob); PetFx.sit(mob, false); PetFx.lie(mob, false); }
+                if (entity instanceof Mob mob) { PostureNavigationGoal.hold(runtime, pet, mob); PetFx.lie(mob, false); PetFx.sit(mob, true); }
             }
             case SPEAK -> {
                 if (entity != null) {

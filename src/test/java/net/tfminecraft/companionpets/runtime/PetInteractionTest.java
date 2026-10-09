@@ -1883,7 +1883,7 @@ class PetInteractionTest {
         actions.onChat(player, "follow Toby"); assertEquals(PetOrder.FOLLOW, pet.order());
         actions.onChat(player, "sit down Toby"); assertEquals(PetOrder.SIT, pet.order());
         pet.bindWord("stay", Trick.STAY); pet.progress(Trick.STAY, 100);
-        actions.onChat(player, "Toby stay"); assertEquals(PetOrder.STAY, pet.order()); assertFalse(body.isSitting()); assertTrue(postureHeld());
+        actions.onChat(player, "Toby stay"); assertEquals(PetOrder.STAY, pet.order()); assertTrue(body.isSitting()); assertTrue(postureHeld());
     }
 
     @Test void remoteOtherOwnerAndStoredPetsCannotHearNamedOrders() {
@@ -1894,15 +1894,60 @@ class PetInteractionTest {
         pet.stored(false); pet.ownerId(UUID.randomUUID()); actions.onChat(player, "Toby follow"); assertEquals(PetOrder.SIT, pet.order());
     }
 
+    @Test void explicitStaySitsTheNativeBodyButKeepsTheModelStandingAndRecoversAfterWater() {
+        var ticker = new PetTicker(runtime, actions);
+        for (boolean legacyStay : new boolean[]{false, true}) {
+            pet.order(legacyStay ? PetOrder.FOLLOW : PetOrder.STAY); pet.staying(legacyStay);
+            ticker.run();
+            assertTrue(body.isSitting());
+            var mode = net.tfminecraft.companionpets.behavior.Locomotion.choose(pet.illness(),
+                    pet.need(Need.HEALTH), pet.need(Need.ENERGY), pet.need(Need.HUNGER),
+                    pet.activity(), false, false, pet.order(), pet.staying());
+            assertEquals(net.tfminecraft.companionpets.visual.PetAnimation.IDLE,
+                    net.tfminecraft.companionpets.visual.VisualPose.select(mode, body.isSitting(), false));
+            inWater = true; ticker.run(); assertFalse(body.isSitting());
+            inWater = false; ticker.run(); assertTrue(body.isSitting());
+        }
+        pet.staying(false); pet.order(PetOrder.FOLLOW); ticker.run(); assertFalse(body.isSitting());
+        pet.bindWord("stay", Trick.STAY); pet.progress(Trick.STAY, 100);
+        pet.bindWord("come", Trick.COME); pet.progress(Trick.COME, 100);
+        actions.onChat(player, "Toby stay"); assertTrue(body.isSitting());
+        actions.onChat(player, "Toby come"); assertFalse(body.isSitting());
+    }
+
+    @Test void offlineFollowUsesADerivedStayWithoutSittingTheNativeBody() {
+        player.disconnect();
+        new PetTicker(runtime, actions).run();
+        assertEquals(PetOrder.FOLLOW, pet.order()); assertFalse(pet.staying());
+        assertTrue(postureHeld()); assertFalse(body.isSitting());
+    }
+
+    @Test void trainingRestingLookDoesNotLiftAnExplicitStayBody() {
+        pet.order(PetOrder.SIT);
+        var treat = new ItemStack(Material.COD);
+        player.getInventory().setItemInMainHand(treat);
+        actions.useOnPet(player, body, treat);
+        var goal = trainingGoal(); goal.tick(); assertTrue(body.isSitting());
+        pet.order(PetOrder.STAY); goal.tick(); assertTrue(body.isSitting());
+    }
+
+    @Test void bellyMomentPreservesTheNativeStayOrder() {
+        testConfig.set("pets.wolf.model", "beagle");
+        runtime.config(CompanionConfig.load(runtime.plugin(), testConfig));
+        bellyAvailable = true; body.setOnGround(true); pet.order(PetOrder.STAY);
+        assertTrue(actions.moments().triggerBelly(pet, body, player));
+        assertTrue(body.isSitting()); assertEquals(PetOrder.STAY, pet.order());
+    }
+
     @Test void stayRemainsStandingAndRejectsNativeTeleportsWhileFollowingAndComeCanMove() {
         var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
         pet.bindWord("stay", Trick.STAY); pet.progress(Trick.STAY, 100);
         actions.onChat(player, "Toby stay");
-        assertEquals(PetOrder.STAY, pet.order()); assertFalse(body.isSitting());
+        assertEquals(PetOrder.STAY, pet.order()); assertTrue(body.isSitting());
         var at = body.getLocation().clone();
         player.teleport(player.getLocation().add(100, 0, 0));
         new PetTicker(runtime, actions).run();
-        assertEquals(at, body.getLocation()); assertFalse(body.isSitting()); assertTrue(postureHeld());
+        assertEquals(at, body.getLocation()); assertTrue(body.isSitting()); assertTrue(postureHeld());
         for (PetOrder order : new PetOrder[]{PetOrder.STAY, PetOrder.SIT, PetOrder.LAY}) {
             pet.order(order); pet.staying(order == PetOrder.STAY);
             var event = new org.bukkit.event.entity.EntityTeleportEvent(body, at, player.getLocation());
@@ -1988,7 +2033,7 @@ class PetInteractionTest {
             assertEquals(previous, pet.order()); assertEquals(previous == PetOrder.STAY, pet.staying());
             assertEquals(Activity.NONE, pet.activity());
             assertTrue(body.isAware()); assertEquals(previous != PetOrder.FOLLOW, postureHeld());
-            assertEquals(previous == PetOrder.SIT || previous == PetOrder.LAY, body.isSitting());
+            assertEquals(previous != PetOrder.FOLLOW, body.isSitting());
             assertEquals(0, body.getVelocity().getX()); assertEquals(0, body.getVelocity().getZ());
             assertFalse(actions.roaming().tickAttention(pet, body, now + 502));
         }

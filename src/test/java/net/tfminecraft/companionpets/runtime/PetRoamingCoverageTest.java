@@ -246,7 +246,7 @@ class PetRoamingCoverageTest {
             assertEquals(previous == PetOrder.STAY, pet.staying());
             assertEquals(Activity.NONE, pet.activity());
             assertFalse(roaming.coming(pet));
-            assertEquals(previous == PetOrder.SIT || previous == PetOrder.LAY, body.isSitting());
+            assertEquals(previous != PetOrder.FOLLOW, body.isSitting());
             assertEquals(0, body.getVelocity().getX());
             assertEquals(0, body.getVelocity().getZ());
             assertEquals(-0.2, body.getVelocity().getY());
