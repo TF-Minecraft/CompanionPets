@@ -81,6 +81,13 @@ pets:
     sounds:
       preset: wolf
       pitch: 1.0
+  bordercolliegray:
+    species: dog
+    model: bordercolliegray
+    egg: mmoitems:PETS:PET_BORDERCOLLIEGRAY_EGG
+    sounds:
+      preset: wolf
+      pitch: 1.0
   catgray:
     species: cat
     model: catgray

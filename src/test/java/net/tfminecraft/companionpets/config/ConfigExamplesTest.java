@@ -67,7 +67,7 @@ class ConfigExamplesTest {
         var config = loadWithoutWarnings(bundled());
         assertEquals(java.util.Set.of("wolf", "cat", "beagle", "chihuahua", "corgi", "golden", "husky",
                 "catblack", "catfunny", "catorange", "mainecoon", "fox", "frog", "bernesse",
-                "bordercollie", "catgray", "cattabby", "lagottoromagnolo", "yorkshire"), config.types().keySet());
+                "bordercollie", "bordercolliegray", "catgray", "cattabby", "lagottoromagnolo", "yorkshire"), config.types().keySet());
         assertNull(config.type("rabbit"));
         assertNull(config.type("fox_example"));
         assertNull(config.customTrick(Trick.valueOf("wave")));
@@ -79,7 +79,7 @@ class ConfigExamplesTest {
         var config = loadWithoutWarnings(bundled());
         var pitches = java.util.Map.of("chihuahua", 1.25f, "corgi", 1.10f, "beagle", 1.05f,
                 "husky", .95f, "golden", .90f, "bernesse", .90f, "bordercollie", 1.0f,
-                "lagottoromagnolo", 1.05f, "yorkshire", 1.20f);
+                "bordercolliegray", 1.0f, "lagottoromagnolo", 1.05f, "yorkshire", 1.20f);
         for (var entry : pitches.entrySet()) {
             var dog = config.type(entry.getKey());
             assertEquals(EntityType.WOLF, dog.entity());
@@ -134,7 +134,7 @@ class ConfigExamplesTest {
         text = uncomment(text, "dog:", "  voice: wolf");
         text = uncomment(text, "wave:", "  at: [0, 1]");
         var config = loadWithoutWarnings(text);
-        assertEquals(21, config.types().size());
+        assertEquals(22, config.types().size());
         assertEquals(EntityType.WOLF, config.type("rabbit").entity());
         assertEquals("rabbit", config.type("rabbit").appearance().model());
         assertEquals(List.of(ItemRef.vanilla(Material.COOKED_BEEF)), config.type("wolf").treats());
