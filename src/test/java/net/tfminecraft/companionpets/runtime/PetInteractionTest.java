@@ -1635,7 +1635,7 @@ class PetInteractionTest {
         assertSame(pet, runtime.store().get(pet.id())); assertTrue(body.isValid()); assertEquals(0, bodyRemovals);
     }
 
-    @Test void restartingWithADistantFollowingPetKeepsItsSavedPositionAndBlocksNativeTeleport() {
+    @Test void restartingWithALoadedDistantFollowerAllowsNativeFollowingAndTeleport() {
         body.teleport(player.getLocation().add(40, 0, 0)); runtime.remember(pet, body);
         var at = body.getLocation().clone();
         var recovered = new PetRuntime(runtime.plugin(), runtime.config(), runtime.store(), new Sessions(),
@@ -1643,37 +1643,43 @@ class PetInteractionTest {
         var recoveredActions = new PetActions(recovered);
         recoveredActions.reattach(body);
         new PetTicker(recovered, recoveredActions).run();
-        assertEquals(at, body.getLocation()); assertTrue(postureHeld());
-        assertEquals(PetOrder.FOLLOW, pet.order(), "The saved order is retained while its session is paused");
+        assertEquals(at, body.getLocation()); assertFalse(postureHeld());
+        assertTrue(recovered.followingAllowed(pet, player)); assertEquals(PetOrder.FOLLOW, pet.order());
         var event = new org.bukkit.event.entity.EntityTeleportEvent(body, at, player.getLocation());
         new net.tfminecraft.companionpets.listen.PetListener(recovered, recoveredActions).onTeleport(event);
-        assertTrue(event.isCancelled());
-        player.teleport(at.clone().add(1, 0, 0));
-        new PetTicker(recovered, recoveredActions).run();
-        assertTrue(body.isAware()); assertTrue(recovered.followingAllowed(pet, player));
+        assertFalse(event.isCancelled());
     }
 
-    @Test void reconnectDoesNotSummonADistantPetAndExplicitFollowResumesIt() {
+    @Test void reconnectAllowsDistantFollowButPreservesStayAndDisconnectHoldsFollow() {
         var listener = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);
-        listener.onQuit(new org.bukkit.event.player.PlayerQuitEvent(player, (net.kyori.adventure.text.Component) null));
-        player.teleport(player.getLocation().add(40, 0, 0));
-        listener.onJoin(new org.bukkit.event.player.PlayerJoinEvent(player, (net.kyori.adventure.text.Component) null));
-        var at = body.getLocation().clone();
-        new PetTicker(runtime, actions).run();
-        assertEquals(at, body.getLocation()); assertTrue(postureHeld());
-        var event = new org.bukkit.event.entity.EntityTeleportEvent(body, at, player.getLocation());
-        listener.onTeleport(event); assertTrue(event.isCancelled());
-        player.teleport(at.clone().add(8, 0, 0));
-        actions.onChat(player, "Toby follow");
-        assertTrue(body.isAware()); assertTrue(runtime.followingAllowed(pet, player));
-        player.teleport(at.clone().add(40, 0, 0));
-        new PetTicker(runtime, actions).run();
-        assertEquals(at, body.getLocation(), "Normal catching up is delegated to native AI");
-        assertTrue(body.isAware());
-        event = new org.bukkit.event.entity.EntityTeleportEvent(body, at, player.getLocation());
-        listener.onTeleport(event); assertFalse(event.isCancelled(), "Native teleport is allowed after explicit Follow");
+        var ticker = new PetTicker(runtime, actions);
+        for (PetOrder order : new PetOrder[]{PetOrder.FOLLOW, PetOrder.STAY}) {
+            pet.order(order); pet.staying(order == PetOrder.STAY);
+            player.disconnect();
+            listener.onQuit(new org.bukkit.event.player.PlayerQuitEvent(player, (net.kyori.adventure.text.Component) null));
+            ticker.run();
+            assertTrue(postureHeld()); assertFalse(runtime.followingAllowed(pet, player));
+            player.reconnect(); player.teleport(body.getLocation().add(40, 0, 0));
+            player.openInventory(MockBukkit.getMock().createInventory(null, 9));
+            listener.onJoin(new org.bukkit.event.player.PlayerJoinEvent(player, (net.kyori.adventure.text.Component) null));
+            ticker.run();
+            assertTrue(runtime.followingAllowed(pet, player));
+            assertEquals(order == PetOrder.STAY, postureHeld());
+            var event = new org.bukkit.event.entity.EntityTeleportEvent(body, body.getLocation(), player.getLocation());
+            listener.onTeleport(event); assertEquals(order == PetOrder.STAY, event.isCancelled());
+            assertEquals(order, pet.order());
+        }
     }
 
+    @Test void followingIsUnavailableAcrossWorldsAndResumesOnReturningToTheSameWorld() {
+        var home = player.getLocation();
+        player.teleport(new Location(MockBukkit.getMock().addSimpleWorld("other"), 0, 64, 0));
+        assertFalse(runtime.followingAllowed(pet, player));
+        new PetTicker(runtime, actions).run(); assertTrue(postureHeld()); assertFalse(body.isSitting());
+        player.teleport(home.clone().add(100, 0, 0));
+        assertTrue(runtime.followingAllowed(pet, player));
+        new PetTicker(runtime, actions).run(); assertFalse(postureHeld());
+    }
     @Test void hungryWeakenedOrRestingPetStaysMobileAndFloatsInWaterWithoutChangingItsOrder() {
         inWater = true;
         for (PetOrder order : PetOrder.values()) {

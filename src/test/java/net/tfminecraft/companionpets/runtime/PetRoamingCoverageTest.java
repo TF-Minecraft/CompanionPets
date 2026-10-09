@@ -253,7 +253,6 @@ class PetRoamingCoverageTest {
             assertTrue(body.isAware());
             assertEquals(previous == PetOrder.LAY ? PetAnimation.LIE
                     : previous == PetOrder.SIT ? PetAnimation.SIT : PetAnimation.IDLE, poses.getLast());
-            runtime.resumeFollowing(pet);
         }
         assertTrue(stops > 0);
     }

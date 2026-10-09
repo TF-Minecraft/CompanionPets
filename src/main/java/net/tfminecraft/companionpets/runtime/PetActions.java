@@ -130,10 +130,9 @@ public final class PetActions {
         return roaming;
     }
 
-    private void resumeFollowing(Player player, Pet pet, long now) {
+    private void follow(Player player, Pet pet, long now) {
         clearInteractions(pet); releaseFetch(pet, player, true);
         pet.order(PetOrder.FOLLOW); pet.staying(false); pet.forcedSitUntilMillis(0);
-        runtime.resumeFollowing(pet);
         wakeToFollow(pet, now);
         Entity body = runtime.entity(pet);
         if (body != null) {
@@ -164,13 +163,11 @@ public final class PetActions {
     }
 
     public void ownerSessionChanged(Player player) {
-        runtime.suspendFollowing(player.getUniqueId());
         for (Pet pet : runtime.store().of(player.getUniqueId())) {
             if (pet.fetch() != null) continue;
             roaming.cancelWithPosture(pet);
             clearInteractions(pet);
-            if (runtime.entity(pet) instanceof Mob mob && pet.order() == PetOrder.FOLLOW)
-                PostureNavigationGoal.hold(runtime, pet, mob);
+            pauseRestoredFollowing(pet, runtime.entity(pet));
         }
     }
 
@@ -773,7 +770,7 @@ public final class PetActions {
                 }
             }
             case FOLLOW -> {
-                resumeFollowing(player, pet, now);
+                follow(player, pet, now);
             }
             case COME -> {
                 PetOrder previous = roaming.returnOrder(pet);
@@ -918,7 +915,6 @@ public final class PetActions {
         // Time in the Pet House is not an absence that earns a welcome.
         pet.lastOwnerNearbyMillis(System.currentTimeMillis());
         runtime.remember(pet, entity);
-        runtime.resumeFollowing(pet);
         runtime.store().requestSave();
     }
 

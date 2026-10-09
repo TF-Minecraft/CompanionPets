@@ -33,7 +33,6 @@ public final class PetRuntime {
     private final PetVoice voice = new PetVoice(this);
     private final java.util.Map<String, net.tfminecraft.companionpets.visual.PetCapabilities> capabilities = new java.util.HashMap<>();
     private final java.util.Map<String, Long> capabilityRetryAt = new java.util.HashMap<>();
-    private final java.util.Set<UUID> suspendedFollowing = new java.util.HashSet<>();
     private final java.util.Map<UUID, Location> lastGround = new java.util.HashMap<>();
     private final java.util.Map<org.bukkit.entity.Mob, WaterNavigationGoal> waterGoals = new java.util.HashMap<>();
 
@@ -54,8 +53,6 @@ public final class PetRuntime {
         this.visual = visual;
         this.petKey = petKey;
         this.toyKey = toyKey;
-        // Loading a saved Follow order must not summon distant pets into a new session.
-        for (Pet pet : store.all()) suspendedFollowing.add(pet.id());
         applyDefaultTricks();
     }
 
@@ -165,18 +162,8 @@ public final class PetRuntime {
             pet.carers().reinforce(player.getUniqueId(), gain, now, 60_000);
     }
 
-    public void suspendFollowing(UUID ownerId) {
-        for (Pet pet : store.of(ownerId)) suspendedFollowing.add(pet.id());
-    }
-
-    public void resumeFollowing(Pet pet) { suspendedFollowing.remove(pet.id()); }
-
     public boolean followingAllowed(Pet pet, Player owner) {
-        if (owner == null || !owner.isOnline() || distance(owner, pet) == Double.POSITIVE_INFINITY) return false;
-        if (suspendedFollowing.contains(pet.id())
-                && distance(owner, pet) <= Math.min(config.ownerNearRadius(), 12))
-            suspendedFollowing.remove(pet.id());
-        return !suspendedFollowing.contains(pet.id());
+        return owner != null && owner.isOnline() && Double.isFinite(distance(owner, pet));
     }
 
     public Entity entity(Pet pet) {

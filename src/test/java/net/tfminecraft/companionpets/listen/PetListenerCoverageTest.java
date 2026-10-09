@@ -442,19 +442,21 @@ class PetListenerCoverageTest {
         assertTrue(body.isValid());
     }
 
-    @Test void joinAndQuitSuspendDistantFollowingAndClearInteractionDeduplication() {
+    @Test void joinAllowsDistantFollowingAndQuitClearsInteractionDeduplication() {
         hold(Material.COD, 8);
         pet.need(Need.HUNGER, 10);
         fire(new PlayerInteractEntityEvent(owner, body, EquipmentSlot.HAND));
         assertEquals(7, owner.getInventory().getItemInMainHand().getAmount());
         body.teleport(owner.getLocation().add(30, 0, 0));
         fire(new PlayerJoinEvent(owner, net.kyori.adventure.text.Component.empty()));
-        assertFalse(runtime.followingAllowed(pet, owner));
+        assertTrue(runtime.followingAllowed(pet, owner));
         runtime.sessions().rename(owner.getUniqueId(), new RenamePrompt(pet.id(), System.currentTimeMillis() + 30_000));
+        owner.disconnect();
         fire(new PlayerQuitEvent(owner, net.kyori.adventure.text.Component.empty()));
         assertNull(runtime.sessions().privatePrompt(owner.getUniqueId()));
         assertFalse(runtime.followingAllowed(pet, owner));
         // A reconnect can deliver a new interaction within the same server tick.
+        owner.reconnect();
         fire(new PlayerInteractEntityEvent(owner, body, EquipmentSlot.HAND));
         assertEquals(6, owner.getInventory().getItemInMainHand().getAmount());
     }

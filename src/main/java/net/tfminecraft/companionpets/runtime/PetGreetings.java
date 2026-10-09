@@ -93,7 +93,7 @@ final class PetGreetings {
         runtime.visual().cancelAction(body);
         if (mobile) {
             pet.order(PetOrder.FOLLOW); pet.staying(false); pet.forcedSitUntilMillis(0);
-            pet.activity(Activity.GREETING); runtime.resumeFollowing(pet);
+            pet.activity(Activity.GREETING);
             actions.markSleep(body, false); PetFx.sit(body, false); PetFx.lie(body, false);
             body.setAware(true);
         }
