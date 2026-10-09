@@ -7,7 +7,6 @@ import java.util.UUID;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.item.ItemRef;
 import net.tfminecraft.companionpets.item.HeldItem;
 import org.bukkit.Particle;
@@ -27,6 +26,7 @@ import net.tfminecraft.companionpets.care.DominantNeed;
 import net.tfminecraft.companionpets.care.NeedClock;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
+import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.management.PresenceRules;
 import net.tfminecraft.companionpets.pet.Activity;
 import net.tfminecraft.companionpets.pet.Illness;
@@ -263,8 +263,8 @@ public final class PetTicker implements Runnable {
                 }
                 actions.markSleep(mob, false);
                 runtime.visual().cancelAction(mob);
-                WaterEscape.swim(mob, null);
-                WaterNavigationGoal.ensure(runtime, pet, mob, actions);
+                WaterEscape.swim(mob);
+                WaterNavigationGoal.ensure(runtime, pet, mob);
                 continue;
             }
             runtime.rememberGround(pet, mob);
@@ -296,8 +296,6 @@ public final class PetTicker implements Runnable {
             }
             boolean held = mode == Locomotion.Mode.SIT || mode == Locomotion.Mode.STAY
                     || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP;
-            // The posture waits until the pet reaches the bank it swam towards.
-            if (held && WaterNavigationGoal.finishing(runtime, mob)) continue;
             if (!held && runtime.visual().holdsMovement(mob)) {
                 net.tfminecraft.companionpets.integration.PetMotion.settle(mob);
                 continue;

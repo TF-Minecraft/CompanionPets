@@ -101,6 +101,7 @@ class PetRoamingCoverageTest {
             @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() {
                 return (com.destroystokyo.paper.entity.Pathfinder) Proxy.newProxyInstance(getClass().getClassLoader(),
                         new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class}, (proxy, method, args) -> switch (method.getName()) {
+                            case "setCanFloat" -> { assertEquals(true, args[0]); yield null; }
                             case "stopPathfinding" -> { stops++; yield null; }
                             case "moveTo" -> { paths.add(((Location) args[0]).clone()); speeds.add((Double) args[1]); yield true; }
                             case "hasPath" -> false;
@@ -319,10 +320,8 @@ class PetRoamingCoverageTest {
 
     @Test void fetchReturnUsesItsConfiguredSpeedAndCompletesOnArrival() {
         assertFalse(roaming.returningFromFetch(pet));
-        assertEquals(1.25, roaming.movementSpeed(pet));
         roaming.returnFromFetch(pet, owner, 1.8);
         assertTrue(roaming.returningFromFetch(pet));
-        assertEquals(1.8, roaming.movementSpeed(pet));
         assertEquals(owner.getLocation(), paths.getLast());
         assertEquals(1.8, speeds.getLast());
         body.teleport(owner.getLocation().add(1, 0, 0));
@@ -330,7 +329,6 @@ class PetRoamingCoverageTest {
         assertFalse(roaming.returningFromFetch(pet));
         assertEquals(Activity.NONE, pet.activity());
         assertEquals(PetOrder.FOLLOW, pet.order());
-        assertEquals(1.25, roaming.movementSpeed(pet));
         assertNull(roaming.destination(pet));
     }
 

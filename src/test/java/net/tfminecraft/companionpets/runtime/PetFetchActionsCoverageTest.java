@@ -163,6 +163,7 @@ class PetFetchActionsCoverageTest {
         return (Pathfinder) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Pathfinder.class},
             (proxy, method, args) -> switch (method.getName()) {
                 case "moveTo" -> { targets.put(body.getUniqueId(), ((Location) args[0]).clone()); yield true; }
+                case "setCanFloat" -> { assertEquals(true, args[0]); yield null; }
                 case "stopPathfinding" -> { targets.remove(body.getUniqueId()); yield null; }
                 case "hasPath" -> targets.containsKey(body.getUniqueId());
                 case "getEntity" -> body;
@@ -333,11 +334,10 @@ class PetFetchActionsCoverageTest {
         assertEquals(actions.fetchActions().destination(follower), targets.get(body.getUniqueId()));
     }
 
-    @Test void swimmingFollowerReturnsToItsOwnOwnerInTheSameWaterTickWithoutSteppingTheRace() {
+    @Test void swimmingFollowerKeepsFollowingTheCarrierUntilDeliveryThenReturnsToItsOwner() {
         Pet follower = foreignPet();
         Pet other = wolf(owner.getUniqueId(), 4);
-        carry(pet);
-        var job = pet.fetch();
+        carry(pet); var job = pet.fetch();
         var body = (PetFetchWorkflowTest.FetchWolf) runtime.entity(follower);
         var carrier = (PetFetchWorkflowTest.FetchWolf) runtime.entity(pet);
         var otherBody = (PetFetchWorkflowTest.FetchWolf) runtime.entity(other);
@@ -345,47 +345,36 @@ class PetFetchActionsCoverageTest {
         petOwner.teleport(new Location(world, 14, 64, 8));
         body.teleport(new Location(world, 12, 64, 0));
         double speed = actions.fetchActions().movementSpeed(follower);
-        // Changing needs after the race begins must not replace its cached pace.
         follower.bond(100); follower.need(Need.CLEANLINESS, 0);
         int carrierRequests = carrier.navigationRequests, otherRequests = otherBody.navigationRequests;
-        var carrierTarget = targets.get(carrier.getUniqueId());
-        var otherTarget = targets.get(otherBody.getUniqueId());
+        var velocity = new org.bukkit.util.Vector(.08, -.02, .03); body.setVelocity(velocity);
         body.inWater = true;
-        loadedWaterChunks = true;
-        WaterNavigationGoal.ensure(runtime, follower, body, actions);
-        WaterNavigationGoal goal = runtime.waterGoal(body);
+        WaterNavigationGoal.ensure(runtime, follower, body);
+        var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
         long now = System.currentTimeMillis();
-        goal.tick(now);
-        assertNull(follower.fetch()); assertEquals(Activity.ATTENDING, follower.activity());
-        assertTrue(actions.roaming().returningFromFetch(follower));
-        assertEquals(petOwner.getLocation(), actions.roaming().destination(follower));
-        assertEquals(petOwner.getLocation(), targets.get(body.getUniqueId()));
-        assertEquals(speed, actions.roaming().movementSpeed(follower));
-        assertEquals(speed, speeds.get(body.getUniqueId()));
-        assertEquals(.10 * speed / 1.1, body.getVelocity().clone().setY(0).length(), .000001);
-        assertTrue(body.getVelocity().getX() > 0); assertTrue(body.getVelocity().getZ() > 0);
+        assertFalse(goal.shouldActivate()); goal.tick();
+        actions.fetchActions().step(follower, body, now + 500);
+        assertSame(job, follower.fetch()); assertEquals(Activity.PLAYING, follower.activity());
+        assertFalse(actions.roaming().returningFromFetch(follower));
+        assertEquals(actions.fetchActions().destination(follower), targets.get(body.getUniqueId()));
+        assertEquals(speed, speeds.get(body.getUniqueId())); assertEquals(velocity, body.getVelocity());
         assertSame(job, pet.fetch()); assertSame(job, other.fetch());
         assertEquals(FetchPhase.CARRY, job.phase()); assertEquals(pet.id(), job.carrierId());
-        assertEquals(Activity.PLAYING, pet.activity()); assertEquals(Activity.PLAYING, other.activity());
         assertEquals(carrierRequests, carrier.navigationRequests); assertEquals(otherRequests, otherBody.navigationRequests);
-        assertEquals(carrierTarget, targets.get(carrier.getUniqueId())); assertEquals(otherTarget, targets.get(otherBody.getUniqueId()));
         assertTrue(items().isEmpty());
-        goal.tick(now + 500);
-        int requests = body.navigationRequests;
-        Location returnTarget = targets.get(body.getUniqueId());
         carrier.teleport(owner.getLocation()); actions.fetchActions().step(pet, carrier, now + 1000);
         assertNull(pet.fetch()); assertNull(other.fetch()); assertNull(follower.fetch());
         assertEquals(Activity.ATTENDING, follower.activity());
-        assertEquals(requests, body.navigationRequests, "Delivery must not restart the released follower's return");
-        assertEquals(returnTarget, targets.get(body.getUniqueId()));
-        assertOnePlainToy();
+        assertTrue(actions.roaming().returningFromFetch(follower));
+        assertEquals(petOwner.getLocation(), targets.get(body.getUniqueId()));
+        assertEquals(speed, speeds.get(body.getUniqueId())); assertEquals(velocity, body.getVelocity());
+        assertFalse(goal.shouldActivate()); assertOnePlainToy();
         actions.fetchActions().returned(pet, owner); actions.fetchActions().tick(now + 1500);
         assertOnePlainToy();
     }
-
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
-    void swimmingSharedFollowerOnlyDetachesWhenItsOwnerIsUnavailable(boolean offline) {
+    void swimmingSharedFollowerDetachesAtTheNextRaceValidationWhenItsOwnerIsUnavailable(boolean offline) {
         Pet follower = foreignPet(); carry(pet); var job = pet.fetch();
         var body = (PetFetchWorkflowTest.FetchWolf) runtime.entity(follower);
         PlayerMock petOwner = (PlayerMock) Bukkit.getPlayer(follower.ownerId());
@@ -393,6 +382,7 @@ class PetFetchActionsCoverageTest {
         else petOwner.teleport(new Location(server.addSimpleWorld("owner-away"), 0, 64, 0));
         body.inWater = true;
         actions.fetchActions().step(follower, body);
+        actions.fetchActions().tick(System.currentTimeMillis());
         assertNull(follower.fetch()); assertEquals(Activity.NONE, follower.activity());
         assertFalse(actions.roaming().returningFromFetch(follower));
         assertNull(actions.roaming().destination(follower)); assertSame(job, pet.fetch());

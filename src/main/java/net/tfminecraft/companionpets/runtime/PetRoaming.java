@@ -106,11 +106,6 @@ final class PetRoaming {
         return job != null && job.fetchReturn;
     }
 
-    double movementSpeed(Pet pet) {
-        Attention job = attention.get(pet.id());
-        return job == null ? 1.25 : job.speed;
-    }
-
     private void attend(Pet pet, Player owner, long now, PetOrder returnOrder) {
         if (runtime.entity(pet) instanceof Mob body) {
             net.tfminecraft.companionpets.integration.PetMotion.stop(body);

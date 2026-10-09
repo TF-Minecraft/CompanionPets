@@ -20,7 +20,6 @@ import org.bukkit.util.Vector;
 
 import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.behavior.Locomotion;
-import net.tfminecraft.companionpets.behavior.WaterEscape;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.item.HandItems;
@@ -219,11 +218,6 @@ final class PetFetchActions {
             return;
         }
         if (!pet.id().equals(job.carrierId())) {
-            if (WaterEscape.needed(mob)) {
-                releaseFetch(pet, false);
-                returnFollower(pet, speed);
-                return;
-            }
             Location destination = carrierDestination(pet, job, owner);
             if (destination == null) { actions.releaseFetch(pet, owner, false); return; }
             if (mob.getLocation().distanceSquared(destination) > 1) moveTo(pet, mob, destination, speed, now);

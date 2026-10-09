@@ -77,7 +77,7 @@ public final class PetMotion {
 
     public static void stop(Mob body) {
         if (net.tfminecraft.companionpets.behavior.WaterEscape.needed(body)) {
-            net.tfminecraft.companionpets.behavior.WaterEscape.swim(body, null);
+            net.tfminecraft.companionpets.behavior.WaterEscape.swim(body);
             return;
         }
         body.getPathfinder().stopPathfinding();
@@ -95,8 +95,12 @@ public final class PetMotion {
      * player, so a body that is already still is left alone; a route or a slide is stopped.
      */
     public static void settle(Mob body) {
+        if (net.tfminecraft.companionpets.behavior.WaterEscape.needed(body)) {
+            net.tfminecraft.companionpets.behavior.WaterEscape.swim(body);
+            return;
+        }
         var velocity = body.getVelocity();
-        if (net.tfminecraft.companionpets.behavior.WaterEscape.needed(body) || body.getPathfinder().hasPath()
+        if (body.getPathfinder().hasPath()
                 || velocity.getX() * velocity.getX() + velocity.getZ() * velocity.getZ() > SETTLED) stop(body);
     }
 

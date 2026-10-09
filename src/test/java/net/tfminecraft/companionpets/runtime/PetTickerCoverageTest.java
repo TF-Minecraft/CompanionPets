@@ -168,6 +168,7 @@ class PetTickerCoverageTest {
             @Override public Pathfinder getPathfinder() {
                 return (Pathfinder) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[] {Pathfinder.class},
                     (proxy, method, args) -> switch (method.getName()) {
+                        case "setCanFloat" -> { assertEquals(true, args[0]); yield null; }
                         case "stopPathfinding" -> { stops++; yield null; }
                         case "hasPath" -> false;
                         case "getEntity" -> this;
@@ -473,7 +474,7 @@ class PetTickerCoverageTest {
         move(now);
         assertEquals(Activity.NONE, pet.activity());
         assertEquals(20, pet.need(Need.ENERGY));
-        assertTrue(body.getVelocity().getY() >= .16);
+        assertEquals(new org.bukkit.util.Vector(), body.getVelocity());
         assertFalse(body.isSitting());
     }
 

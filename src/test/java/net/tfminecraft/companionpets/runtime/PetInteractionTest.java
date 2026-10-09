@@ -116,6 +116,7 @@ class PetInteractionTest {
                     @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() {
                         return (com.destroystokyo.paper.entity.Pathfinder) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
                                 new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class}, (proxy, method, args) -> switch (method.getName()) {
+                                    case "setCanFloat" -> { assertEquals(true, args[0]); yield null; }
                                     case "stopPathfinding" -> { navigationStops++; yield null; }
                                     case "moveTo" -> { navigationRequests++; navigationTarget = (args[0] instanceof Location at ? at : plannedPathTarget).clone(); navigationSpeed = (double) args[1]; yield true; }
                                     case "hasPath" -> existingFollowPath;
@@ -1697,17 +1698,17 @@ class PetInteractionTest {
             pet.illness(Illness.WEAKENED); pet.need(Need.HEALTH, 0); pet.need(Need.ENERGY, 0); pet.need(Need.HUNGER, 0);
             body.setAware(false); body.setSitting(true); body.setVelocity(new org.bukkit.util.Vector(0, -0.3, 0));
             new PetTicker(runtime, actions).run();
-            assertTrue(body.isAware()); assertFalse(body.isSitting()); assertTrue(body.getVelocity().getY() > 0);
+            assertTrue(body.isAware()); assertFalse(body.isSitting()); assertEquals(-0.3, body.getVelocity().getY());
             assertEquals(order, pet.order());
             var key = com.destroystokyo.paper.entity.ai.GoalKey.of(org.bukkit.entity.Mob.class,
                     new NamespacedKey(runtime.plugin(), "water_navigation"));
             var goal = org.bukkit.Bukkit.getMobGoals().getGoal(body, key);
-            assertNotNull(goal); assertTrue(goal.shouldActivate());
-            goal.tick(); assertTrue(body.getVelocity().getY() > 0);
+            assertNotNull(goal); assertEquals(order != PetOrder.FOLLOW, goal.shouldActivate());
+            goal.tick(); assertEquals(-0.3, body.getVelocity().getY());
             net.tfminecraft.companionpets.integration.PetMotion.hold(body);
             net.tfminecraft.companionpets.fx.PetFx.sit(body, true);
             net.tfminecraft.companionpets.fx.PetFx.lie(body, true);
-            assertTrue(body.isAware()); assertFalse(body.isSitting()); assertTrue(body.getVelocity().getY() > 0);
+            assertTrue(body.isAware()); assertFalse(body.isSitting()); assertEquals(-0.3, body.getVelocity().getY());
             inWater = false;
             new PetTicker(runtime, actions).run();
             assertTrue(body.isAware(), "Sleeping pets keep native AI awake while sitting");
@@ -2348,16 +2349,17 @@ class PetInteractionTest {
         assertFalse(actions.anticipation().active(pet)); assertEquals(0,tailHz);
     }
 
-    @Test void comeContinuesToUpdateAttentionWhileTheWaterGoalOwnsMovement() {
+    @Test void comeKeepsItsNativeRouteAndMoveOwnershipInWater() {
         pet.bindWord("come",Trick.COME); pet.progress(Trick.COME,100);
         player.teleport(player.getLocation().add(5,0,0));
         actions.onChat(player,pet.name()+" come"); assertEquals(Activity.ATTENDING,pet.activity());
-        inWater=true; WaterNavigationGoal.ensure(runtime,pet,body,actions);
+        inWater=true; WaterNavigationGoal.ensure(runtime,pet,body);
         var water=org.bukkit.Bukkit.getMobGoals().getGoal(body,com.destroystokyo.paper.entity.ai.GoalKey.of(
                 org.bukkit.entity.Mob.class,new NamespacedKey(runtime.plugin(),"water_navigation")));
-        assertTrue(water.shouldStayActive()); water.start();
+        assertFalse(water.shouldStayActive()); water.start();
+        actions.roaming().tickAttention(pet,body,System.currentTimeMillis()+500);
         assertEquals(Activity.ATTENDING,pet.activity());
-        assertTrue(navigationRequests>0); assertTrue(body.getVelocity().getY()>0,"Water goal keeps the attending pet afloat");
+        assertTrue(navigationRequests>0); assertEquals(new org.bukkit.util.Vector(),body.getVelocity());
     }
     private PlayerMock toyPlayer(String name, double x, Material toy) {
         var server = (org.mockbukkit.mockbukkit.ServerMock) org.bukkit.Bukkit.getServer();

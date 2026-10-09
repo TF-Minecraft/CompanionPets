@@ -129,6 +129,7 @@ class PetFetchWorkflowTest {
             boolean inWater;
             boolean airborne;
             int navigationRequests;
+            final java.util.List<Float> navigationWaterCosts = new java.util.ArrayList<>();
             final NativeClock clock = new NativeClock();
             public FetchWolf(ServerMock server, UUID id, java.util.Map<UUID, Location> navigationTargets,
                     java.util.Map<UUID, Double> navigationSpeeds) {
@@ -138,12 +139,13 @@ class PetFetchWorkflowTest {
                             getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class},
                             (proxy, method, args) -> switch (method.getName()) {
                                 case "moveTo" -> {
-                                    navigationRequests++;
+                                    navigationRequests++; navigationWaterCosts.add(clock.waterMalus);
                                     Location target = args[0] instanceof Location at ? at
                                             : ((com.destroystokyo.paper.entity.Pathfinder.PathResult) args[0]).getFinalPoint();
                                     navigationTargets.put(getUniqueId(), target.clone());
                                     navigationSpeeds.put(getUniqueId(), ((Number) args[1]).doubleValue()); yield true;
                                 }
+                                case "setCanFloat" -> { assertEquals(true, args[0]); yield null; }
                                 case "stopPathfinding" -> { navigationTargets.remove(getUniqueId()); yield null; }
                                 case "hasPath" -> navigationTargets.containsKey(getUniqueId());
                                 case "getEntity" -> this;
@@ -170,6 +172,9 @@ class PetFetchWorkflowTest {
     public static class NativeClock {
         public boolean isWet;
         float progress;
+        float waterMalus = 8F;
+        public float getPathfindingMalus(net.minecraft.world.level.pathfinder.PathType type) { return waterMalus; }
+        public void setPathfindingMalus(net.minecraft.world.level.pathfinder.PathType type, float value) { waterMalus = value; }
         final NativeLevel level = new NativeLevel();
         public float getShakeAnim(float partial) { return progress; }
         public void handleEntityEvent(byte event) { if (event == 56) progress = 0; }
@@ -419,7 +424,7 @@ class PetFetchWorkflowTest {
         follower.teleport(new Location(world, 8, 64, 0)); carrier.teleport(owner.getLocation());
         actions.fetchActions().step(pet, carrier);
         assertEquals(Activity.ATTENDING, other.activity());
-        assertEquals(base * 1.1, actions.roaming().movementSpeed(other), 0.0001);
+        assertEquals(base * 1.1, navigationSpeeds.get(runtime.entity(other).getUniqueId()), 0.0001);
     }
 
     @Test void fetchRefreshesRoutesAtItsCadenceButPicksUpAndDeliversImmediately() {
@@ -705,7 +710,7 @@ class PetFetchWorkflowTest {
         listener.onTeleport(afterReturn); assertFalse(afterReturn.isCancelled());
     }
 
-    @Test void winnerAndLoserKeepTheirOwnFasterOutboundSpeedOnLandAndInWater() {
+    @Test void carrierAndFollowerKeepTheirOwnCachedSpeedUntilWaterDelivery() {
         Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
         pet.bond(0); pet.favoriteToy(null); other.bond(80); other.favoriteToy("STICK");
         double oldSpeed = net.tfminecraft.companionpets.behavior.Locomotion.speed(
@@ -729,10 +734,11 @@ class PetFetchWorkflowTest {
         water.start();
         assertEquals(loserOutbound, navigationSpeeds.get(loser.getUniqueId()));
         assertEquals(outboundSwim, loser.getVelocity().clone().setY(0).length(), 1e-9);
+        assertSame(pet.fetch(), other.fetch()); assertEquals(Activity.PLAYING, other.activity());
+        winner.teleport(owner.getLocation()); actions.fetchActions().step(pet, winner);
         assertNull(other.fetch()); assertEquals(Activity.ATTENDING, other.activity());
         assertEquals(owner.getLocation(), actions.roaming().destination(other));
-        assertTrue(loser.getVelocity().getX() < 0, "The loser leaves the water race and swims back to its owner");
-        actions.fetchActions().step(pet, winner);
+        assertEquals(owner.getLocation(), navigationTargets.get(loser.getUniqueId()));
         assertEquals(winnerOutbound, navigationSpeeds.get(winner.getUniqueId()));
         winner.inWater = true; new PetTicker(runtime, actions).run();
         var winnerWater = server.getMobGoals().getGoal(winner, com.destroystokyo.paper.entity.ai.GoalKey.of(
@@ -758,44 +764,51 @@ class PetFetchWorkflowTest {
         var body = (FetchWolf) runtime.entity(pet);
         body.teleport(new Location(world, 2, 64, 0)); body.inWater = true;
         body.clock.isWet = true; body.clock.progress = 0.5F;
+        var velocity = new org.bukkit.util.Vector(.08, -.02, .03); body.setVelocity(velocity);
         new PetTicker(runtime, actions).run();
-        var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+        var water = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
                 org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
-        assertNotNull(goal); assertTrue(goal.shouldActivate()); goal.start();
-        assertSame(job, pet.fetch());
+        var fetch = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+                org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "fetch_navigation")));
+        assertNotNull(water); assertFalse(water.shouldActivate()); water.start(); fetch.tick();
+        assertTrue(fetch.shouldStayActive()); assertSame(job, pet.fetch());
+        assertFalse(body.navigationWaterCosts.isEmpty());
+        assertTrue(body.navigationWaterCosts.stream().allMatch(cost -> cost == 0F));
+        assertEquals(8F, body.clock.waterMalus);
         var teleport = new org.bukkit.event.entity.EntityTeleportEvent(body, body.getLocation(), owner.getLocation());
         listener.onTeleport(teleport); assertTrue(teleport.isCancelled());
         assertEquals(items().getFirst().getLocation(), navigationTargets.get(body.getUniqueId()));
-        assertTrue(body.getVelocity().getX() > 0); assertTrue(body.getVelocity().getY() > 0);
-        assertEquals(0, body.clock.progress); assertFalse(body.clock.isWet);
-        for (int i = 0; i < 3; i++) { new PetTicker(runtime, actions).run(); goal.start(); }
-        assertSame(job, pet.fetch()); assertTrue(body.getVelocity().getX() > 0);
-        body.teleport(items().getFirst().getLocation()); goal.start();
-        assertEquals(FetchPhase.CARRY, job.phase());
+        assertEquals(velocity, body.getVelocity()); assertEquals(0, body.clock.progress); assertFalse(body.clock.isWet);
+        for (int i = 0; i < 3; i++) { new PetTicker(runtime, actions).run(); fetch.tick(); }
+        assertSame(job, pet.fetch()); assertEquals(velocity, body.getVelocity());
+        body.teleport(items().getFirst().getLocation()); actions.fetchActions().step(pet, body);
+        assertEquals(FetchPhase.CARRY, job.phase()); actions.fetchActions().step(pet, body);
         assertEquals(owner.getLocation(), navigationTargets.get(body.getUniqueId()));
-        assertTrue(body.getVelocity().getX() < 0);
-        body.inWater = false; goal.stop();
-        actions.fetchActions().step(pet, body);
+        assertEquals(velocity, body.getVelocity());
+        body.inWater = false; water.stop(); actions.fetchActions().step(pet, body);
         assertSame(job, pet.fetch()); assertEquals(owner.getLocation(), navigationTargets.get(body.getUniqueId()));
     }
 
-    @Test void losingPetLeavesTheRaceAndReturnsToItsOwnerWhileSwimming() {
+    @Test void followerCrossesWaterWithTheCarrierAndReturnsToItsOwnerAfterDelivery() {
         Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
-        land(throwToy());
+        land(throwToy()); var job = pet.fetch();
         var body = (FetchWolf) runtime.entity(other);
         body.teleport(new Location(world, 4, 64, 0)); body.inWater = true;
-        runtime.entity(pet).teleport(items().getFirst().getLocation());
-        assertTrue(actions.fetchActions().claim(pet));
+        var carrier = (org.bukkit.entity.Mob) runtime.entity(pet);
+        carrier.teleport(items().getFirst().getLocation()); assertTrue(actions.fetchActions().claim(pet));
         new PetTicker(runtime, actions).run();
-        assertEquals(Activity.ATTENDING, other.activity()); assertNull(other.fetch());
-        assertNotNull(pet.fetch());
-        var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
+        assertEquals(Activity.PLAYING, other.activity()); assertSame(job, other.fetch());
+        var water = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
                 org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
-        goal.start();
+        assertFalse(water.shouldActivate()); water.start();
+        assertEquals(actions.fetchActions().destination(other), navigationTargets.get(body.getUniqueId()));
+        carrier.teleport(owner.getLocation()); actions.fetchActions().step(pet, carrier);
+        assertNull(other.fetch()); assertEquals(Activity.ATTENDING, other.activity());
+        assertFalse(water.shouldActivate());
         assertEquals(actions.roaming().destination(other), navigationTargets.get(body.getUniqueId()));
-        assertTrue(body.getVelocity().getX() < 0); assertEquals(Activity.ATTENDING, other.activity());
+        assertTrue(body.navigationWaterCosts.stream().allMatch(cost -> cost == 0F)); assertEquals(8F, body.clock.waterMalus);
+        assertEquals(new org.bukkit.util.Vector(), body.getVelocity());
     }
-
     @Test void visualTickerDoesNotStopFetchingOrPlayShakeForAModeledWetWolf() throws Exception {
         land(throwToy());
         var body = (FetchWolf) runtime.entity(pet);
