@@ -176,6 +176,7 @@ public final class PetListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onUnload(EntitiesUnloadEvent event) {
         for (Entity entity : event.getEntities()) {
+            runtime.forgetWaterGoal(entity);
             Pet pet = runtime.byEntity(entity);
             if (pet != null && entity.getUniqueId().equals(pet.entityId())) {
                 runtime.remember(pet, entity);

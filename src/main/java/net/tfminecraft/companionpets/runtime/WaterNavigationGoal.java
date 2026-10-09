@@ -8,12 +8,16 @@ import org.bukkit.entity.Mob;
 import com.destroystokyo.paper.entity.ai.*;
 import net.tfminecraft.companionpets.behavior.WaterEscape;
 import net.tfminecraft.companionpets.pet.Pet;
+import net.tfminecraft.companionpets.pet.Activity;
+import net.tfminecraft.companionpets.pet.PetOrder;
 
 /** Floats land pets while preserving fetch and call destinations across water. */
 final class WaterNavigationGoal implements Goal<Mob> {
     static final int PATH_SEARCH_BUDGET = 4;
     private static final long ROUTE_RETRY_MILLIS = 2_000L;
     private static final long MAX_SEARCH_DELAY_MILLIS = 16_000L;
+    // After 25 seconds without an escape route, FOLLOW yields MOVE to native owner following.
+    static final long STUCK_MILLIS = 25_000L;
     private final GoalKey<Mob> key;
     private final PetRuntime runtime;
     private final Pet pet;
@@ -30,6 +34,8 @@ final class WaterNavigationGoal implements Goal<Mob> {
     private long retryDelay = 1_000L;
     private int pathsRemaining;
     private double speed = 1.1;
+    private long failedSince = -1L;
+    private boolean stuck;
 
     private WaterNavigationGoal(GoalKey<Mob> key, PetRuntime runtime, Pet pet, Mob body, PetActions actions) {
         this.key = key; this.runtime = runtime; this.pet = pet; this.body = body; this.actions = actions;
@@ -64,7 +70,32 @@ final class WaterNavigationGoal implements Goal<Mob> {
         return current != null && near(current.getFinalPoint(), exit);
     }
 
-    @Override public boolean shouldActivate() { return !pet.stored() && !pet.dead() && WaterEscape.needed(body); }
+    @Override public boolean shouldActivate() { return shouldActivate(System.currentTimeMillis()); }
+    boolean shouldActivate(long now) {
+        if (!body.isValid() || body.isDead() || runtime.entity(pet) != body
+                || pet.stored() || pet.dead() || !WaterEscape.needed(body)) {
+            resetStuck();
+            return false;
+        }
+        if (!mayYield() || exit != null) resetStuck();
+        else if (!stuck && failedSince >= 0 && now - failedSince >= STUCK_MILLIS) {
+            actions.releaseFetch(pet, Bukkit.getPlayer(pet.ownerId()), true);
+            actions.clearInteractions(pet);
+            pet.activity(Activity.NONE);
+            pet.forcedSitUntilMillis(0);
+            WaterEscape.swim(body, null);
+            body.getPathfinder().stopPathfinding();
+            stuck = true;
+        }
+        return !stuck;
+    }
+
+    private boolean mayYield() {
+        return pet.order() == PetOrder.FOLLOW && !pet.staying()
+                && runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId()));
+    }
+
+    void resetStuck() { failedSince = -1L; stuck = false; }
     @Override public boolean shouldStayActive() { return shouldActivate(); }
     @Override public void start() { searchAt = 0; tick(); }
     @Override public void tick() {
@@ -72,7 +103,7 @@ final class WaterNavigationGoal implements Goal<Mob> {
     }
 
     void tick(long now) {
-        if (!shouldActivate()) return;
+        if (!shouldActivate(now)) return;
         if (pet.fetch() != null && body instanceof org.bukkit.entity.Wolf wolf)
             net.tfminecraft.companionpets.integration.WolfShake.defer(wolf);
         if (now >= searchAt) {
@@ -87,6 +118,8 @@ final class WaterNavigationGoal implements Goal<Mob> {
             speed = pet.fetch() != null ? actions.fetchActions().movementSpeed(pet)
                     : actions.roaming().returningFromFetch(pet) ? actions.roaming().movementSpeed(pet) : 1.1;
             navigate(preferred, now);
+            if (exit != null || !mayYield()) resetStuck();
+            else if (failedSince < 0) failedSince = now;
             searchAt = now + 500L;
         }
         WaterEscape.swim(body, exit, speed);

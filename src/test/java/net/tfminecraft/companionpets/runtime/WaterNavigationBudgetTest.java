@@ -52,7 +52,7 @@ class WaterNavigationBudgetTest {
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
-        world = new WorldMock() {
+        world = new net.tfminecraft.companionpets.testutil.CollisionWorldMock() {
             @Override public boolean isChunkLoaded(int x, int z) { return true; }
             @Override public BlockMock getBlockAt(int x, int y, int z) {
                 blockReads++;
@@ -108,6 +108,7 @@ class WaterNavigationBudgetTest {
         body = new WolfMock(server, UUID.randomUUID()) {
             @Override public boolean isInWater() { return swimming; }
             @Override public boolean isOnGround() { return grounded; }
+            @Override public float getBodyYaw() { return 0; }
             @Override public Pathfinder getPathfinder() { return path; }
         };
         server.registerEntity(body);
@@ -122,6 +123,226 @@ class WaterNavigationBudgetTest {
         if (actions != null) actions.holograms().clear();
         if (runtime != null) runtime.store().close();
         MockBukkit.unmock();
+    }
+
+    @Test void followYieldsAtTwentyFiveSecondsWithoutAnExitAndStopsSearching() {
+        pet.order(PetOrder.FOLLOW);
+        goal.tick(NOW);
+        assertTrue(goal.shouldActivate(NOW + WaterNavigationGoal.STUCK_MILLIS - 1));
+        assertFalse(goal.shouldActivate(NOW + WaterNavigationGoal.STUCK_MILLIS));
+        int reads = blockReads, before = searches;
+        goal.tick(NOW + WaterNavigationGoal.STUCK_MILLIS + 500);
+        assertEquals(reads, blockReads); assertEquals(before, searches);
+        assertEquals(Activity.NONE, pet.activity()); assertEquals(PetOrder.FOLLOW, pet.order());
+        assertFalse(body.isSitting()); assertTrue(body.isAware());
+        assertNativeTeleportAllowed();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = PetOrder.class, names = {"STAY", "SIT", "LAY"})
+    void heldOrdersNeverYieldDespiteLongFailedSearches(PetOrder order) {
+        pet.order(order);
+        goal.tick(NOW); goal.tick(NOW + WaterNavigationGoal.STUCK_MILLIS * 2);
+        assertTrue(goal.shouldActivate(NOW + WaterNavigationGoal.STUCK_MILLIS * 3));
+        assertEquals(order, pet.order()); assertTrue(body.getVelocity().getY() > 0);
+        pet.order(PetOrder.FOLLOW); pet.staying(true);
+        goal.tick(NOW + WaterNavigationGoal.STUCK_MILLIS * 4);
+        assertTrue(goal.shouldActivate(NOW + WaterNavigationGoal.STUCK_MILLIS * 5));
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void unavailableOwnerPreventsYieldAndRestartsTheDeadline(boolean offline) {
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW);
+        assertFalse(goal.shouldActivate(NOW + WaterNavigationGoal.STUCK_MILLIS));
+        Location home = owner.getLocation();
+        if (offline) owner.disconnect();
+        else owner.teleport(new Location(server.addSimpleWorld("other"), 0, 64, 0));
+        assertTrue(goal.shouldActivate(NOW + 26_000));
+        goal.tick(NOW + 60_000); assertTrue(goal.shouldActivate(NOW + 90_000));
+        if (offline) owner.reconnect(); else owner.teleport(home);
+        goal.tick(NOW + 100_000);
+        assertTrue(goal.shouldActivate(NOW + 124_999));
+        assertFalse(goal.shouldActivate(NOW + 125_000));
+    }
+
+    @Test void leavingWaterRestartsAStuckFollowerOnItsNextEntry() {
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW);
+        assertFalse(goal.shouldActivate(NOW + 25_000));
+        swimming = false; assertFalse(goal.shouldActivate(NOW + 26_000)); goal.stop();
+        swimming = true; goal.tick(NOW + 27_000);
+        assertTrue(goal.shouldActivate(NOW + 51_999));
+        assertFalse(goal.shouldActivate(NOW + 52_000));
+    }
+
+    @Test void findingAnExitRestartsTheDeadlineIfThatRouteLaterFails() {
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW);
+        nativeRoute = true; goal.tick(NOW + 20_000);
+        assertTrue(goal.shouldActivate(NOW + 45_000), "A known exit prevents surrender");
+        nativeRoute = false; hasPath = false; goal.tick(NOW + 46_000);
+        assertTrue(goal.shouldActivate(NOW + 70_999));
+        assertFalse(goal.shouldActivate(NOW + 71_000));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = PetOrder.class, names = {"STAY", "SIT", "LAY"})
+    void changingOrderClearsTheStuckStateAndRestartsFollow(PetOrder order) {
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW);
+        assertFalse(goal.shouldActivate(NOW + 25_000));
+        pet.order(order); assertTrue(goal.shouldActivate(NOW + 26_000));
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW + 27_000);
+        assertTrue(goal.shouldActivate(NOW + 51_999));
+        assertFalse(goal.shouldActivate(NOW + 52_000));
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void losingOrChangingTheBodyForgetsItsStuckState(boolean missing) {
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW);
+        assertFalse(goal.shouldActivate(NOW + 25_000));
+        UUID original = pet.entityId();
+        if (missing) pet.entityId(null); else pet.entityId(UUID.randomUUID());
+        runtime.forgetMissingGround(); assertNull(runtime.waterGoal(body));
+        assertFalse(goal.shouldActivate(NOW + 26_000));
+        pet.entityId(original); WaterNavigationGoal.ensure(runtime, pet, body, actions);
+        goal.tick(NOW + 27_000);
+        assertTrue(goal.shouldActivate(NOW + 51_999));
+        assertFalse(goal.shouldActivate(NOW + 52_000));
+    }
+
+    @Test void chunkUnloadForgetsStuckStateEvenBeforeTheBodyBecomesInvalid() {
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW);
+        assertFalse(goal.shouldActivate(NOW + 25_000));
+        new net.tfminecraft.companionpets.listen.PetListener(runtime, actions).onUnload(
+                new org.bukkit.event.world.EntitiesUnloadEvent(body.getLocation().getChunk(), java.util.List.of(body)));
+        assertNull(runtime.waterGoal(body));
+        WaterNavigationGoal.ensure(runtime, pet, body, actions);
+        goal.tick(NOW + 27_000);
+        assertTrue(goal.shouldActivate(NOW + 51_999));
+        assertFalse(goal.shouldActivate(NOW + 52_000));
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void surrenderCancelsCallsAndFetchReturnsWithoutRestoringTheirOldPosture(boolean fetchReturn) {
+        pet.order(PetOrder.FOLLOW);
+        if (fetchReturn) actions.roaming().returnFromFetch(pet, owner, 1.8);
+        else actions.roaming().come(pet, owner, NOW, PetOrder.STAY);
+        assertEquals(Activity.ATTENDING, pet.activity());
+        goal.tick(NOW); assertFalse(goal.shouldActivate(NOW + 25_000));
+        assertFalse(actions.fetchingOrReturning(pet)); assertNull(actions.roaming().destination(pet));
+        assertEquals(Activity.NONE, pet.activity()); assertEquals(PetOrder.FOLLOW, pet.order());
+        assertNoPluginMovement(); assertNativeTeleportAllowed();
+    }
+
+    @Test void surrenderReleasesSleepingAndForcedSittingAndEveryRegisteredMovementGoal() {
+        pet.order(PetOrder.FOLLOW); pet.activity(Activity.SLEEPING);
+        pet.forcedSitUntilMillis(Long.MAX_VALUE); body.setSitting(true);
+        PostureNavigationGoal.hold(runtime, pet, body);
+        FetchNavigationGoal.ensure(runtime, pet, body, () -> fail("Fetch must not run"));
+        CallNavigationGoal.ensure(runtime, pet, body, () -> fail("Call must not run"));
+        PlayNavigationGoal.ensure(runtime, pet, body, () -> fail("Play must not run"));
+        TrainingNavigationGoal.begin(runtime, pet, body, owner);
+        SocialNavigationGoal.ensure(runtime, pet, body, actions.social());
+        ToyNavigationGoal.ensure(runtime, pet, body, actions.anticipation());
+        goal.tick(NOW); assertFalse(goal.shouldActivate(NOW + 25_000));
+        assertEquals(Activity.NONE, pet.activity()); assertEquals(0, pet.forcedSitUntilMillis());
+        new PetTicker(runtime, actions).run();
+        assertFalse(body.isSitting()); assertNoPluginMovement(); assertNativeTeleportAllowed();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"AIR,false,false", "GROUND,false,false", "CARRY,false,false",
+            "AIR,true,false", "GROUND,true,false", "CARRY,true,false", "CARRY,true,true"})
+    void surrenderPreservesExactlyOneToyThroughEachFetchPhaseAndThrower(
+            net.tfminecraft.companionpets.play.FetchPhase phase, boolean foreign, boolean offlineThrower) {
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW);
+        var thrower = foreign ? server.addPlayer() : owner;
+        if (foreign) thrower.teleport(owner.getLocation().add(3, 0, 0));
+        var toy = new org.bukkit.inventory.ItemStack(Material.STICK);
+        var meta = toy.getItemMeta(); meta.displayName(net.kyori.adventure.text.Component.text("Water toy")); toy.setItemMeta(meta);
+        var job = new net.tfminecraft.companionpets.play.FetchJob(
+                net.tfminecraft.companionpets.item.ToyItems.encode(toy), thrower.getUniqueId());
+        pet.fetch(job); job.join(pet.id()); pet.activity(Activity.PLAYING);
+        var ball = world.spawn(body.getLocation().add(3, 0, 0), org.bukkit.entity.Snowball.class);
+        ball.getPersistentDataContainer().set(runtime.toyKey(), org.bukkit.persistence.PersistentDataType.STRING, job.id().toString());
+        actions.fetchActions().register(job, ball);
+        if (phase != net.tfminecraft.companionpets.play.FetchPhase.AIR) {
+            actions.toyLanded(ball);
+            if (phase == net.tfminecraft.companionpets.play.FetchPhase.CARRY) {
+                plainToys().getFirst().teleport(body.getLocation());
+                assertTrue(actions.fetchActions().claim(pet));
+            }
+        }
+        FetchNavigationGoal.ensure(runtime, pet, body, () -> actions.fetchActions().step(pet, body));
+        if (offlineThrower) thrower.disconnect();
+        assertTrue(goal.shouldActivate(NOW + 24_999)); assertSame(job, pet.fetch());
+        assertFalse(goal.shouldActivate(NOW + 25_000));
+        assertNull(pet.fetch()); assertNull(pet.carriedToy()); assertNoPluginMovement(); assertNativeTeleportAllowed();
+        if (phase == net.tfminecraft.companionpets.play.FetchPhase.AIR) {
+            assertTrue(ball.isValid()); assertTrue(plainToys().isEmpty());
+            actions.toyLanded(ball);
+        }
+        assertEquals(1, plainToys().size());
+        var dropped = plainToys().getFirst();
+        assertTrue(toy.isSimilar(dropped.getItemStack())); assertEquals(0, dropped.getPickupDelay());
+        assertFalse(dropped.getPersistentDataContainer().has(runtime.toyKey()));
+        if (phase == net.tfminecraft.companionpets.play.FetchPhase.CARRY)
+            assertTrue(dropped.getLocation().distance(offlineThrower ? body.getLocation() : thrower.getLocation()) < 3);
+        actions.releaseFetch(pet, owner, true); actions.toyLanded(ball);
+        actions.fetchActions().tick(System.currentTimeMillis() + 120_000);
+        assertEquals(1, plainToys().size(), "Repeated release and expiry cannot duplicate the toy");
+    }
+
+    @Test void surrenderingOneSharedChaserLeavesTheToyForTheOtherAndLastReleaseUnprotectsIt() {
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW);
+        var job = new net.tfminecraft.companionpets.play.FetchJob("STICK", owner.getUniqueId());
+        pet.fetch(job); job.join(pet.id()); pet.activity(Activity.PLAYING);
+        var other = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
+        runtime.store().add(other); other.fetch(job); job.join(other.id()); other.activity(Activity.PLAYING);
+        var ball = world.spawn(body.getLocation().add(3, 0, 0), org.bukkit.entity.Snowball.class);
+        ball.getPersistentDataContainer().set(runtime.toyKey(), org.bukkit.persistence.PersistentDataType.STRING, job.id().toString());
+        actions.fetchActions().register(job, ball); actions.toyLanded(ball);
+        assertFalse(goal.shouldActivate(NOW + 25_000));
+        assertNull(pet.fetch()); assertSame(job, other.fetch()); assertEquals(1, plainToys().size());
+        assertTrue(plainToys().getFirst().getPersistentDataContainer().has(runtime.toyKey()));
+        actions.releaseFetch(other, owner, true);
+        assertEquals(1, plainToys().size()); assertEquals(0, plainToys().getFirst().getPickupDelay());
+        assertFalse(plainToys().getFirst().getPersistentDataContainer().has(runtime.toyKey()));
+    }
+
+    @Test void aReplacementBodyStartsWithAFreshWaterDeadline() {
+        pet.order(PetOrder.FOLLOW); goal.tick(NOW);
+        assertFalse(goal.shouldActivate(NOW + 25_000));
+        var replacement = new WolfMock(server, UUID.randomUUID()) {
+            @Override public boolean isInWater() { return swimming; }
+            @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() { return path; }
+        };
+        server.registerEntity(replacement); replacement.teleport(body.getLocation());
+        runtime.remember(pet, replacement); runtime.forgetMissingGround();
+        assertNull(runtime.waterGoal(body)); assertFalse(goal.shouldActivate(NOW + 26_000));
+        WaterNavigationGoal.ensure(runtime, pet, replacement, actions);
+        var fresh = runtime.waterGoal(replacement); assertNotSame(goal, fresh);
+        fresh.tick(NOW + 27_000);
+        assertTrue(fresh.shouldActivate(NOW + 51_999));
+        assertFalse(fresh.shouldActivate(NOW + 52_000));
+    }
+
+    private java.util.List<org.bukkit.entity.Item> plainToys() {
+        return world.getEntities().stream().filter(org.bukkit.entity.Item.class::isInstance)
+                .map(org.bukkit.entity.Item.class::cast).toList();
+    }
+
+    private void assertNoPluginMovement() {
+        for (var registered : server.getMobGoals().getAllGoals(body)) {
+            if (registered.getTypes().contains(com.destroystokyo.paper.entity.ai.GoalType.MOVE)) {
+                assertFalse(registered.shouldActivate(), registered.getKey().toString());
+                assertFalse(registered.shouldStayActive(), registered.getKey().toString());
+            }
+        }
+    }
+
+    private void assertNativeTeleportAllowed() {
+        var event = new org.bukkit.event.entity.EntityTeleportEvent(body, body.getLocation(), owner.getLocation());
+        new net.tfminecraft.companionpets.listen.PetListener(runtime, actions).onTeleport(event);
+        assertFalse(event.isCancelled());
     }
 
     @Test void shoreRouteChecksUseTheRememberedGoalAndForgetRemovedBodies() {
@@ -166,9 +387,10 @@ class WaterNavigationBudgetTest {
         assertEquals(16, searches, "Moving two blocks resets the failed-search delay");
     }
 
-    @Test void distantBoatOwnerSharesTheBudgetAndRetriesWithACappedExponentialDelay() {
+    @Test void offlineBoatOwnerSharesTheBudgetAndRetriesWithACappedExponentialDelay() {
         pet.order(PetOrder.FOLLOW);
         owner.teleport(new Location(world, 80, 64, 0));
+        owner.disconnect();
         long at = NOW;
         for (long delay : new long[]{1_000, 2_000, 4_000, 8_000, 16_000, 16_000}) {
             int before = searches;
