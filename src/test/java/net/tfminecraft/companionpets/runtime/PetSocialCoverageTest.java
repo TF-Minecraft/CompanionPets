@@ -309,6 +309,7 @@ class PetSocialCoverageTest {
                 (proxy, method, args) -> switch (method.getName()) {
                     case "getEntity" -> this;
                     case "hasPath" -> paths.containsKey(getUniqueId());
+                    case "setCanFloat" -> { assertEquals(true, args[0]); yield null; }
                     case "stopPathfinding" -> { paths.remove(getUniqueId()); yield null; }
                     case "findPath" -> {
                         planned = ((Location) args[0]).clone();

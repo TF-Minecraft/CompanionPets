@@ -41,6 +41,8 @@ class TestPetSpawnTest {
                 Entity body;
                 if (type == org.bukkit.entity.Wolf.class) {
                     body = new WolfMock(server, java.util.UUID.randomUUID()) {
+                        private final com.destroystokyo.paper.entity.Pathfinder path = org.mockito.Mockito.mock(com.destroystokyo.paper.entity.Pathfinder.class);
+                        @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() { return path; }
                         @Override public void setRemoveWhenFarAway(boolean remove) { }
                         @Override public boolean teleport(Location to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
                             if (teleportGuard != null) {
@@ -53,6 +55,8 @@ class TestPetSpawnTest {
                     };
                 } else if (type == org.bukkit.entity.Cat.class) {
                     body = new CatMock(server, java.util.UUID.randomUUID()) {
+                        private final com.destroystokyo.paper.entity.Pathfinder path = org.mockito.Mockito.mock(com.destroystokyo.paper.entity.Pathfinder.class);
+                        @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() { return path; }
                         @Override public void setRemoveWhenFarAway(boolean remove) { }
                     };
                 } else return super.spawn(at, type);

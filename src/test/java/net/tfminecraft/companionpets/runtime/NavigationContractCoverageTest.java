@@ -77,4 +77,20 @@ class NavigationContractCoverageTest {
         goal("water_navigation").stop(); verifyNoInteractions(path);
     }
 
+    @Test void jumpGoalsYieldToFloatGoalWhileTheirInteractionsAreStillActive() {
+        var greetings=mock(PetGreetings.class); when(greetings.active(pet)).thenReturn(true);
+        var toy=mock(PetToyAnticipation.class); when(toy.active(pet)).thenReturn(true);
+        var social=mock(PetSocial.class); when(social.engaged(pet)).thenReturn(true);
+        GreetingNavigationGoal.ensure(runtime,pet,body,greetings);
+        ToyNavigationGoal.ensure(runtime,pet,body,toy);
+        SocialNavigationGoal.ensure(runtime,pet,body,social);
+        pet.activity(Activity.PLAYING);
+        PlayNavigationGoal.ensure(runtime,pet,body,()->{});
+        for (String name:List.of("greeting_navigation","toy_navigation","social_navigation","play_navigation")) {
+            var goal=goal(name); assertTrue(goal.shouldActivate()); assertTrue(goal.shouldStayActive());
+            assertTrue(goal.getTypes().contains(GoalType.JUMP));
+            inWater=true; assertFalse(goal.shouldActivate()); assertFalse(goal.shouldStayActive());
+            inWater=false; assertTrue(goal.shouldActivate());
+        }
+    }
 }

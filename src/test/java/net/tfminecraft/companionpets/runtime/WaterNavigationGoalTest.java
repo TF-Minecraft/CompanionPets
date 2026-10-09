@@ -108,6 +108,14 @@ class WaterNavigationGoalTest {
                 GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
     }
 
+    @Test void configuredAndReattachedBodiesCanFloat() {
+        var type = runtime.config().type(pet.typeId());
+        runtime.bodies().configure(body, type);
+        verify(path).setCanFloat(true);
+        runtime.bodies().reattach(body, pet, type);
+        verify(path, times(2)).setCanFloat(true);
+    }
+
     @Test void idlePetReturnsToRememberedGroundWithoutChangingVelocity() {
         swimming = false; runtime.rememberGround(pet, body);
         Location ground = runtime.lastGround(pet);
