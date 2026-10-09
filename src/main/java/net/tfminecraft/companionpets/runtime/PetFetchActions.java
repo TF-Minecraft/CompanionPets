@@ -19,6 +19,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
 import net.tfminecraft.companionpets.behavior.Locomotion;
+import net.tfminecraft.companionpets.behavior.WaterEscape;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
 import net.tfminecraft.companionpets.item.HandItems;
@@ -217,6 +218,11 @@ final class PetFetchActions {
             return;
         }
         if (!pet.id().equals(job.carrierId())) {
+            if (WaterEscape.needed(mob)) {
+                releaseFetch(pet, false);
+                returnFollower(pet, speed);
+                return;
+            }
             Location destination = carrierDestination(pet, job, owner);
             if (destination == null) { actions.releaseFetch(pet, owner, false); return; }
             if (mob.getLocation().distanceSquared(destination) > 1) moveTo(pet, mob, destination, speed, now);
@@ -477,13 +483,15 @@ final class PetFetchActions {
         var speeds = new HashMap<UUID, Double>();
         for (Pet follower : followers) speeds.put(follower.id(), movementSpeed(follower));
         forget(job);
-        for (Pet follower : followers) {
-            Player owner = Bukkit.getPlayer(follower.ownerId());
-            Entity body = runtime.entity(follower);
-            if (canChase(follower) && owner != null && owner.isOnline() && body != null && body.getWorld().equals(owner.getWorld()))
-                actions.roaming().returnFromFetch(follower, owner, speeds.get(follower.id()));
-        }
+        for (Pet follower : followers) returnFollower(follower, speeds.get(follower.id()));
         if (at != null) dropPlain(at, job.toy());
+    }
+
+    private void returnFollower(Pet pet, double speed) {
+        Player owner = Bukkit.getPlayer(pet.ownerId());
+        Entity body = runtime.entity(pet);
+        if (canChase(pet) && owner != null && owner.isOnline() && body != null && body.getWorld().equals(owner.getWorld()))
+            actions.roaming().returnFromFetch(pet, owner, speed);
     }
 
     private void forget(FetchJob job) {

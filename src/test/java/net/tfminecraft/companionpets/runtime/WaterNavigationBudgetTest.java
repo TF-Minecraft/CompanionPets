@@ -49,6 +49,7 @@ class WaterNavigationBudgetTest {
     private double clearFromX = Double.POSITIVE_INFINITY;
     private Location routedTo;
     private Location waterTarget;
+    private Location airOverWater;
 
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
@@ -58,6 +59,8 @@ class WaterNavigationBudgetTest {
                 blockReads++;
                 return new BlockMock(new Location(this, x, y, z)) {
                     @Override public Material getType() {
+                        if (airOverWater != null && x == airOverWater.getBlockX() && y == airOverWater.getBlockY() - 1
+                                && z == airOverWater.getBlockZ()) return Material.WATER;
                         if (waterTarget != null && x == waterTarget.getBlockX() && y == waterTarget.getBlockY()
                                 && z == waterTarget.getBlockZ()) return Material.WATER;
                         return floor && y == 63 ? Material.STONE : Material.AIR;
@@ -385,6 +388,98 @@ class WaterNavigationBudgetTest {
         assertEquals(12, searches);
         goal.tick(NOW + 4_000);
         assertEquals(16, searches, "Moving two blocks resets the failed-search delay");
+    }
+
+    @ParameterizedTest @ValueSource(doubles = {2.5, 20.5})
+    void unreachableReturnDiscardsBanksThatDoNotAdvanceAndReusesItsExitDespiteAttentionPaths(double groundX) {
+        body.teleport(new Location(world, groundX, 64, 2.5));
+        swimming = false; runtime.rememberGround(pet, body);
+        Location ground = runtime.lastGround(pet);
+        swimming = true; body.teleport(new Location(world, 4.5, 64, 2.5));
+        pet.order(PetOrder.FOLLOW);
+        airOverWater = new Location(world, 12.5, 64, 6.5);
+        owner.teleport(airOverWater);
+        when(result.canReachFinalPoint()).thenAnswer(invocation -> !routedTo.equals(owner.getLocation()));
+        when(path.moveTo(any(Location.class), anyDouble())).thenAnswer(invocation -> { hasPath = true; return true; });
+        actions.roaming().returnFromFetch(pet, owner, 1.8);
+        long now = System.currentTimeMillis();
+        goal.tick(now);
+        assertTrue(searches <= WaterNavigationGoal.PATH_SEARCH_BUDGET);
+        assertEquals(2, searches, "The discarded bank must consume no path search");
+        assertTrue(blockReads > 1_000);
+        Location exit = routedTo.clone();
+        assertTrue(exit.distanceSquared(owner.getLocation()) < ground.distanceSquared(owner.getLocation()));
+        assertTrue(exit.getX() > body.getLocation().getX()); assertTrue(exit.getZ() > body.getLocation().getZ());
+        assertTrue(body.getVelocity().getX() > 0); assertTrue(body.getVelocity().getZ() > 0);
+        int before = searches;
+        clearInvocations(path);
+        for (int tick = 1; tick <= 12; tick++) {
+            owner.teleport(owner.getLocation().add(.1, 0, .1));
+            int reads = blockReads;
+            goal.tick(now + tick * 500L);
+            assertTrue(hasPath, "tickAttention keeps renewing a native path");
+            assertEquals(before, searches);
+            assertEquals(3, blockReads - reads, "Only validate the cached exit's feet, head and floor; never scan again");
+            assertEquals(exit, routedTo);
+            assertTrue(body.getVelocity().getX() > 0); assertTrue(body.getVelocity().getZ() > 0);
+        }
+        verify(path, times(12)).moveTo(any(Location.class), eq(1.8));
+        verify(path, never()).findPath(any(Location.class));
+    }
+
+    @Test void unreachableReturnWithDiscardedLastGroundKeepsTheSearchBudgetAndBackoffDespiteAttentionPaths() {
+        swimming = false; runtime.rememberGround(pet, body);
+        swimming = true; body.teleport(new Location(world, 4, 64, 2.5));
+        pet.order(PetOrder.FOLLOW);
+        airOverWater = new Location(world, 12.5, 64, 6.5); owner.teleport(airOverWater);
+        when(path.moveTo(any(Location.class), anyDouble())).thenAnswer(invocation -> { hasPath = true; return true; });
+        actions.roaming().returnFromFetch(pet, owner, 1.8);
+        long now = System.currentTimeMillis();
+        // Keep this return below the separate 25-second native-follow surrender deadline.
+        for (long delay : new long[]{1_000, 2_000, 4_000, 8_000}) {
+            int before = searches;
+            goal.tick(now);
+            assertEquals(WaterNavigationGoal.PATH_SEARCH_BUDGET, searches - before);
+            int reads = blockReads;
+            for (long elapsed = 500; elapsed < delay; elapsed += 500) {
+                goal.tick(now + elapsed);
+                assertTrue(hasPath);
+                assertEquals(before + WaterNavigationGoal.PATH_SEARCH_BUDGET, searches);
+                assertEquals(reads, blockReads, "Backoff must perform no block reads even when attention has a path");
+            }
+            now += delay;
+        }
+    }
+
+    @Test void unreachableDestinationUsesLastGroundWhenItIsCloserToTheDestination() {
+        body.teleport(new Location(world, 8.5, 64, 2.5));
+        swimming = false; runtime.rememberGround(pet, body);
+        swimming = true; body.teleport(new Location(world, 4, 64, 2.5));
+        pet.order(PetOrder.FOLLOW);
+        airOverWater = new Location(world, 12.5, 64, 2.5); owner.teleport(airOverWater);
+        when(result.canReachFinalPoint()).thenAnswer(invocation -> !routedTo.equals(owner.getLocation()));
+        int reads = blockReads;
+        goal.tick(NOW);
+        assertEquals(runtime.lastGround(pet), routedTo); assertEquals(2, searches);
+        assertTrue(blockReads - reads < 20); assertTrue(body.getVelocity().getX() > 0);
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void closerLastGroundStillNeedsToBeSafeAndReachable(boolean safeGround) {
+        body.teleport(new Location(world, 8.5, 64, 2.5));
+        swimming = false; runtime.rememberGround(pet, body);
+        swimming = true; body.teleport(new Location(world, 4, 64, 2.5));
+        pet.order(PetOrder.FOLLOW);
+        airOverWater = new Location(world, 12.5, 64, 2.5); owner.teleport(airOverWater);
+        floor = safeGround;
+        int reads = blockReads;
+        goal.tick(NOW);
+        assertEquals(safeGround ? WaterNavigationGoal.PATH_SEARCH_BUDGET : 1, searches);
+        assertEquals(0, moves); assertTrue(blockReads - reads > 1_000);
+        assertEquals(0, body.getVelocity().getX()); assertTrue(body.getVelocity().getY() > 0);
+        reads = blockReads;
+        goal.tick(NOW + 500);
+        assertEquals(reads, blockReads);
     }
 
     @Test void offlineBoatOwnerSharesTheBudgetAndRetriesWithACappedExponentialDelay() {

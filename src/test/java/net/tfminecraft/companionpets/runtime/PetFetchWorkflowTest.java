@@ -729,7 +729,9 @@ class PetFetchWorkflowTest {
         water.start();
         assertEquals(loserOutbound, navigationSpeeds.get(loser.getUniqueId()));
         assertEquals(outboundSwim, loser.getVelocity().clone().setY(0).length(), 1e-9);
-        assertTrue(loser.getVelocity().getX() > 0, "The loser swims toward the carrier, not directly back to the thrower");
+        assertNull(other.fetch()); assertEquals(Activity.ATTENDING, other.activity());
+        assertEquals(owner.getLocation(), actions.roaming().destination(other));
+        assertTrue(loser.getVelocity().getX() < 0, "The loser leaves the water race and swims back to its owner");
         actions.fetchActions().step(pet, winner);
         assertEquals(winnerOutbound, navigationSpeeds.get(winner.getUniqueId()));
         winner.inWater = true; new PetTicker(runtime, actions).run();
@@ -777,7 +779,7 @@ class PetFetchWorkflowTest {
         assertSame(job, pet.fetch()); assertEquals(owner.getLocation(), navigationTargets.get(body.getUniqueId()));
     }
 
-    @Test void losingPetFollowsTheCarrierWhileSwimming() {
+    @Test void losingPetLeavesTheRaceAndReturnsToItsOwnerWhileSwimming() {
         Pet other = outsidePet(owner.getUniqueId(), "Luna", 2);
         land(throwToy());
         var body = (FetchWolf) runtime.entity(other);
@@ -785,12 +787,13 @@ class PetFetchWorkflowTest {
         runtime.entity(pet).teleport(items().getFirst().getLocation());
         assertTrue(actions.fetchActions().claim(pet));
         new PetTicker(runtime, actions).run();
-        assertEquals(Activity.PLAYING, other.activity()); assertSame(pet.fetch(), other.fetch());
+        assertEquals(Activity.ATTENDING, other.activity()); assertNull(other.fetch());
+        assertNotNull(pet.fetch());
         var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(
                 org.bukkit.entity.Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
         goal.start();
-        assertEquals(actions.fetchActions().destination(other), navigationTargets.get(body.getUniqueId()));
-        assertTrue(body.getVelocity().getX() > 0); assertEquals(Activity.PLAYING, other.activity());
+        assertEquals(actions.roaming().destination(other), navigationTargets.get(body.getUniqueId()));
+        assertTrue(body.getVelocity().getX() < 0); assertEquals(Activity.ATTENDING, other.activity());
     }
 
     @Test void visualTickerDoesNotStopFetchingOrPlayShakeForAModeledWetWolf() throws Exception {
