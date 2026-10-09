@@ -34,7 +34,6 @@ public final class PetRuntime {
     private final java.util.Map<String, net.tfminecraft.companionpets.visual.PetCapabilities> capabilities = new java.util.HashMap<>();
     private final java.util.Map<String, Long> capabilityRetryAt = new java.util.HashMap<>();
     private final java.util.Map<UUID, Location> lastGround = new java.util.HashMap<>();
-    private final java.util.Map<org.bukkit.entity.Mob, WaterNavigationGoal> waterGoals = new java.util.HashMap<>();
 
     public PetRuntime(
             JavaPlugin plugin,
@@ -130,24 +129,10 @@ public final class PetRuntime {
     }
 
     void forgetMissingGround() {
-        waterGoals.entrySet().removeIf(entry -> {
-            var body = entry.getKey();
-            Pet pet = byEntity(body);
-            boolean missing = !body.isValid() || body.isDead() || pet == null || entity(pet) != body;
-            if (missing) entry.getValue().resetStuck();
-            return missing;
-        });
         lastGround.keySet().removeIf(id -> {
             Pet pet = store.get(id);
             return pet == null || pet.stored() || pet.dead() || entity(pet) == null;
         });
-    }
-
-    WaterNavigationGoal waterGoal(org.bukkit.entity.Mob body) { return waterGoals.get(body); }
-    void waterGoal(org.bukkit.entity.Mob body, WaterNavigationGoal goal) { waterGoals.put(body, goal); }
-    public void forgetWaterGoal(Entity body) {
-        WaterNavigationGoal goal = waterGoals.remove(body);
-        if (goal != null) goal.resetStuck();
     }
 
     public boolean behaves(Pet pet, net.tfminecraft.companionpets.config.PetBehavior behavior) {

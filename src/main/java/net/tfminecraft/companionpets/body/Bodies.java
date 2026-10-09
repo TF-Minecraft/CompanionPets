@@ -146,7 +146,10 @@ public final class Bodies {
 
     public void configure(Entity entity, PetTypeDef type) {
         entity.setSilent(!type.sounds().nativeSounds());
-        if (entity instanceof Mob mob) NativeCombatGuard.configure(plugin, mob, type.nativeCombat());
+        if (entity instanceof Mob mob) {
+            mob.getPathfinder().setCanFloat(true);
+            NativeCombatGuard.configure(plugin, mob, type.nativeCombat());
+        }
     }
 
     private static boolean aware(Pet pet) {

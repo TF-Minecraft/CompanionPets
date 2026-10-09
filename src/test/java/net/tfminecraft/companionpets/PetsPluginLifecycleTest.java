@@ -99,6 +99,7 @@ class PetsPluginLifecycleTest {
                 return (com.destroystokyo.paper.entity.Pathfinder) java.lang.reflect.Proxy.newProxyInstance(
                     getClass().getClassLoader(), new Class<?>[]{com.destroystokyo.paper.entity.Pathfinder.class},
                     (proxy, method, args) -> switch (method.getName()) {
+                        case "setCanFloat" -> { assertEquals(true, args[0]); yield null; }
                         case "stopPathfinding" -> null;
                         case "hasPath" -> false;
                         case "getCurrentPath" -> null;

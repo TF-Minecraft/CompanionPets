@@ -57,6 +57,8 @@ class TestCommandsCoverageTest {
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
                 if (type != Wolf.class) return super.spawn(at, type);
                 var body = new WolfMock(server, UUID.randomUUID()) {
+                    private final com.destroystokyo.paper.entity.Pathfinder path = org.mockito.Mockito.mock(com.destroystokyo.paper.entity.Pathfinder.class);
+                    @Override public com.destroystokyo.paper.entity.Pathfinder getPathfinder() { return path; }
                     @Override public void setRemoveWhenFarAway(boolean remove) { }
                 };
                 server.registerEntity(body); body.teleport(at);

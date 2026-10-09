@@ -106,11 +106,6 @@ final class PetRoaming {
         return job != null && job.fetchReturn;
     }
 
-    double movementSpeed(Pet pet) {
-        Attention job = attention.get(pet.id());
-        return job == null ? 1.25 : job.speed;
-    }
-
     private void attend(Pet pet, Player owner, long now, PetOrder returnOrder) {
         if (runtime.entity(pet) instanceof Mob body) {
             net.tfminecraft.companionpets.integration.PetMotion.stop(body);
@@ -142,7 +137,7 @@ final class PetRoaming {
         if (job.waitUntil == 0 && body.getLocation().distanceSquared(target) > 4.0) {
             if (job.routeTarget == null || now - job.routeAt >= 500L
                     || !job.routeTarget.getWorld().equals(target.getWorld()) || job.routeTarget.distanceSquared(target) > 4.0) {
-                body.getPathfinder().moveTo(target, job.speed);
+                PetMotion.moveTo(body, target, job.speed);
                 job.routeTarget = target;
                 job.routeAt = now;
             }

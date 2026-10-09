@@ -52,7 +52,7 @@ final class PostureNavigationGoal implements Goal<Mob> {
 
     private Locomotion.Mode posture() {
         if (!body.isValid() || body.isDead() || pet.stored() || pet.dead() || WaterEscape.needed(body)
-                || WaterNavigationGoal.finishing(runtime, body) || runtime.trainingFocused(pet, body)) return null;
+                || runtime.trainingFocused(pet, body)) return null;
         var mode = mode();
         return runtime.visual().belly(body) || mode == Locomotion.Mode.STAY || mode == Locomotion.Mode.SIT
                 || mode == Locomotion.Mode.LIE || mode == Locomotion.Mode.SLEEP ? mode : null;

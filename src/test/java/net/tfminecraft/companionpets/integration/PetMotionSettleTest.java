@@ -36,10 +36,16 @@ class PetMotionSettleTest {
         verify(sliding).setVelocity(new Vector());
     }
 
-    @Test void aSwimmingBodyKeepsFloating() {
-        Wolf swimming = body(new Vector(), false);
+    @Test void aSwimmingBodyKeepsItsNativeRouteAndVelocityForEveryHoldVariant() {
+        Wolf swimming = body(new Vector(0.12, -0.04, 0.03), true);
         when(swimming.isInWater()).thenReturn(true);
         PetMotion.settle(swimming);
-        verify(swimming).setVelocity(new Vector(0, 0.16, 0));
+        PetMotion.stop(swimming);
+        PetMotion.hold(swimming);
+        verify(swimming, times(3)).setAware(true);
+        verify(swimming, never()).setAware(false);
+        verify(swimming, never()).getVelocity();
+        verify(swimming, never()).setVelocity(any());
+        verify(swimming.getPathfinder(), never()).stopPathfinding();
     }
 }

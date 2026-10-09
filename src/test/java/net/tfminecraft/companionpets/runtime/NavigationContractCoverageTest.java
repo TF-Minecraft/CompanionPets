@@ -22,6 +22,7 @@ import org.mockbukkit.mockbukkit.entity.WolfMock;
 class NavigationContractCoverageTest {
     GoalServerMock server; PetRuntime runtime; PetActions actions; Pet pet; WolfMock body; PetStore store;
     Pathfinder path;
+    boolean inWater;
     @BeforeEach void setup() throws Exception {
         server=MockBukkit.mock(new GoalServerMock()); var world=server.addSimpleWorld("world");
         var plugin=MockBukkit.createMockPlugin(); var yaml=new YamlConfiguration();
@@ -32,7 +33,10 @@ class NavigationContractCoverageTest {
         actions=new PetActions(runtime); var owner=server.addPlayer();
         pet=new Pet(UUID.randomUUID(),owner.getUniqueId(),"dog","Toby",PetSex.MALE); pet.stored(false);
         path=mock(Pathfinder.class);
-        body=new WolfMock(server,UUID.randomUUID()) { @Override public Pathfinder getPathfinder() { return path; } };
+        body=new WolfMock(server,UUID.randomUUID()) {
+            @Override public Pathfinder getPathfinder() { return path; }
+            @Override public boolean isInWater() { return inWater; }
+        };
         body.teleport(new Location(world,0,64,0));
     }
     @AfterEach void teardown() { try { if(store!=null) store.close(); } finally { MockBukkit.unmock(); } }
@@ -64,12 +68,29 @@ class NavigationContractCoverageTest {
         inactive("social_navigation",EnumSet.of(GoalType.MOVE,GoalType.JUMP)); assertFalse(social.engaged(pet));
         verifyNoInteractions(path);
     }
-    @Test void inactiveFetchAndWaterGoalsDoNotMoveStoredPetsAndWaterStopCancelsItsPath() {
+    @Test void inactiveFetchAndWaterGoalsDoNotMoveStoredPets() {
         int[] steps={0}; FetchNavigationGoal.ensure(runtime,pet,body,()->steps[0]++);
         inactive("fetch_navigation",EnumSet.of(GoalType.MOVE)); assertEquals(0,steps[0]);
-        pet.stored(true); WaterNavigationGoal.ensure(runtime,pet,body,actions);
+        pet.stored(true); WaterNavigationGoal.ensure(runtime,pet,body);
         inactive("water_navigation",EnumSet.of(GoalType.MOVE));
         goal("water_navigation").start(); verifyNoInteractions(path);
-        goal("water_navigation").stop(); verify(path).stopPathfinding();
+        goal("water_navigation").stop(); verifyNoInteractions(path);
+    }
+
+    @Test void jumpGoalsYieldToFloatGoalWhileTheirInteractionsAreStillActive() {
+        var greetings=mock(PetGreetings.class); when(greetings.active(pet)).thenReturn(true);
+        var toy=mock(PetToyAnticipation.class); when(toy.active(pet)).thenReturn(true);
+        var social=mock(PetSocial.class); when(social.engaged(pet)).thenReturn(true);
+        GreetingNavigationGoal.ensure(runtime,pet,body,greetings);
+        ToyNavigationGoal.ensure(runtime,pet,body,toy);
+        SocialNavigationGoal.ensure(runtime,pet,body,social);
+        pet.activity(Activity.PLAYING);
+        PlayNavigationGoal.ensure(runtime,pet,body,()->{});
+        for (String name:List.of("greeting_navigation","toy_navigation","social_navigation","play_navigation")) {
+            var goal=goal(name); assertTrue(goal.shouldActivate()); assertTrue(goal.shouldStayActive());
+            assertTrue(goal.getTypes().contains(GoalType.JUMP));
+            inWater=true; assertFalse(goal.shouldActivate()); assertFalse(goal.shouldStayActive());
+            inWater=false; assertTrue(goal.shouldActivate());
+        }
     }
 }

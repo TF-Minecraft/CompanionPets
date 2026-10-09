@@ -8,6 +8,7 @@ import java.util.WeakHashMap;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRule;
 import org.bukkit.Material;
+import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.item.ItemRef;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
@@ -283,7 +284,7 @@ final class PetMoments {
             return;
         }
         if (body.getLocation().distanceSquared(owner.getLocation()) > 9.0) {
-            body.getPathfinder().moveTo(owner.getLocation(), 1.1);
+            PetMotion.moveTo(body, owner.getLocation(), 1.1);
             return;
         }
         body.getWorld().dropItem(PetRuntime.inFront(owner), gift.item);

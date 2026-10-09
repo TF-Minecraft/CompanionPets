@@ -49,6 +49,7 @@ class PetFetchActionsCoverageTest {
     private YamlConfiguration yaml;
     private ItemStack toy;
     private boolean failSpawn;
+    private boolean loadedWaterChunks;
     private java.util.Set<String> modelClips = java.util.Set.of();
     private Runnable beforeSpawnFailure = () -> { };
     private final Map<UUID, Location> targets = new HashMap<>();
@@ -59,6 +60,7 @@ class PetFetchActionsCoverageTest {
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new GoalServerMock());
         world = new CollisionWorldMock() {
+            @Override public boolean isChunkLoaded(int x, int z) { return loadedWaterChunks || super.isChunkLoaded(x, z); }
             @Override public <T extends Entity> T spawn(Location at, Class<T> type, java.util.function.Consumer<? super T> callback) {
                 if (type == Snowball.class && failSpawn) {
                     beforeSpawnFailure.run(); throw new IllegalStateException("Projectile spawning is unavailable");
@@ -161,6 +163,7 @@ class PetFetchActionsCoverageTest {
         return (Pathfinder) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Pathfinder.class},
             (proxy, method, args) -> switch (method.getName()) {
                 case "moveTo" -> { targets.put(body.getUniqueId(), ((Location) args[0]).clone()); yield true; }
+                case "setCanFloat" -> { assertEquals(true, args[0]); yield null; }
                 case "stopPathfinding" -> { targets.remove(body.getUniqueId()); yield null; }
                 case "hasPath" -> targets.containsKey(body.getUniqueId());
                 case "getEntity" -> body;
@@ -329,6 +332,93 @@ class PetFetchActionsCoverageTest {
         runtime.entity(pet).teleport(new Location(world, 14, 64, 0));
         actions.fetchActions().step(follower, body, System.currentTimeMillis() + 300);
         assertEquals(actions.fetchActions().destination(follower), targets.get(body.getUniqueId()));
+    }
+
+    @Test void swimmingFollowerKeepsFollowingTheCarrierUntilDeliveryThenReturnsToItsOwner() {
+        Pet follower = foreignPet();
+        Pet other = wolf(owner.getUniqueId(), 4);
+        carry(pet); var job = pet.fetch();
+        var body = (PetFetchWorkflowTest.FetchWolf) runtime.entity(follower);
+        var carrier = (PetFetchWorkflowTest.FetchWolf) runtime.entity(pet);
+        var otherBody = (PetFetchWorkflowTest.FetchWolf) runtime.entity(other);
+        Player petOwner = Bukkit.getPlayer(follower.ownerId());
+        petOwner.teleport(new Location(world, 14, 64, 8));
+        body.teleport(new Location(world, 12, 64, 0));
+        double speed = actions.fetchActions().movementSpeed(follower);
+        follower.bond(100); follower.need(Need.CLEANLINESS, 0);
+        int carrierRequests = carrier.navigationRequests, otherRequests = otherBody.navigationRequests;
+        var velocity = new org.bukkit.util.Vector(.08, -.02, .03); body.setVelocity(velocity);
+        body.inWater = true;
+        WaterNavigationGoal.ensure(runtime, follower, body);
+        var goal = server.getMobGoals().getGoal(body, com.destroystokyo.paper.entity.ai.GoalKey.of(Mob.class, new NamespacedKey(runtime.plugin(), "water_navigation")));
+        long now = System.currentTimeMillis();
+        assertFalse(goal.shouldActivate()); goal.tick();
+        actions.fetchActions().step(follower, body, now + 500);
+        assertSame(job, follower.fetch()); assertEquals(Activity.PLAYING, follower.activity());
+        assertFalse(actions.roaming().returningFromFetch(follower));
+        assertEquals(actions.fetchActions().destination(follower), targets.get(body.getUniqueId()));
+        assertEquals(speed, speeds.get(body.getUniqueId())); assertEquals(velocity, body.getVelocity());
+        assertSame(job, pet.fetch()); assertSame(job, other.fetch());
+        assertEquals(FetchPhase.CARRY, job.phase()); assertEquals(pet.id(), job.carrierId());
+        assertEquals(carrierRequests, carrier.navigationRequests); assertEquals(otherRequests, otherBody.navigationRequests);
+        assertTrue(items().isEmpty());
+        carrier.teleport(owner.getLocation()); actions.fetchActions().step(pet, carrier, now + 1000);
+        assertNull(pet.fetch()); assertNull(other.fetch()); assertNull(follower.fetch());
+        assertEquals(Activity.ATTENDING, follower.activity());
+        assertTrue(actions.roaming().returningFromFetch(follower));
+        assertEquals(petOwner.getLocation(), targets.get(body.getUniqueId()));
+        assertEquals(speed, speeds.get(body.getUniqueId())); assertEquals(velocity, body.getVelocity());
+        assertFalse(goal.shouldActivate()); assertOnePlainToy();
+        actions.fetchActions().returned(pet, owner); actions.fetchActions().tick(now + 1500);
+        assertOnePlainToy();
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void swimmingSharedFollowerDetachesAtTheNextRaceValidationWhenItsOwnerIsUnavailable(boolean offline) {
+        Pet follower = foreignPet(); carry(pet); var job = pet.fetch();
+        var body = (PetFetchWorkflowTest.FetchWolf) runtime.entity(follower);
+        PlayerMock petOwner = (PlayerMock) Bukkit.getPlayer(follower.ownerId());
+        if (offline) petOwner.disconnect();
+        else petOwner.teleport(new Location(server.addSimpleWorld("owner-away"), 0, 64, 0));
+        body.inWater = true;
+        actions.fetchActions().step(follower, body);
+        actions.fetchActions().tick(System.currentTimeMillis());
+        assertNull(follower.fetch()); assertEquals(Activity.NONE, follower.activity());
+        assertFalse(actions.roaming().returningFromFetch(follower));
+        assertNull(actions.roaming().destination(follower)); assertSame(job, pet.fetch());
+        assertTrue(items().isEmpty());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"tired", "owner-missing", "owner-away", "body-missing"})
+    void deliveryOnlyReleasesFollowersThatCannotReturn(String unavailable) {
+        Pet follower = foreignPet(); carry(pet);
+        switch (unavailable) {
+            case "tired" -> follower.need(Need.ENERGY, 20);
+            case "owner-missing" -> ((PlayerMock) Bukkit.getPlayer(follower.ownerId())).disconnect();
+            case "owner-away" -> Bukkit.getPlayer(follower.ownerId()).teleport(
+                    new Location(server.addSimpleWorld("owner-away"), 0, 64, 0));
+            case "body-missing" -> runtime.entity(follower).remove();
+            default -> fail("Unknown unavailability");
+        }
+        var carrier = (Mob) runtime.entity(pet);
+        carrier.teleport(owner.getLocation()); actions.fetchActions().step(pet, carrier);
+        assertNull(follower.fetch()); assertEquals(Activity.NONE, follower.activity());
+        assertFalse(actions.roaming().returningFromFetch(follower));
+        assertNull(actions.roaming().destination(follower)); assertOnePlainToy();
+    }
+
+    @Test void deliveryOnlyReleasesAFollowerWhenItsResolvedOwnerIsOffline() {
+        Pet follower = foreignPet(); carry(pet);
+        Player offlineOwner = org.mockito.Mockito.mock(Player.class);
+        try (var bukkit = org.mockito.Mockito.mockStatic(Bukkit.class, org.mockito.Mockito.CALLS_REAL_METHODS)) {
+            bukkit.when(() -> Bukkit.getPlayer(follower.ownerId())).thenReturn(offlineOwner);
+            var carrier = (Mob) runtime.entity(pet);
+            carrier.teleport(owner.getLocation()); actions.fetchActions().step(pet, carrier);
+        }
+        assertNull(follower.fetch()); assertEquals(Activity.NONE, follower.activity());
+        assertFalse(actions.roaming().returningFromFetch(follower));
+        assertNull(actions.roaming().destination(follower)); assertOnePlainToy();
     }
 
     @Test void vanishedForeignCarrierDropsItsToyAtTheLastObservedCarrierPosition() {

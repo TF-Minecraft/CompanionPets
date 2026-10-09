@@ -18,6 +18,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
+import net.tfminecraft.companionpets.integration.PetMotion;
 import net.tfminecraft.companionpets.behavior.Locomotion;
 import net.tfminecraft.companionpets.config.PetTypeDef;
 import net.tfminecraft.companionpets.fx.PetFx;
@@ -245,7 +246,7 @@ final class PetFetchActions {
                 && previous.target.getWorld().equals(target.getWorld()) && previous.target.distanceSquared(target) < 16) return;
         // Keep pickup and delivery checks on every AI tick, but avoid recalculating
         // paths every tick. Phase changes and distant target jumps refresh immediately.
-        body.getPathfinder().moveTo(target, speed);
+        PetMotion.moveTo(body, target, speed);
         routes.put(pet.id(), new Route(job, job.phase(), target.clone(), now + 250));
     }
     private record Route(FetchJob job, FetchPhase phase, Location target, long refreshAt) { }
@@ -477,13 +478,15 @@ final class PetFetchActions {
         var speeds = new HashMap<UUID, Double>();
         for (Pet follower : followers) speeds.put(follower.id(), movementSpeed(follower));
         forget(job);
-        for (Pet follower : followers) {
-            Player owner = Bukkit.getPlayer(follower.ownerId());
-            Entity body = runtime.entity(follower);
-            if (canChase(follower) && owner != null && owner.isOnline() && body != null && body.getWorld().equals(owner.getWorld()))
-                actions.roaming().returnFromFetch(follower, owner, speeds.get(follower.id()));
-        }
+        for (Pet follower : followers) returnFollower(follower, speeds.get(follower.id()));
         if (at != null) dropPlain(at, job.toy());
+    }
+
+    private void returnFollower(Pet pet, double speed) {
+        Player owner = Bukkit.getPlayer(pet.ownerId());
+        Entity body = runtime.entity(pet);
+        if (canChase(pet) && owner != null && owner.isOnline() && body != null && body.getWorld().equals(owner.getWorld()))
+            actions.roaming().returnFromFetch(pet, owner, speed);
     }
 
     private void forget(FetchJob job) {
