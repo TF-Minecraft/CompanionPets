@@ -21,9 +21,14 @@ import net.tfminecraft.companionpets.text.PetTexts;
 
 final class PetHatching {
     private static final long PROMPT_MILLIS = 60_000L;
+    private static final String NOT_ALLOWED = "You don't know how to hatch this egg";
     private final PetRuntime runtime;
     PetHatching(PetRuntime runtime) { this.runtime = runtime; }
     void begin(Player player, PetTypeDef type) {
+        if (!type.canHatch(player)) {
+            PetFx.bar(player, NOT_ALLOWED);
+            return;
+        }
         if (!Quota.canAdopt(runtime.store().countPets(player.getUniqueId()), runtime.config().limits().maxPets())) {
             PetFx.bar(player, PetTexts.refusal("", PetSex.FEMALE, "full-total"));
             return;
@@ -101,6 +106,11 @@ final class PetHatching {
         ItemStack hand = player.getInventory().getItemInMainHand();
         if (!type.matchesEgg(hand)) {
             PetFx.tell(player, "The egg left your hand, so nothing hatched. Use it again to start over.");
+            return;
+        }
+        // Permissions can be revoked or the config reloaded while the player answers in chat.
+        if (!type.canHatch(player)) {
+            PetFx.tell(player, NOT_ALLOWED + ". Your egg is safe.");
             return;
         }
         if (!Quota.canAdopt(runtime.store().countPets(player.getUniqueId()), runtime.config().limits().maxPets())) {

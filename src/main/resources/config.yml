@@ -1,6 +1,7 @@
 # CompanionPets: hatch, care for, train and play with persistent companion pets.
 # Start with pets/species, custom-tricks and items; then tune care/training/play.
-# presence/orders/roaming/moments/social control daily behavior; limits set quotas.
+# presence/orders/roaming/moments/social control daily behavior; limits set quotas;
+# hatching restricts who can use eggs.
 # Item IDs: STICK (vanilla), mmoitems:TYPE:ID, itemsadder:namespace:id.
 # Inheritance: global settings -> species.<id> -> pets.<id>; omitted options inherit.
 # Nested maps merge deeply; simple values and lists replace inherited values.
@@ -127,6 +128,7 @@ pets:
   #   egg: EGG                  # Vanilla, MMOItems or ItemsAdder selector.
   #   egg-custom-model-data: 12002 # Nonnegative integer; only valid for vanilla eggs.
   #   sex: choose               # random assigns sex at hatching; choose asks the owner.
+  #   hatch-permission: companionpets.hatch.fox # Replaces hatching.permission for this type; false clears it.
   #   native-combat: false      # true allows native targeting/combat; default false suppresses it.
   #   behavior: cat             # Character independent of body, model and voice.
   #   items:                    # Present categories replace inherited lists, never append.
@@ -424,3 +426,9 @@ social:
 limits:
   max-pets: 20                # Maximum living pets per owner, counting those inside the Pet House and outside.
   max-out: 4                  # Maximum pets simultaneously out in the world per owner.
+
+# Hatching: permission node required to use any egg; omit it so everyone can hatch.
+# Match it to the egg recipes' crafting condition so traded eggs stay restricted too.
+# Pets/species override it with hatch-permission; false or "" lets anyone hatch that type.
+# hatching:
+#   permission: companionpets.hatch # Players without it keep the egg and cannot start hatching.

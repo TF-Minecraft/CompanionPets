@@ -88,6 +88,26 @@ class CompanionConfigCoverageTest {
         assertTrue(warnings.stream().anyMatch(s -> s.contains("max-out exceeds limits.max-pets") && s.endsWith("2")));
     }
 
+    @Test void hatchPermissionInheritsThroughSpeciesAndFalseOrBlankClearsIt() throws Exception {
+        var config = load("""
+                hatching: {permission: " roles.pet_master "}
+                species: {fox: {entity: WOLF, hatch-permission: roles.fox_keeper}}
+                pets:
+                  wolf: {species: dog, egg: WOLF_SPAWN_EGG}
+                  fox: {species: fox, egg: FOX_SPAWN_EGG}
+                  frog: {species: fox, egg: FROG_SPAWN_EGG, hatch-permission: false}
+                  cat: {species: cat, egg: CAT_SPAWN_EGG, hatch-permission: ""}
+                """);
+        assertEquals("roles.pet_master", config.type("wolf").hatchPermission());
+        assertEquals("roles.fox_keeper", config.type("fox").hatchPermission());
+        assertNull(config.type("frog").hatchPermission());
+        assertNull(config.type("cat").hatchPermission());
+        assertNull(load("pets: {wolf: {species: dog, egg: WOLF_SPAWN_EGG}}").type("wolf").hatchPermission());
+        var error = assertThrows(IllegalArgumentException.class, () -> load("hatching: {permission: [a, b]}"));
+        assertTrue(error.getMessage().contains("hatching.permission"), error.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> load("pets: {wolf: {species: dog, egg: WOLF_SPAWN_EGG, hatch-permission: true}}"));
+    }
+
     @Test void numericFallbacksWarnAndPreserveValidNeighbours() throws Exception {
         var defaults = load("");
         var config = load("""
