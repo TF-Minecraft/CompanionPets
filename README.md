@@ -31,6 +31,10 @@ ItemsAdder are optional.
 
 ## Documentation
 
+The editable [Chihuahua and Yorkshire ModelEngine blueprints](models/modelengine/companions/)
+include the corrected textures and Yorkshire eyebrow geometry. Their installation
+instructions are in the model directory.
+
 [Project documentation](https://github.com/TF-Minecraft/Docs/blob/main/projects/CompanionPets/README.md)
 
 Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/TF-Minecraft/Docs).
