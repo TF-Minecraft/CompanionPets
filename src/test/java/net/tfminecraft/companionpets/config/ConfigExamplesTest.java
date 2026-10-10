@@ -71,6 +71,7 @@ class ConfigExamplesTest {
         assertNull(config.type("rabbit"));
         assertNull(config.type("fox_example"));
         assertNull(config.customTrick(Trick.valueOf("wave")));
+        assertTrue(config.types().values().stream().allMatch(type -> type.hatchPermission() == null));
         assertEquals(config.items(), config.type("wolf").items());
         assertEquals(List.of(Trick.FOLLOW), config.type("wolf").defaultTricks());
     }
@@ -133,6 +134,7 @@ class ConfigExamplesTest {
         text = uncomment(text, "fox_example:", "    eat: false");
         text = uncomment(text, "dog:", "  voice: wolf");
         text = uncomment(text, "wave:", "  at: [0, 1]");
+        text = uncomment(text, "hatching:", "  permission: companionpets.hatch");
         var config = loadWithoutWarnings(text);
         assertEquals(22, config.types().size());
         assertEquals(EntityType.WOLF, config.type("rabbit").entity());
@@ -146,6 +148,8 @@ class ConfigExamplesTest {
         assertEquals(BehaviorProfile.CAT, fox.behavior());
         assertEquals(SexMode.CHOOSE, fox.sexMode());
         assertEquals(12002, fox.eggCustomModelData());
+        assertEquals("companionpets.hatch.fox", fox.hatchPermission());
+        assertEquals("companionpets.hatch", config.type("rabbit").hatchPermission());
         assertEquals(List.of(ItemRef.vanilla(Material.SALMON)), fox.treats());
         assertEquals(java.util.Map.of(ItemRef.vanilla(Material.COOKED_CHICKEN), 35.0), fox.foods());
         assertEquals(List.of(Trick.FOLLOW), fox.defaultTricks());

@@ -9,6 +9,7 @@ import net.tfminecraft.companionpets.item.HeldItem;
 import org.bukkit.entity.EntityType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.permissions.Permissible;
 
 import net.tfminecraft.companionpets.pet.SexMode;
 import net.tfminecraft.companionpets.pet.Trick;
@@ -27,12 +28,18 @@ public record PetTypeDef(
         BehaviorProfile behavior,
         PetSounds sounds,
         boolean nativeCombat,
-        String species) {
+        String species,
+        String hatchPermission) {
 
     public PetTypeDef {
         tricks = Set.copyOf(tricks);
         defaultTricks = List.copyOf(defaultTricks);
         java.util.Objects.requireNonNull(behavior);
+    }
+
+    /** A null hatch permission lets anyone hatch this type's egg. */
+    public boolean canHatch(Permissible player) {
+        return hatchPermission == null || player.hasPermission(hatchPermission);
     }
 
     public Set<PetBehavior> behaviors() { return behavior.behaviors(); }

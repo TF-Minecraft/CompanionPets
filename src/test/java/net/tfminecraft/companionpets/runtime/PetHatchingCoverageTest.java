@@ -288,6 +288,41 @@ class PetHatchingCoverageTest {
         assertNull(lastSpawned);
     }
 
+    @Test void hatchingRequiresTheConfiguredPermissionAndKeepsTheEggOtherwise() {
+        reload("hatching.permission", "test.hatch");
+        var egg = new ItemStack(Material.WOLF_SPAWN_EGG, 2);
+        player.getInventory().setItemInMainHand(egg);
+        var event = new PlayerInteractEvent(player, Action.RIGHT_CLICK_AIR, egg, null, BlockFace.SELF, EquipmentSlot.HAND);
+        server.getPluginManager().callEvent(event);
+        assertTrue(event.isCancelled(), "refused eggs must not fall back to vanilla spawning");
+        assertNull(runtime.sessions().hatch(player.getUniqueId()));
+        assertEquals(egg, player.getInventory().getItemInMainHand());
+        assertTrue(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(player.nextActionBar()).contains("don't know how to hatch"));
+
+        player.addAttachment(runtime.plugin(), "test.hatch", true);
+        begin(); namePet(); chat("yes");
+        assertEquals("Luna", onlyPet().name());
+    }
+
+    @Test void aPetOverrideCanClearTheGlobalHatchPermission() {
+        reload("hatching.permission", "test.hatch");
+        reload("pets.wolf.hatch-permission", false);
+        begin(); namePet(); chat("yes");
+        assertEquals("Luna", onlyPet().name());
+    }
+
+    @Test void losingTheHatchPermissionDuringTheDialogueKeepsTheEggAtConfirmation() {
+        begin(); namePet();
+        reload("pets.wolf.hatch-permission", "test.hatch");
+        chat("yes");
+        assertNull(runtime.sessions().hatch(player.getUniqueId()));
+        assertTrue(runtime.store().all().isEmpty());
+        assertEquals(2, player.getInventory().getItemInMainHand().getAmount());
+        assertTrue(messages().contains("don't know how to hatch this egg. Your egg is safe."));
+        assertNull(lastSpawned);
+    }
+
     @Test void reachingTheTotalDuringTheDialogueKeepsTheEggAtConfirmation() {
         begin(); namePet();
         fillPetHouse();

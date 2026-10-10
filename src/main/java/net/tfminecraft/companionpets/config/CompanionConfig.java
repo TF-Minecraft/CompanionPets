@@ -223,7 +223,8 @@ public final class CompanionConfig {
         boolean mythic = plugin.getServer().getPluginManager().isPluginEnabled("MythicMobs");
         Map<Trick, CustomTrick> custom = CustomTrick.read(config.getConfigurationSection("custom-tricks"), logger);
         List<Trick> defaultTricks = readDefaultTricks(config, "training.default-tricks", List.of(Trick.FOLLOW), custom);
-        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), config.getConfigurationSection("species"), mythic, plugin.getLogger(), custom, interactionItems, defaultTricks);
+        String hatchPermission = readPermission(config, "hatching.permission", null);
+        Map<String, PetTypeDef> types = readTypes(config.getConfigurationSection("pets"), config.getConfigurationSection("species"), mythic, plugin.getLogger(), custom, interactionItems, defaultTricks, hatchPermission);
         return new CompanionConfig(
                 careSettings,
                 playSettings,
@@ -260,7 +261,16 @@ public final class CompanionConfig {
         return List.copyOf(result);
     }
 
-    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, ConfigurationSection species, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom, PetItems globalItems, List<Trick> globalDefaults) {
+    /** Reads a permission node; false or a blank string clears an inherited one. */
+    private static String readPermission(ConfigurationSection section, String key, String inherited) {
+        if (!section.contains(key)) return inherited;
+        Object raw = section.get(key);
+        if (Boolean.FALSE.equals(raw)) return null;
+        if (!(raw instanceof String node)) throw new IllegalArgumentException(section.getCurrentPath() + "." + key + " must be a permission node or false");
+        return node.isBlank() ? null : node.trim();
+    }
+
+    private static Map<String, PetTypeDef> readTypes(ConfigurationSection pets, ConfigurationSection species, boolean mythic, Logger logger, Map<Trick, CustomTrick> custom, PetItems globalItems, List<Trick> globalDefaults, String globalHatchPermission) {
         Map<String, PetTypeDef> types = new LinkedHashMap<>();
         if (pets == null) {
             return types;
@@ -321,6 +331,7 @@ public final class CompanionConfig {
             SexMode sexMode = "choose".equalsIgnoreCase(section.getString("sex", "random")) ? SexMode.CHOOSE : SexMode.RANDOM;
             Set<Trick> tricks = new java.util.LinkedHashSet<>(resolved.tricks());
             List<Trick> defaults = readDefaultTricks(section, "default-tricks", globalDefaults, custom);
+            String hatchPermission = readPermission(section, "hatch-permission", globalHatchPermission);
             tricks.addAll(defaults);
             PetAppearance appearance;
             try {
@@ -353,7 +364,7 @@ public final class CompanionConfig {
                     sexMode,
                     appearance,
                     petItems, tricks, defaults, resolved.behavior(),
-                    PetSounds.read(section, entity, logger), section.getBoolean("native-combat", false), resolved.species()));
+                    PetSounds.read(section, entity, logger), section.getBoolean("native-combat", false), resolved.species(), hatchPermission));
         }
         return Collections.unmodifiableMap(types);
     }
