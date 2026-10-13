@@ -339,7 +339,7 @@ class ModelEngineBridgeTest {
 
     @BeforeEach void setup() throws Exception {
         var server = MockBukkit.mock();
-        plugin = MockBukkit.createMockPlugin();
+        plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         player = server.addPlayer();
         var world = server.addSimpleWorld("models");
         body = world.spawn(new org.bukkit.Location(world, 0, 64, 0), org.bukkit.entity.Wolf.class);
@@ -718,7 +718,7 @@ class ModelEngineBridgeTest {
 
     @Test void hookAvailabilityTracksProviderEnablementAndInteractionUsesThePublicHook() throws Exception {
         assertFalse(ModelHook.available());
-        var modelPlugin = MockBukkit.createMockPlugin("ModelEngine");
+        var modelPlugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("ModelEngine");
         assertTrue(ModelHook.available());
         org.bukkit.Bukkit.getPluginManager().disablePlugin(modelPlugin);
         assertFalse(ModelHook.available());

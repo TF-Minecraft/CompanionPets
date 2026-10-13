@@ -21,7 +21,7 @@ final class PetSearch {
         String filter = name.toLowerCase(Locale.ROOT);
         List<Result> result = new ArrayList<>();
         for (Pet pet : runtime.store().all()) {
-            if (selected != null && !selected.equals(pet.id()) || owner != null && !owner.equals(pet.ownerId())
+            if (selected != null && !selected.equals(pet.id()) || owner != null && !owner.equals(pet.ownerCharacterId())
                     || !pet.name().toLowerCase(Locale.ROOT).contains(filter)) continue;
             var found = bodies.getOrDefault(pet.id(), List.of());
             String status;

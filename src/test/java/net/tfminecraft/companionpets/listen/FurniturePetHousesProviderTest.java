@@ -137,7 +137,7 @@ class FurniturePetHousesProviderTest {
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock(new ProviderServer());
         var world = server.addSimpleWorld("houses");
-        var plugin = MockBukkit.createMockPlugin("HouseCoverage");
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("HouseCoverage");
         plugin.getLogger().addHandler(new Handler() {
             @Override public void publish(LogRecord record) { logs.add(record.getMessage()); }
             @Override public void flush() { }

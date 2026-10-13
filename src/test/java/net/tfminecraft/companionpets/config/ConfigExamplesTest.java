@@ -34,7 +34,7 @@ class ConfigExamplesTest {
     private CompanionConfig loadWithoutWarnings(String text) throws Exception {
         var yaml = new YamlConfiguration();
         yaml.loadFromString(text);
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         List<String> warnings = new ArrayList<>();
         Handler handler = new Handler() {
             @Override public void publish(LogRecord record) {

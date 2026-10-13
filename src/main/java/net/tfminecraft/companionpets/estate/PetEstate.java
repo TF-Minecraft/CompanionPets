@@ -1,0 +1,228 @@
+package net.tfminecraft.companionpets.estate;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import org.bukkit.Bukkit;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.ServicePriority;
+import net.tfminecraft.companionpets.ownership.DurableFiles;
+import net.tfminecraft.companionpets.ownership.OwnershipMigration;
+import net.tfminecraft.companionpets.pet.Pet;
+import net.tfminecraft.companionpets.runtime.PetActions;
+import net.tfminecraft.companionpets.runtime.PetRuntime;
+import net.tfminecraft.tlibs.character.CharacterRef;
+import net.tfminecraft.tlibs.character.estate.*;
+
+/** Transfers only owner envelopes; the pet and all of its learning and friendships survive. */
+public final class PetEstate implements EstateParticipant {
+    private final PetRuntime runtime;
+    private final PetActions actions;
+    private final Path journals;
+    Predicate<EstateDecision> guard = Estates::guardHolds;
+    Supplier<List<EstateDecision>> decided = Estates::decided;
+
+    public PetEstate(PetRuntime runtime, PetActions actions, Path journals) {
+        this.runtime = runtime; this.actions = actions; this.journals = journals;
+    }
+    public static void start(Plugin plugin, PetRuntime runtime, PetActions actions) {
+        PetEstate estate = new PetEstate(runtime, actions, plugin.getDataFolder().toPath().resolve("estates"));
+        estate.recover();
+        Bukkit.getServicesManager().register(EstateParticipant.class, estate, plugin, ServicePriority.Normal);
+        Bukkit.getScheduler().runTaskTimer(plugin, estate::reconcile, 1L, 72000L);
+    }
+    @Override public String id() { return "companionpets"; }
+    @Override public Holdings describe(UUID character) {
+        List<String> labels = new ArrayList<>();
+        runtime.store().ofCharacter(character).forEach(pet -> labels.add("Pet: " + pet.name()));
+        runtime.store().kennelCharacters().forEach((key, owner) -> { if (character.equals(owner)) labels.add("Pet House: " + key); });
+        return labels.isEmpty() ? Holdings.NONE : new Holdings(Map.of("pets-and-houses", labels.size()), labels);
+    }
+    @Override public Outcome settle(EstateDecision decision) {
+        if (runtime.store().persistenceConflict()) return Outcome.blocked("Pet source changed outside its current writer; review is required");
+        if (!net.tfminecraft.companionpets.ownership.CharacterAccess.heirReady() || !runtime.store().ownershipReady())
+            return Outcome.retry("Reviewed pet ownership and persistence are not ready");
+        if (!guard.test(decision)) return Outcome.retry("The exact estate decision is not current");
+        try {
+            Files.createDirectories(journals);
+            List<String> moved = new ArrayList<>();
+            Path file = journals.resolve(decision.deathId() + "-" + decision.revision() + ".yml");
+            try (var files = Files.list(journals)) {
+                for (Path older : files.filter(path -> path.toString().endsWith(".yml")).toList()) {
+                    YamlConfiguration receipt = readPlan(older);
+                    if (!decision.deathId().toString().equals(receipt.getString("death"))) continue;
+                    if (receipt.getBoolean("complete")) moved.addAll(receipt.getStringList("moved"));
+                    else if (!older.equals(file)) {
+                        if (changed(receipt)) { hold(receipt); return Outcome.blocked("An earlier partial estate intent needs review: " + older.getFileName()); }
+                        receipt.set("complete", true); receipt.set("obsolete", true);
+                        DurableFiles.write(older, receipt.saveToString());
+                    }
+                }
+            }
+            if (decision.property().character().isEmpty()) return done(moved);
+            YamlConfiguration plan;
+            if (Files.exists(file)) {
+                plan = readPlan(file);
+                if (!matchesDecision(plan, decision)) {
+                    hold(plan); return Outcome.blocked("Estate intent does not match the exact recipient/decision envelope");
+                }
+                if (plan.getBoolean("complete")) return done(moved);
+            } else {
+                CharacterRef to = decision.property().character().orElseThrow();
+                plan = new YamlConfiguration();
+                plan.set("death", decision.deathId().toString()); plan.set("revision", decision.revision());
+                plan.set("decision", decision.toString()); plan.set("complete", false);
+                plan.set("from-account", decision.testator().ownerId().toString());
+                plan.set("from-character", decision.testator().characterId().toString());
+                plan.set("to-account", to.ownerId().toString()); plan.set("to-character", to.characterId().toString());
+                plan.set("pets", runtime.store().ofCharacter(decision.testator().characterId()).stream()
+                        .filter(pet -> pet.ownerId().equals(decision.testator().ownerId())).map(pet -> pet.id().toString()).toList());
+                plan.set("kennels", runtime.store().kennelCharacters().entrySet().stream()
+                        .filter(entry -> decision.testator().characterId().equals(entry.getValue()))
+                        .map(Map.Entry::getKey).toList());
+                DurableFiles.write(file, plan.saveToString());
+            }
+            if (!guard.test(decision)) return Outcome.retry("Estate changed before publication");
+            UUID fromAccount = UUID.fromString(plan.getString("from-account"));
+            UUID fromCharacter = UUID.fromString(plan.getString("from-character"));
+            UUID toAccount = UUID.fromString(plan.getString("to-account"));
+            UUID toCharacter = UUID.fromString(plan.getString("to-character"));
+            Map<Pet, CharacterRef> before = new LinkedHashMap<>();
+            Map<String, CharacterRef> housesBefore = new LinkedHashMap<>();
+            List<String> thisMove = new ArrayList<>();
+            for (String id : plan.getStringList("pets")) {
+                Pet pet = runtime.store().get(UUID.fromString(id));
+                if (pet == null || !(matches(pet, fromAccount, fromCharacter) || matches(pet, toAccount, toCharacter))) {
+                    hold(plan); return Outcome.blocked("Pet changed or disappeared after estate planning: " + id);
+                }
+                before.put(pet, new CharacterRef(pet.ownerId(), pet.ownerCharacterId()));
+                thisMove.add("pet:" + id);
+            }
+            for (String key : plan.getStringList("kennels")) {
+                UUID account = runtime.store().kennelOwner(key), character = runtime.store().kennelCharacter(key);
+                if (!((fromAccount.equals(account) && fromCharacter.equals(character)) || (toAccount.equals(account) && toCharacter.equals(character)))) {
+                    hold(plan); return Outcome.blocked("Pet House changed after estate planning: " + key);
+                }
+                housesBefore.put(key, new CharacterRef(account, character)); thisMove.add("kennel:" + key);
+            }
+            before.keySet().forEach(pet -> {
+                pet.ownershipHeld(true); actions.clearInteractions(pet);
+                actions.releaseFetch(pet, null, false); runtime.sessions().clearPet(pet.id());
+                pet.ownership(toAccount, toCharacter);
+            });
+            housesBefore.keySet().forEach(key -> { runtime.store().holdKennel(key, true); runtime.store().kennel(key, toAccount, toCharacter); });
+            if (!guard.test(decision) || !runtime.store().saveOwnership()) {
+                before.forEach((pet, owner) -> { pet.ownership(owner.ownerId(), owner.characterId()); pet.ownershipHeld(true); });
+                housesBefore.forEach((key, owner) -> { runtime.store().kennel(key, owner.ownerId(), owner.characterId()); runtime.store().holdKennel(key, true); });
+                return runtime.store().persistenceConflict() ? Outcome.blocked("Pet save changed outside the writer; preserve the intent and current file for review")
+                        : Outcome.retry("Pet ownership could not be durably published");
+            }
+            plan.set("moved", thisMove); plan.set("complete", true);
+            DurableFiles.write(file, plan.saveToString());
+            before.keySet().forEach(pet -> {
+                pet.ownershipHeld(false);
+                var body = runtime.entity(pet); var type = runtime.config().type(pet.typeId());
+                if (body != null) {
+                    runtime.bodies().bindOwner(body, pet);
+                    if (type != null) runtime.bodies().reattach(body, pet, type);
+                }
+            });
+            housesBefore.keySet().forEach(key -> runtime.store().holdKennel(key, false));
+            moved.addAll(thisMove);
+            return done(moved);
+        } catch (InvalidIntent | RuntimeException ex) {
+            holdAll();
+            runtime.plugin().getLogger().severe("Pet estate intent needs review: " + ex.getMessage());
+            return Outcome.blocked("Pet estate intent needs review: " + ex.getMessage());
+        } catch (IOException ex) {
+            runtime.plugin().getLogger().warning("Pet estate held for retry: " + ex.getMessage());
+            return Outcome.retry("Pet estate persistence failed: " + ex.getMessage());
+        }
+    }
+    private static final class InvalidIntent extends IOException {
+        InvalidIntent(String message) { super(message); }
+    }
+    private static YamlConfiguration readPlan(Path file) throws IOException {
+        YamlConfiguration plan;
+        try { plan = OwnershipMigration.read(file); }
+        catch (IOException ex) {
+            if (ex.getCause() instanceof org.bukkit.configuration.InvalidConfigurationException)
+                throw new InvalidIntent("Unreadable journal: " + file.getFileName());
+            throw ex;
+        }
+        for (String key : List.of("death", "from-account", "from-character", "to-account", "to-character")) {
+            if (OwnershipMigration.uuid(plan.getString(key)) == null)
+                throw new InvalidIntent("Invalid " + key + " in " + file.getFileName());
+        }
+        if (!(plan.get("revision") instanceof Number) || plan.getLong("revision") < 0
+                || !(plan.get("complete") instanceof Boolean) || plan.getString("decision", "").isBlank())
+            throw new InvalidIntent("Invalid decision envelope in " + file.getFileName());
+        if (!file.getFileName().toString().equals(plan.getString("death") + "-" + plan.getLong("revision") + ".yml"))
+            throw new InvalidIntent("Journal path does not match its death/revision: " + file.getFileName());
+        for (String key : List.of("pets", "kennels")) {
+            if (!(plan.get(key) instanceof List<?> values) || values.stream().anyMatch(value -> !(value instanceof String)))
+                throw new InvalidIntent("Invalid " + key + " list in " + file.getFileName());
+        }
+        if (plan.getStringList("pets").stream().anyMatch(id -> OwnershipMigration.uuid(id) == null))
+            throw new InvalidIntent("Invalid pet ID in " + file.getFileName());
+        return plan;
+    }
+    private static boolean matchesDecision(YamlConfiguration plan, EstateDecision decision) {
+        CharacterRef recipient = decision.property().character().orElseThrow();
+        return decision.toString().equals(plan.getString("decision"))
+                && decision.deathId().toString().equals(plan.getString("death"))
+                && decision.revision() == plan.getLong("revision")
+                && decision.testator().ownerId().toString().equals(plan.getString("from-account"))
+                && decision.testator().characterId().toString().equals(plan.getString("from-character"))
+                && recipient.ownerId().toString().equals(plan.getString("to-account"))
+                && recipient.characterId().toString().equals(plan.getString("to-character"));
+    }
+    private static boolean matches(Pet pet, UUID account, UUID character) {
+        return account.equals(pet.ownerId()) && character.equals(pet.ownerCharacterId());
+    }
+    private boolean changed(YamlConfiguration plan) {
+        UUID account = OwnershipMigration.uuid(plan.getString("from-account"));
+        UUID character = OwnershipMigration.uuid(plan.getString("from-character"));
+        return plan.getStringList("pets").stream().anyMatch(id -> {
+            Pet pet = runtime.store().get(OwnershipMigration.uuid(id));
+            return pet == null || !matches(pet, account, character);
+        }) || plan.getStringList("kennels").stream().anyMatch(key -> !(account.equals(runtime.store().kennelOwner(key)) && character.equals(runtime.store().kennelCharacter(key))));
+    }
+    private void hold(YamlConfiguration plan) {
+        plan.getStringList("kennels").forEach(key -> runtime.store().holdKennel(key, true));
+        plan.getStringList("pets").forEach(id -> { Pet pet = runtime.store().get(OwnershipMigration.uuid(id)); if (pet != null) pet.ownershipHeld(true); });
+    }
+    private void holdAll() {
+        runtime.store().all().forEach(pet -> pet.ownershipHeld(true));
+        runtime.store().kennelCharacters().keySet().forEach(key -> runtime.store().holdKennel(key, true));
+    }
+    private static Outcome done(List<String> moved) {
+        List<String> ids = moved.stream().distinct().sorted().toList();
+        return Outcome.done(Map.of("pets-and-houses", ids.size()), ids);
+    }
+    private void recover() {
+        if (!Files.isDirectory(journals)) return;
+        try (var files = Files.list(journals)) {
+            for (Path file : files.filter(path -> path.toString().endsWith(".yml")).toList()) {
+                YamlConfiguration plan = readPlan(file);
+                if (!plan.getBoolean("complete")) hold(plan);
+            }
+        } catch (IOException | RuntimeException ex) {
+            holdAll();
+            runtime.plugin().getLogger().severe("Pet estate journals unreadable; ownership stays held: " + ex.getMessage());
+        }
+    }
+    void reconcile() {
+        for (EstateDecision decision : decided.get()) {
+            if (guard.test(decision)) Estates.report(decision.deathId(), id(), decision.revision(), settle(decision));
+        }
+    }
+}

@@ -25,6 +25,7 @@ final class PetHatching {
     private final PetRuntime runtime;
     PetHatching(PetRuntime runtime) { this.runtime = runtime; }
     void begin(Player player, PetTypeDef type) {
+        if (runtime.characterId(player) == null) { PetFx.tell(player, "You need an active character to hatch a pet."); return; }
         if (!type.canHatch(player)) {
             PetFx.bar(player, NOT_ALLOWED);
             return;
@@ -122,6 +123,7 @@ final class PetHatching {
             return;
         }
         Pet pet = new Pet(UUID.randomUUID(), player.getUniqueId(), type.id(), name, sex);
+        pet.ownership(player.getUniqueId(), runtime.characterId(player));
         net.tfminecraft.companionpets.training.DefaultTricks.apply(runtime.config(), pet);
         pet.bornAt(System.currentTimeMillis());
         FavoriteToy.Result favorite = FavoriteToy.reconcile(null, PetActions.toyNames(type), runtime.random());

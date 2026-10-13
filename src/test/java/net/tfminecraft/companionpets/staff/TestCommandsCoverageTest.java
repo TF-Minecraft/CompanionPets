@@ -77,7 +77,7 @@ class TestCommandsCoverageTest {
             @Override public void playSound(Location at, Sound sound, float volume, float pitch) { sounds.add(sound); }
         };
         server.addWorld(world);
-        plugin = MockBukkit.createMockPlugin();
+        plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         staff = server.addPlayer("Staff"); staff.setOp(true);
         staff.teleport(new Location(world, 0, 64, 0));
         var yaml = new YamlConfiguration();
@@ -92,7 +92,7 @@ class TestCommandsCoverageTest {
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
         var actions = new PetActions(runtime);
         commands = new TestCommands(runtime, actions, new StaffCommands(runtime, actions));
-        existing = new Pet(UUID.randomUUID(), staff.getUniqueId(), "wolf", "Existing", PetSex.MALE);
+        existing = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), staff.getUniqueId(), "wolf", "Existing", PetSex.MALE);
         existing.stored(true); store.add(existing);
     }
 
@@ -177,7 +177,7 @@ class TestCommandsCoverageTest {
         execute("moment", "affection");
         assertEquals("Look at one of your pets first.", staff.nextMessage());
         var otherOwner = server.addPlayer("Other");
-        var other = new Pet(UUID.randomUUID(), otherOwner.getUniqueId(), "wolf", "OtherPet", PetSex.FEMALE);
+        var other = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), otherOwner.getUniqueId(), "wolf", "OtherPet", PetSex.FEMALE);
         runtime.store().add(other); bringOut(other);
         execute("moment", "affection");
         assertEquals("Look at one of your pets first.", staff.nextMessage());

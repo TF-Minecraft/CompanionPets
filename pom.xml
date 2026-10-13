@@ -16,9 +16,16 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.proc>full</maven.compiler.proc>
+        <tlibs.version>2.6.0</tlibs.version>
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>me.plugins</groupId>
+            <artifactId>tlibs</artifactId>
+            <version>${tlibs.version}</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>

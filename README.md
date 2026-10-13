@@ -6,7 +6,9 @@ CompanionPets gives players a companion that lives beyond a single entity. Each
 pet hatches from an egg with its own name, sex, personality, and favourite toy,
 and keeps its needs, bond, and learned tricks between summons. Vanilla wolves,
 cats, and foxes need no model plugin; ModelEngine, MythicMobs, MMOItems, and
-ItemsAdder are optional.
+ItemsAdder are optional. TLibs 2.6.0 and a ready character identity provider
+(supplied by RPCharacters) are required for pet ownership actions. Pets and Pet
+Houses belong to their character; account-wide capacity limits remain shared.
 
 ## Features
 
@@ -24,7 +26,7 @@ ItemsAdder are optional.
 - **Configurable species** — per-type bodies, eggs, interaction items, learnable
   tricks, optional behaviours, and custom tricks, with optional ModelEngine models
   and animations. Resting pets look around with bounded head movement.
-- **Staff tools** — browse, locate, and create pets for any player, give eggs,
+- **Staff tools** — browse, locate, and create pets for a living character, give eggs,
   and audit every staff intervention.
 - **Pet recovery** — keep pets and their learning across restarts, including pets
   left outside their Pet House.
@@ -44,7 +46,7 @@ Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/
 With Java 21 and Maven installed, run:
 
 ```sh
-mvn clean verify
+tfmc-mvn -o -B clean verify
 ```
 
 Tests use JUnit, MockBukkit, and Mockito. Surefire reports go to

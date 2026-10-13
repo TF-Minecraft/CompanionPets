@@ -57,27 +57,22 @@ public final class StaffCommands {
     }
 
     public UUID resolveOwner(String token) {
-        Player online = Bukkit.getPlayerExact(token);
-        if (online != null) return online.getUniqueId();
-        OfflinePlayer cached = Bukkit.getOfflinePlayerIfCached(token);
-        if (cached != null) return cached.getUniqueId();
-        // Explicit UUIDs remain available only for restoring unknown/offline owners with create.
-        try { return UUID.fromString(token); } catch (IllegalArgumentException ignored) { }
-        throw new IllegalArgumentException("Unknown player '" + token + "'. Use Tab to select a player.");
+        UUID character = net.tfminecraft.companionpets.ownership.CharacterAccess.resolve(token);
+        require(character != null, "Unknown or ambiguous character '" + token + "'. Specify a known character UUID or unique living character name.");
+        return character;
     }
 
     public String ownerName(UUID owner) {
-        var player = Bukkit.getOfflinePlayer(owner);
-        return player.getName() == null ? "Unknown player" : player.getName();
+        return net.tfminecraft.companionpets.ownership.CharacterAccess.name(owner);
     }
 
     public List<UUID> owners() {
-        return runtime.store().all().stream().map(Pet::ownerId).distinct()
+        return runtime.store().all().stream().map(Pet::ownerCharacterId).filter(java.util.Objects::nonNull).distinct()
                 .sorted(Comparator.comparing(this::ownerName, String.CASE_INSENSITIVE_ORDER)).toList();
     }
 
     public List<Pet> owned(UUID owner) {
-        return runtime.store().of(owner).stream().sorted(Comparator.comparing((Pet p) -> p.name(), String.CASE_INSENSITIVE_ORDER).thenComparing(Pet::id)).toList();
+        return runtime.store().ofCharacter(owner).stream().sorted(Comparator.comparing((Pet p) -> p.name(), String.CASE_INSENSITIVE_ORDER).thenComparing(Pet::id)).toList();
     }
 
     public Pet resolveNamedPet(String player, String name) {
@@ -90,6 +85,12 @@ public final class StaffCommands {
     private void list(CommandSender sender, String[] args) {
         if (args.length == 1) {
             sender.sendMessage("Usage: /companionpets list <player> [pet name]. Use Tab to select a player.");
+            return;
+        }
+        if (args[1].equalsIgnoreCase("unassigned")) {
+            var held = runtime.store().unassigned();
+            sender.sendMessage("Unassigned or held pet records: " + held.size());
+            held.forEach(sender::sendMessage);
             return;
         }
         UUID owner = resolveOwner(args[1]);
@@ -123,7 +124,7 @@ public final class StaffCommands {
     }
 
     public void info(CommandSender sender, Pet pet) {
-        sender.sendMessage(pet.name() + " (" + pet.typeId() + "), owner: " + ownerName(pet.ownerId()));
+        sender.sendMessage(pet.name() + " (" + pet.typeId() + "), owner: " + ownerName(pet.ownerCharacterId()));
         sender.sendMessage("State: " + (pet.stored() ? "in Pet House" : "outside") + "; order: " + pet.order() + "; illness: " + pet.illness());
         sender.sendMessage("Needs: " + Arrays.stream(Need.values()).map(n -> n.name().toLowerCase(Locale.ROOT) + "=" + Math.round(pet.need(n))).toList());
         sender.sendMessage("Tricks: " + pet.words().keySet());
@@ -133,8 +134,12 @@ public final class StaffCommands {
         require(args.length >= 3, PetCreation.usage());
         require(runtime.store().canRestoreBodies(), "Pet persistence is unavailable; creation refused.");
         UUID owner = resolveOwner(args[1]);
-        Pet pet = PetCreation.parse(runtime, owner, args);
-        require(runtime.store().countPets(owner) < runtime.config().limits().maxPets(), "The player already has the maximum number of pets.");
+        require(net.tfminecraft.companionpets.ownership.CharacterAccess.alive(owner), "Creation requires a living character.");
+        UUID account = net.tfminecraft.companionpets.ownership.CharacterAccess.account(owner);
+        require(account != null, "The character owner is unavailable.");
+        Pet pet = PetCreation.parse(runtime, account, args);
+        pet.ownership(account, owner);
+        require(runtime.store().countPets(account) < runtime.config().limits().maxPets(), "The player already has the maximum number of pets.");
         if (!audit.append(sender, "create-requested", pet, "none", StaffAudit.snapshot(pet))) return;
         runtime.store().add(pet);
         if (!runtime.store().save()) {

@@ -65,7 +65,7 @@ public final class PetListener implements Listener {
         if (actions.fetchingOrReturning(pet) || actions.greeting(pet) || actions.socializing(pet) || pet.activity() == net.tfminecraft.companionpets.pet.Activity.TOY_FOCUS
                 || pet.staying() || pet.order() != net.tfminecraft.companionpets.pet.PetOrder.FOLLOW
                 || pet.activity() == net.tfminecraft.companionpets.pet.Activity.SLEEPING
-                || !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId()))
+                || !runtime.followingAllowed(pet, runtime.owner(pet))
                 || System.currentTimeMillis() < pet.forcedSitUntilMillis()) event.setCancelled(true);
     }
 
@@ -90,7 +90,7 @@ public final class PetListener implements Listener {
         if (previous != null && previous.tick() == tick && previous.entity().equals(entity.getUniqueId())) return true;
         boolean handled = actions.useOnPet(player, entity, player.getInventory().getItemInMainHand());
         if (handled) lastClicks.put(player.getUniqueId(), new Click(entity.getUniqueId(), tick));
-        return handled;
+        return handled || runtime.byEntity(entity) != null;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -124,10 +124,11 @@ public final class PetListener implements Listener {
         String text = event.getMessage();
         UUID playerId = player.getUniqueId();
         Object prompt = runtime.sessions().privatePrompt(playerId);
+        var token = runtime.sessions().token(playerId);
         if (prompt != null) event.setCancelled(true);
         Bukkit.getScheduler().runTask(runtime.plugin(), () -> {
             Player online = Bukkit.getPlayer(playerId);
-            if (online != null && (prompt == null
+            if (online != null && net.tfminecraft.companionpets.ownership.CharacterAccess.current(token) && (prompt == null
                     ? runtime.sessions().privatePrompt(playerId) == null
                     : runtime.sessions().privatePrompt(playerId) == prompt)) {
                 actions.onChat(online, text);
@@ -246,6 +247,7 @@ public final class PetListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
+        runtime.sessions().refresh(event.getPlayer().getUniqueId());
         actions.ownerSessionChanged(event.getPlayer());
     }
 

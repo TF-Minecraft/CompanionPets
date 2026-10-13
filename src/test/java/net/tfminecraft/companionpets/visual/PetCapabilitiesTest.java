@@ -29,7 +29,7 @@ class PetCapabilitiesTest {
     };
 
     @BeforeEach void setup() throws Exception {
-        MockBukkit.mock(); plugin = MockBukkit.createMockPlugin();
+        MockBukkit.mock(); plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 pets:
@@ -82,7 +82,7 @@ class PetCapabilitiesTest {
         var key = new NamespacedKey(plugin, "pet");
         var runtime = new PetRuntime(plugin, config, new PetStore(plugin), new Sessions(),
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "dog", "Toby", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "dog", "Toby", PetSex.MALE);
         var type = config.type("dog");
         long before = System.currentTimeMillis();
         var missing = runtime.capabilities(type);
@@ -133,7 +133,7 @@ class PetCapabilitiesTest {
         var key = new NamespacedKey(plugin, "pet");
         var runtime = new PetRuntime(plugin, config, new PetStore(plugin), new Sessions(),
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "dog", "Toby", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "dog", "Toby", PetSex.MALE);
         assertFalse(runtime.behaves(pet, PetBehavior.GREETING_TAIL_WAG));
         assertFalse(runtime.behaves(pet, PetBehavior.BELLY_RUB));
         assertTrue(runtime.behaves(pet, PetBehavior.FETCH));

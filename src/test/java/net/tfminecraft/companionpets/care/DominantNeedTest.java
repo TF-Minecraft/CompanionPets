@@ -38,6 +38,6 @@ class DominantNeedTest {
     }
 
     private static Pet pet() {
-        return new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Luna", PetSex.FEMALE);
+        return net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Luna", PetSex.FEMALE);
     }
 }

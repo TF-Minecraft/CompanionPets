@@ -81,7 +81,7 @@ class PetInteractionTest {
                         });
             }
         });
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var world = new net.tfminecraft.companionpets.testutil.CollisionWorldMock() {
             @Override public void playSound(Location at, org.bukkit.Sound sound, float volume, float pitch) {
                 greetingSounds.add(sound); greetingPitches.add(pitch);
@@ -207,7 +207,7 @@ class PetInteractionTest {
         runtime = new PetRuntime(plugin, CompanionConfig.load(plugin, yaml), loadedStore(plugin),
                 new Sessions(), new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
         actions = new PetActions(runtime);
-        pet = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", PetSex.MALE);
         body = (WolfMock) world.spawn(player.getLocation().add(1, 0, 0), org.bukkit.entity.Wolf.class);
         body.getPersistentDataContainer().set(key, org.bukkit.persistence.PersistentDataType.STRING, pet.id().toString());
         net.tfminecraft.companionpets.training.DefaultTricks.apply(runtime.config(), pet); runtime.store().add(pet);
@@ -229,7 +229,7 @@ class PetInteractionTest {
     private void eagerGreeting() { pet.bond(100); pet.personality(PetPersonality.FRIENDLY); }
 
     @Test void ordinaryChatSkipsRaytracesAndPetIterationWithoutOwnedPetsOut() {
-        for (int i = 0; i < 500; i++) runtime.store().add(new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Other" + i, PetSex.MALE));
+        for (int i = 0; i < 500; i++) runtime.store().add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Other" + i, PetSex.MALE));
         var other = MockBukkit.getMock().addPlayer();
         var store = spy(runtime.store());
         var observed = spy(runtime);
@@ -249,7 +249,7 @@ class PetInteractionTest {
         chat.onChat(player, "Toby");
         assertEquals(Activity.ATTENDING, pet.activity());
         verify(store, never()).active();
-        verify(store).of(player.getUniqueId());
+        verify(store).ofCharacter(player.getUniqueId());
         verify(observed, never()).entity(argThat(candidate -> candidate != pet));
     }
 
@@ -1079,7 +1079,7 @@ class PetInteractionTest {
     }
 
     private Pet secondPet(Location at) {
-        var other = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
+        var other = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
         var otherBody = at.getWorld().spawn(at, org.bukkit.entity.Wolf.class);
         otherBody.getPersistentDataContainer().set(runtime.petKey(), org.bukkit.persistence.PersistentDataType.STRING, other.id().toString());
         runtime.store().add(other); runtime.remember(other, otherBody); other.bond(100); other.personality(PetPersonality.FRIENDLY);
@@ -1823,7 +1823,7 @@ class PetInteractionTest {
     }
 
     @Test void explicitEmptyPetListsDisableAllGlobalCareItems() {
-        var selective = new Pet(UUID.randomUUID(), player.getUniqueId(), "selective", "Other", PetSex.FEMALE);
+        var selective = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), player.getUniqueId(), "selective", "Other", PetSex.FEMALE);
         runtime.store().add(selective);
         selective.stored(false);
         runtime.remember(selective, body);
@@ -1873,6 +1873,7 @@ class PetInteractionTest {
     @Test void petHouseDeletesVisualAndBodyButPreservesLearningAndNeeds() {
         pet.progress(Trick.FOLLOW, 73); pet.bindWord("here", Trick.FOLLOW); pet.need(Need.HUNGER, 55);
         var holder = new net.tfminecraft.companionpets.gui.MenuHolder(net.tfminecraft.companionpets.gui.MenuHolder.Kind.CARE, pet.id(), null);
+        holder.capture(player);
         actions.clickMenu(player, holder, net.tfminecraft.companionpets.gui.PetMenus.careSlot(
                 net.tfminecraft.companionpets.gui.PetMenus.STORE_SLOT, false, pet.stored()), null, false, false, false);
         assertEquals(1, bodyRemovals, "Pet House must not detach by revealing the vanilla mob");
@@ -1978,7 +1979,7 @@ class PetInteractionTest {
 
     @Test void ambiguousPetNamesDoNotExecuteCommandsOnEitherPet() {
         pet.order(PetOrder.SIT);
-        var other = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", PetSex.FEMALE);
+        var other = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", PetSex.FEMALE);
         other.order(PetOrder.SIT); runtime.store().add(other);
         var otherBody = body.getWorld().spawn(player.getLocation().add(2, 0, 0), org.bukkit.entity.Wolf.class); runtime.remember(other, otherBody);
         actions.onChat(player, "Toby follow");
@@ -2472,7 +2473,7 @@ class PetInteractionTest {
         greetingGround = true; body.setOnGround(true); pet.personality(PetPersonality.PLAYFUL); pet.favoriteToy("STICK");
         PlayerMock visitor = toyPlayer("Visitor", 0, Material.STICK);
         PlayerMock secondOwner = toyPlayer("SecondOwner", 4, Material.AIR);
-        Pet other = new Pet(new UUID(0, 1), secondOwner.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
+        Pet other = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(new UUID(0, 1), secondOwner.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
         var otherBody = player.getWorld().spawn(new Location(player.getWorld(), -3, 64, 0), org.bukkit.entity.Wolf.class);
         runtime.store().add(other); runtime.remember(other, otherBody);
         other.personality(PetPersonality.PLAYFUL); other.favoriteToy("STICK");

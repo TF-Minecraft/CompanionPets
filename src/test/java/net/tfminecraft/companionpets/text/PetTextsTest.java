@@ -50,7 +50,7 @@ class PetTextsTest {
         PetActions actions = null;
         try {
             server.addSimpleWorld("world");
-            var plugin = MockBukkit.createMockPlugin();
+            var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
             var owner = server.addPlayer();
             var yaml = new YamlConfiguration();
             yaml.loadFromString("pets: {'_-_': {entity: WOLF, egg: WOLF_SPAWN_EGG, sex: choose}}");
@@ -73,7 +73,7 @@ class PetTextsTest {
             assertEquals(Material.WOLF_SPAWN_EGG, owner.getInventory().getItemInMainHand().getType());
             assertEquals(1, owner.getInventory().getItemInMainHand().getAmount());
             assertTrue(owner.nextMessage().contains("Hatching cancelled. Your egg is safe."));
-            var pet = new Pet(UUID.randomUUID(), owner.getUniqueId(), "_-_", "Luna", PetSex.FEMALE);
+            var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "_-_", "Luna", PetSex.FEMALE);
             pet.stored(true);
             store.add(pet);
             actions.menus().openCare(owner, pet);
@@ -178,7 +178,7 @@ class PetTextsTest {
 
     @Test
     void trainingAndCareMessagesKeepThePetNameAndCorrectPronouns() {
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Lúna {owner}", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Lúna {owner}", PetSex.FEMALE);
         assertEquals("Look at Lúna {owner} and say a command", PetTexts.trainingPrompt(pet));
         assertEquals("Lúna {owner} whines and looks around for her owner", PetTexts.missesOwner(pet.name(), pet.sex()));
         assertEquals("Lúna {owner} leans into your hand, worn out from training. Let her rest a while", PetTexts.restingCheck(pet.name(), pet.sex()));

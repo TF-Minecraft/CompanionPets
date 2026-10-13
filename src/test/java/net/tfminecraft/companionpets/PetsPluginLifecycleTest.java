@@ -70,7 +70,8 @@ class PetsPluginLifecycleTest {
         plugin.getLogger().addHandler(logs);
         return loaded;
     }
-    private void enable() { server.getPluginManager().enablePlugin(plugin); assertTrue(plugin.isEnabled()); }
+    private void enable() {
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.register(plugin); server.getPluginManager().enablePlugin(plugin); assertTrue(plugin.isEnabled()); }
     private Path file(String name) { return plugin.getDataFolder().toPath().resolve(name); }
     private YamlConfiguration config() { return YamlConfiguration.loadConfiguration(file("config.yml").toFile()); }
     private PetRuntime runtime() throws Exception {
@@ -88,7 +89,7 @@ class PetsPluginLifecycleTest {
         assertTrue(plugin.onCommand(console, null, "companionpets", new String[]{"reload"}));
         return console.nextMessage();
     }
-    private Pet pet(UUID owner) { return new Pet(UUID.randomUUID(), owner, "wolf", "Toby", PetSex.MALE); }
+    private Pet pet(UUID owner) { return net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner, "wolf", "Toby", PetSex.MALE); }
     private void saveBeforeEnable(Pet pet) {
         var stored = new PetStore(plugin);
         assertTrue(stored.load()); stored.add(pet); assertTrue(stored.close());
@@ -115,6 +116,18 @@ class PetsPluginLifecycleTest {
         wolf.setLocation(at); server.registerEntity(wolf);
         wolf.getPersistentDataContainer().set(new NamespacedKey(plugin, "pet"), PersistentDataType.STRING, pet.id().toString());
         return wolf;
+    }
+
+    @Test void lateReviewedHeirsMigrateBeforeAuthorityAndKeepExistingLoadedPets() throws Exception {
+        prepare();var owner=server.addPlayer();var pet=pet(owner.getUniqueId());pet.stored(true);saveBeforeEnable(pet);
+        var saved=YamlConfiguration.loadConfiguration(file("pets.yml").toFile());saved.set("pets."+pet.id()+".owner-character",null);saved.save(file("pets.yml").toFile());
+        var identity=org.mockito.Mockito.mock(net.tfminecraft.tlibs.character.CharacterIdentity.class);var ready=new java.util.concurrent.atomic.AtomicBoolean();
+        org.mockito.Mockito.when(identity.legacyHeirsReady()).thenAnswer(call->ready.get());
+        org.mockito.Mockito.when(identity.legacyHeir(owner.getUniqueId())).thenReturn(java.util.Optional.of(new net.tfminecraft.tlibs.character.CharacterRef(owner.getUniqueId(),owner.getUniqueId())));
+        org.bukkit.Bukkit.getServicesManager().register(net.tfminecraft.tlibs.character.CharacterIdentity.class,identity,plugin,org.bukkit.plugin.ServicePriority.Highest);
+        enable();var existing=runtime().store().get(pet.id());assertNull(existing.ownerCharacterId());server.getScheduler().performOneTick();assertNull(existing.ownerCharacterId());
+        ready.set(true);server.getScheduler().performTicks(20);assertSame(existing,runtime().store().get(pet.id()));assertEquals(owner.getUniqueId(),existing.ownerCharacterId());
+        assertTrue(Files.exists(file("ownership-migrations/plan-0001.yml")));
     }
 
     @Test void recoveryGuardDisablesStartupAndPreservesFilesWithoutSchedulingActions() throws Exception {
@@ -267,7 +280,7 @@ class PetsPluginLifecycleTest {
     }
 
     @Test void enabledModelProviderWithUnavailableApiFallsBackWithoutDisablingPets() throws Exception {
-        MockBukkit.createMockPlugin("ModelEngine"); prepare(); enable();
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("ModelEngine"); prepare(); enable();
         assertInstanceOf(IdleVisual.class, runtime().visual());
         assertTrue(messages.stream().anyMatch(record -> record.getMessage().contains("ModelEngine 4 integration unavailable")));
         assertTrue(Files.exists(file("pets-recovery-required")));
@@ -426,7 +439,7 @@ class PetsPluginLifecycleTest {
     }
 
     @Test void modelStartupRoutesInteractionAndReloadAndShutdownReleaseOwnedRenderers() throws Exception {
-        MockBukkit.createMockPlugin("ModelEngine");
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("ModelEngine");
         var description = new PluginDescriptionFile("CompanionPets", "test", PetsPlugin.class.getName());
         var data = Files.createTempDirectory(modelClasses, "pets-data-");
         var loader = new ModelPluginLoader(server, description, data);

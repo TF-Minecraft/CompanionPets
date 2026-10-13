@@ -62,7 +62,7 @@ final class TrainingNavigationGoal implements Goal<Mob> {
         if (!body.isValid() || body.isDead() || pet.stored() || pet.dead() || pet.fetch() != null
                 || pet.activity() == Activity.SLEEPING || pet.activity() == Activity.ATTENDING
                 || WaterEscape.needed(body) || trainer == null || !trainer.isOnline()
-                || !pet.ownerId().equals(trainer.getUniqueId()) || !body.getWorld().equals(trainer.getWorld())) return false;
+                || !runtime.owns(pet, trainer) || !body.getWorld().equals(trainer.getWorld())) return false;
         var session = runtime.sessions().training(trainer.getUniqueId());
         double range = runtime.config().training().sessionDistance();
         return session != null && session.petId().equals(pet.id())

@@ -48,6 +48,7 @@ public class PetsPlugin extends JavaPlugin {
     private BukkitTask flusher;
     private BukkitTask visualTicker;
     private BukkitTask tailTicker;
+    private BukkitTask heirWait;
     private PetVisual visual;
     private PetRuntime runtime;
     private PetListener petListener;
@@ -66,7 +67,7 @@ public class PetsPlugin extends JavaPlugin {
             return;
         }
         store = new PetStore(this);
-        if (!store.load() || !store.beginSession()) {
+        if (!store.load() || (net.tfminecraft.companionpets.ownership.CharacterAccess.heirReady() && !store.migrate()) || !store.beginSession()) {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
@@ -89,6 +90,10 @@ public class PetsPlugin extends JavaPlugin {
         Bodies bodies = new Bodies(this, petKey, visual);
         runtime = new PetRuntime(this, config, store, new Sessions(), bodies, visual, petKey, toyKey);
         actions = new PetActions(runtime);
+        if (net.tfminecraft.companionpets.ownership.CharacterAccess.available())
+            Bukkit.getPluginManager().registerEvents(new net.tfminecraft.companionpets.ownership.CharacterLifecycle(runtime, actions), this);
+        if (net.tfminecraft.companionpets.estate.EstateProbe.available())
+            net.tfminecraft.companionpets.estate.PetEstate.start(this, runtime, actions);
         staff = new net.tfminecraft.companionpets.staff.StaffCommands(runtime, actions);
         tests = new net.tfminecraft.companionpets.staff.TestCommands(runtime, actions, staff);
         Bukkit.getPluginManager().registerEvents(staff.menus(), this);
@@ -108,6 +113,18 @@ public class PetsPlugin extends JavaPlugin {
                 actions.reattach(entity);
             }
         }
+        if (!net.tfminecraft.companionpets.ownership.CharacterAccess.heirReady()) {
+            heirWait = Bukkit.getScheduler().runTaskTimer(this, () -> {
+                if (!net.tfminecraft.companionpets.ownership.CharacterAccess.heirReady()) return;
+                actions.clearInteractions(); runtime.sessions().clearForReload();
+                if (!store.save() || !store.migrate()) { getServer().getPluginManager().disablePlugin(this); return; }
+                for (var pet : store.all()) {
+                    Entity body = runtime.entity(pet); var type = runtime.config().type(pet.typeId());
+                    if (body != null && type != null) runtime.bodies().reattach(body, pet, type);
+                }
+                heirWait.cancel();
+            }, 1L, 20L);
+        }
         getLogger().info("CompanionPets enabled (" + config.types().size() + " pet types)");
     }
 
@@ -120,6 +137,7 @@ public class PetsPlugin extends JavaPlugin {
                 if (body instanceof org.bukkit.entity.Mob mob) releaseGoals(mob);
             }
         }
+        if (heirWait != null) heirWait.cancel();
         if (visualTicker != null) visualTicker.cancel();
         if (tailTicker != null) tailTicker.cancel();
         if (ticker != null) {

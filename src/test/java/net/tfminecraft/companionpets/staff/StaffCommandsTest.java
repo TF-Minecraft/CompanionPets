@@ -117,7 +117,7 @@ class StaffCommandsTest {
                 return super.getOfflinePlayers();
             }
         }); server.addSimpleWorld("world");
-        plugin = MockBukkit.createMockPlugin();
+        plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         staff = server.addPlayer("Staff"); staff.setOp(true); staff.openInventory(server.createInventory(null, 9));
         owner = server.addPlayer("Owner");
         var yaml = new YamlConfiguration();
@@ -335,7 +335,7 @@ class StaffCommandsTest {
         assertEquals(entities, owner.getWorld().getEntities().size()); assertEquals(1, runtime.store().all().size()); assertEquals("missing_world", pet.worldName());
     }
     private Pet add(UUID owner, String type, String name, boolean stored) {
-        var pet = new Pet(UUID.randomUUID(), owner, type, name, PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner, type, name, PetSex.MALE);
         pet.stored(stored); runtime.store().add(pet); return pet;
     }
     private void command(String... args) { assertTrue(commands.execute(staff, args)); }
@@ -454,7 +454,13 @@ class StaffCommandsTest {
         menu().click(18); assertEquals(pet.id(), menu().subject());
     }
 
-    @Test void legacyTestFlagsAreIgnoredAndNotWrittenBack() throws Exception {
+    @Test void staffCanListHeldRecordsWithoutAssigningThemToTheActiveCharacter() {
+        pet.ownership(owner.getUniqueId(),null);runtime.store().kennel("missing,1,2,3",owner.getUniqueId());
+        var console=server.getConsoleSender();commands.execute(console,"list","unassigned");assertTrue(console.nextMessage().contains("2"));
+        assertTrue(console.nextMessage().contains(pet.id().toString()));assertTrue(console.nextMessage().contains("missing,1,2,3"));assertNull(pet.ownerCharacterId());
+    }
+
+    @Test void legacyTestFlagsRemainInertAndRawMetadataSurvives() throws Exception {
         assertTrue(runtime.store().save());
         var file = new java.io.File(plugin.getDataFolder(), "pets.yml");
         var yaml = YamlConfiguration.loadConfiguration(file);
@@ -462,7 +468,7 @@ class StaffCommandsTest {
         var reloaded = new PetStore(plugin); assertTrue(reloaded.load());
         assertNotNull(reloaded.get(pet.id())); assertTrue(reloaded.save());
         String saved = Files.readString(file.toPath());
-        assertFalse(saved.contains("test-pet")); assertFalse(saved.contains("test-frozen"));
+        assertTrue(saved.contains("test-pet")); assertTrue(saved.contains("test-frozen"));
     }
 
     @Test void consoleNamedProfileReportsSavedNeedsOrderIllnessAndLearnedWords() {

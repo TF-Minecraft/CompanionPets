@@ -25,7 +25,7 @@ class SnapshotReuseTest {
     @BeforeEach void setup() {
         Logger logger = Logger.getAnonymousLogger(); logger.setUseParentHandlers(false);
         store = new PetStore(directory.resolve("pets.yml").toFile(), logger); assertTrue(store.load());
-        pet = new Pet(ID, OWNER, "wolf", "Toby", PetSex.MALE);
+        pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(ID, OWNER, "wolf", "Toby", PetSex.MALE);
         pet.personality(PetPersonality.FRIENDLY); pet.place("world", 1, 64, 3, 4); pet.entityId(BODY);
         pet.bornAt(10); pet.bond(20); pet.favoriteToy("STICK"); pet.carriedToy("BONE");
         pet.bindWord("sit", Trick.SIT); pet.progress(Trick.SIT, 40); pet.markAnnouncedLow(Need.HUNGER);
@@ -106,6 +106,7 @@ class SnapshotReuseTest {
         var covered = new HashSet<String>();
         persistedChanges().forEach(change -> covered.add(((String) change.get()[0]).split("\\.")[0]));
         covered.add("type");
+        covered.add("owner-character"); covered.add("carers-characters");
         assertEquals(covered, row().keySet());
         assertEquals("wolf", row().get("type"));
         assertEquals(Set.of(ID.toString()), store.snapshot().pets().keySet());
@@ -155,7 +156,7 @@ class SnapshotReuseTest {
 
     @Test void replacingRemovingAndReloadingPetsForgetCachedRows() {
         var before = row();
-        var replacement = new Pet(ID, NEXT_OWNER, "cat", "Replacement", PetSex.FEMALE);
+        var replacement = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(ID, NEXT_OWNER, "cat", "Replacement", PetSex.FEMALE);
         store.add(replacement); assertNotSame(before, row()); assertEquals("Replacement", row().get("name"));
         var replaced = row(); assertTrue(store.save()); assertTrue(store.load());
         assertNotSame(replaced, row()); assertEquals("Replacement", row().get("name"));
@@ -163,7 +164,7 @@ class SnapshotReuseTest {
     }
 
     @Test void changedRowsDoNotReplaceTheRowsOfOtherPets() {
-        var other = new Pet(UUID.randomUUID(), OWNER, "cat", "Other", PetSex.FEMALE); store.add(other);
+        var other = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), OWNER, "cat", "Other", PetSex.FEMALE); store.add(other);
         var before = store.snapshot(); pet.name("Rex"); var after = store.snapshot();
         assertNotSame(before.pets().get(ID.toString()), after.pets().get(ID.toString()));
         assertSame(before.pets().get(other.id().toString()), after.pets().get(other.id().toString()));

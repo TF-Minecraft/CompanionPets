@@ -68,7 +68,7 @@ class PetMomentsCoverageTest {
         for (int x = -8; x <= 16; x++) for (int z = -8; z <= 8; z++)
             world.getBlockAt(x, 63, z).setType(Material.STONE);
         owner = server.addPlayer(); owner.teleport(new Location(world, 0, 64, 0));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 moments:
@@ -108,7 +108,7 @@ class PetMomentsCoverageTest {
         runtime = new PetRuntime(plugin, CompanionConfig.load(plugin, yaml), store, new Sessions(),
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
         moments = new PetMoments(runtime);
-        pet = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
         pet.personality(PetPersonality.PLAYFUL);
         for (Need need : Need.values()) pet.need(need, 80);
         body = new WolfMock(server, UUID.randomUUID()) {

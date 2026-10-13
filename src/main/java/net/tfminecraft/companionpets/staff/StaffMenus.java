@@ -41,7 +41,7 @@ public final class StaffMenus implements Listener {
         if (!allowed(player, "list")) return;
         var holder = create(player, StaffMenuHolder.Kind.INSPECT, pet.id(), 0, pet.name(), 45);
         new net.tfminecraft.companionpets.gui.PetMenus(runtime).fillInformation(holder.getInventory(), pet);
-        holder.button(net.tfminecraft.companionpets.gui.PetMenus.BACK_SLOT, () -> list(player, pet.ownerId(), 0));
+        holder.button(net.tfminecraft.companionpets.gui.PetMenus.BACK_SLOT, () -> list(player, pet.ownerCharacterId(), 0));
         holder.button(net.tfminecraft.companionpets.gui.PetMenus.TRICKS_SLOT, () -> tricks(player, pet.id(), 0));
         player.openInventory(holder.getInventory());
     }

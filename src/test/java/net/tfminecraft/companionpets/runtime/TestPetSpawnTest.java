@@ -35,7 +35,7 @@ class TestPetSpawnTest {
 
     @BeforeEach void setup() throws Exception {
         var server = MockBukkit.mock(new net.tfminecraft.companionpets.testutil.GoalServerMock());
-        JavaPlugin plugin = MockBukkit.createMockPlugin();
+        JavaPlugin plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var world = new net.tfminecraft.companionpets.testutil.CollisionWorldMock() {
             @Override public <T extends Entity> T spawn(Location at, Class<T> type) {
                 Entity body;
@@ -145,7 +145,7 @@ class TestPetSpawnTest {
     }
 
     @Test void aBodyThatDoesNotFitIsPlacedOnFreeGroundBeforeItAppears() {
-        Pet pet = new Pet(java.util.UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", net.tfminecraft.companionpets.pet.PetSex.MALE);
+        Pet pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(java.util.UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", net.tfminecraft.companionpets.pet.PetSex.MALE);
         pet.order(net.tfminecraft.companionpets.pet.PetOrder.SIT);
         runtime.store().add(pet);
         teleportGuard = new net.tfminecraft.companionpets.listen.PetListener(runtime, actions);

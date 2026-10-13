@@ -13,6 +13,10 @@ import net.tfminecraft.companionpets.play.FetchJob;
 public final class Pet {
     private final UUID id;
     private UUID ownerId;
+    private UUID ownerCharacterId;
+    private boolean ownershipHeld;
+    private java.util.function.BooleanSupplier persistenceHeld = () -> false;
+    public void persistenceHeld(java.util.function.BooleanSupplier guard) { persistenceHeld = guard; }
     private final String typeId;
     private String name;
     private PetSex sex;
@@ -89,6 +93,18 @@ public final class Pet {
 
     public UUID ownerId() {
         return ownerId;
+    }
+
+    public UUID ownerCharacterId() { return ownerCharacterId; }
+    public boolean ownershipHeld() { return ownershipHeld || persistenceHeld.getAsBoolean(); }
+    public void ownershipHeld(boolean held) { ownershipHeld = held; }
+
+    /** Ownership changes retain this pet's physiology, learning and relationships. */
+    public void ownership(UUID account, UUID character) {
+        ownerId = java.util.Objects.requireNonNull(account);
+        ownerCharacterId = character;
+        changed();
+        reindex();
     }
 
     public void ownerId(UUID ownerId) {

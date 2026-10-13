@@ -69,7 +69,7 @@ class WaterNavigationGoalTest {
         server.addWorld(world);
         owner = server.addPlayer();
         owner.teleport(new Location(world, 6.5, 64, 2.5));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, default-tricks: [], sounds: false}}
@@ -81,7 +81,7 @@ class WaterNavigationGoalTest {
         var store = new PetStore(plugin); assertTrue(store.load());
         runtime = new PetRuntime(plugin, CompanionConfig.load(plugin, yaml), store, new Sessions(),
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
-        pet = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
         pet.order(PetOrder.SIT);
         store.add(pet);
         path = mock(Pathfinder.class);

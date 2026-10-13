@@ -50,7 +50,7 @@ final class PetTraining {
     }
     private void comfort(Pet pet, long now) { pet.nextCryAtMillis(now + Math.round(runtime.config().cryIntervalSeconds() * 1000)); }
     public void bindTrick(Player player, Pet pet, String word, Trick trick) {
-        if (!pet.ownerId().equals(player.getUniqueId())) return;
+        if (!runtime.owns(pet, player)) return;
         if (!checkTrick(player, pet, trick)) return;
         pet.bindWord(word, trick);
         TrainingSession session = runtime.sessions().training(player.getUniqueId());
@@ -77,7 +77,7 @@ final class PetTraining {
     }
 
     void handleTrainingChat(Player player, String text, long now, Pet pet, Entity looked) {
-        if (pet == null || !pet.ownerId().equals(player.getUniqueId()) || pet.stored()) {
+        if (pet == null || !runtime.owns(pet, player) || pet.stored()) {
             return;
         }
         String line = SpokenOrder.key(text);
@@ -207,7 +207,7 @@ final class PetTraining {
     }
 
     void beginTraining(Player player, Pet pet, Entity entity) {
-        if (!pet.ownerId().equals(player.getUniqueId()) || pet.stored()) return;
+        if (!runtime.owns(pet, player) || pet.stored()) return;
         PetTypeDef trainingType = runtime.config().type(pet.typeId());
         if (trainingType == null || trainingType.tricks().stream().noneMatch(t -> allowsTrick(pet, t))) {
             PetFx.bar(player, pet.name() + " has no available tricks to learn");
@@ -274,7 +274,7 @@ final class PetTraining {
     }
 
     void reward(Player player, Pet pet, TrainingSession session, ItemStack hand) {
-        if (!pet.ownerId().equals(player.getUniqueId()) || !session.petId().equals(pet.id())) return;
+        if (!runtime.owns(pet, player) || !session.petId().equals(pet.id())) return;
         Trick trick = session.rewardTrick();
         if (!checkTrick(player, pet, trick)) {
             session.clearReward();

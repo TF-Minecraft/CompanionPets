@@ -1,0 +1,5 @@
+name: CompanionPetsOwnershipProbe
+main: net.tfminecraft.companionpets.ownershipsmoke.OwnershipProbe
+version: 1.0.0
+api-version: '1.21.10'
+depend: [CompanionPets, TLibs]

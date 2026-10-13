@@ -7,7 +7,7 @@ import net.tfminecraft.companionpets.pet.*;
 
 class GreetingMoodTest {
     private Pet pet() {
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Toby", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Toby", PetSex.MALE);
         pet.personality(PetPersonality.FRIENDLY); return pet;
     }
     @Test void relationshipAndEnergyChangeEnthusiasmButIllnessAlwaysWins() {

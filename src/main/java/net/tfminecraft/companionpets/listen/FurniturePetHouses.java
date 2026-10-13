@@ -65,8 +65,8 @@ public final class FurniturePetHouses implements Listener {
 
     void placed(Event event) {
         Entity entity = petHouse(event);
-        if (entity == null || !(event instanceof PlayerEvent placement) || placement.getPlayer() == null) return;
-        runtime.store().kennel(key(entity), placement.getPlayer().getUniqueId());
+        if (entity == null || !(event instanceof PlayerEvent placement) || placement.getPlayer() == null || runtime.characterId(placement.getPlayer()) == null) return;
+        runtime.store().kennel(key(entity), placement.getPlayer().getUniqueId(), runtime.characterId(placement.getPlayer()));
         runtime.store().requestSave();
         PetFx.bar(placement.getPlayer(), "Pet House placed. Right-click it to look after your pets");
     }
@@ -84,7 +84,7 @@ public final class FurniturePetHouses implements Listener {
         UUID owner = runtime.store().kennelOwner(key(entity));
         if (owner == null) return;
         cancellable.setCancelled(true);
-        if (!owner.equals(interaction.getPlayer().getUniqueId())) {
+        if (!runtime.ownsKennel(key(entity), interaction.getPlayer())) {
             PetFx.bar(interaction.getPlayer(), "This Pet House belongs to someone else");
             return;
         }

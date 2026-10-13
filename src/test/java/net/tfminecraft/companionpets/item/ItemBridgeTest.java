@@ -357,7 +357,7 @@ class ItemBridgeTest {
                   adder: {entity: WOLF, egg: 'ia.pets:egg', toys: ['ia.pets:egg']}
                   mmo: {entity: WOLF, egg: m.pets.egg, toys: [m.pets.egg]}
                 """);
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var config = net.tfminecraft.companionpets.config.CompanionConfig.load(plugin, yaml);
         var stack = mmoItem(Material.BONE, "PETS", "EGG");
         tag(stack, "ia_id", "pets:egg");
@@ -399,7 +399,7 @@ class ItemBridgeTest {
                   adder: {entity: CAT, egg: 'ia.pets:bone'}
                   model: {entity: WOLF, egg: BONE, egg-custom-model-data: 42}
                 """);
-        var config = net.tfminecraft.companionpets.config.CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        var config = net.tfminecraft.companionpets.config.CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), yaml);
         var mmoStack = mmoItem(Material.BONE, "TOY", "BONE");
         var iaStack = iaItem(Material.BONE, "pets:bone");
         for (ItemStack stack : List.of(mmoStack, iaStack)) {
@@ -469,7 +469,7 @@ class ItemBridgeTest {
         var mmo = provider("MMOItems"); var ia = provider("ItemsAdder");
         var yaml = new org.bukkit.configuration.file.YamlConfiguration();
         yaml.load(new File(System.getProperty("companionpets.item-config")));
-        var config = net.tfminecraft.companionpets.config.CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        var config = net.tfminecraft.companionpets.config.CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), yaml);
         var refs = new java.util.LinkedHashSet<ItemRef>();
         for (String id : yaml.getConfigurationSection("pets").getKeys(false))
             refs.add(ItemRef.parse(yaml.getString("pets." + id + ".egg")));

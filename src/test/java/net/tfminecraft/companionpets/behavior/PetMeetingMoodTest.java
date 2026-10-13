@@ -7,7 +7,7 @@ import net.tfminecraft.companionpets.pet.*;
 
 class PetMeetingMoodTest {
     private Pet pet(PetPersonality personality) {
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "dog", "Toby", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "dog", "Toby", PetSex.MALE);
         pet.personality(personality); return pet;
     }
     @Test void reservedPetsWarmUpToTheirOwnFriendsAndKeepDistinctPersonalities() {

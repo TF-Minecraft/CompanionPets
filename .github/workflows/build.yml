@@ -18,6 +18,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install shared plugin dependencies
+        uses: TF-Minecraft/TLibs/.github/actions/setup-plugins@8ef41de589f121c98ff892b10696e7c1feb4ca74
+        with:
+          mode: pinned
+
       - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
@@ -50,6 +55,11 @@ jobs:
         env:
           PLUGIN_VERSION: ${{ steps.dev.outputs.version }}
         run: mvn -B --no-transfer-progress -f integration-tests/pom.xml "-Dcompanionpets.version=$PLUGIN_VERSION" clean package
+
+      - name: Compile isolated ownership fixture
+        env:
+          PLUGIN_VERSION: ${{ steps.dev.outputs.version }}
+        run: mvn -B --no-transfer-progress -f integration-tests/ownership/pom.xml "-Dcompanionpets.version=$PLUGIN_VERSION" clean package
 
       - name: Verify runtime JAR
         env:

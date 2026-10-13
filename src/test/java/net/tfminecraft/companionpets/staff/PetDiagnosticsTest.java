@@ -48,7 +48,7 @@ class PetDiagnosticsTest {
     @BeforeEach void setup() throws Exception {
         server = MockBukkit.mock();
         server.addSimpleWorld("world");
-        plugin = MockBukkit.createMockPlugin();
+        plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         operator = server.addPlayer("Operator");
         operator.setOp(true);
         var visual = new PetVisual() {
@@ -118,7 +118,7 @@ class PetDiagnosticsTest {
     }
 
     @Test void configuredFurnitureReportsProviderApiFailureAndStillChecksOtherReferences() throws Exception {
-        MockBukkit.createMockPlugin("ItemsAdder");
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("ItemsAdder");
         runtime.config(config("""
                 items: {kennel: 'itemsadder:tfmc:house', kennel-furniture: 'itemsadder:tfmc:house'}
                 pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}}
@@ -130,7 +130,7 @@ class PetDiagnosticsTest {
     }
 
     @Test void anEnabledMythicProviderWithAnUnavailableApiProducesAnActionableWarning() throws Exception {
-        MockBukkit.createMockPlugin("MythicMobs");
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("MythicMobs");
         runtime.config(config("pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, mythic-mob: CompanionWolf}}"));
         assertNotNull(runtime.config().type("wolf"), "Enabled provider retains the configured type");
         assertEquals(List.of("wolf: MythicMob unavailable: CompanionWolf"), diagnostics.validate());
@@ -276,7 +276,7 @@ class PetDiagnosticsTest {
     }
 
     private Pet add(String type) {
-        var pet = new Pet(UUID.randomUUID(), operator.getUniqueId(), type, "Toby", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), operator.getUniqueId(), type, "Toby", PetSex.MALE);
         runtime.store().add(pet);
         return pet;
     }

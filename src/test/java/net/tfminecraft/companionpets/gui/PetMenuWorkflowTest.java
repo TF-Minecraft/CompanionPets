@@ -32,7 +32,7 @@ class PetMenuWorkflowTest {
 
     @BeforeEach void setup() throws Exception {
         var server = MockBukkit.mock(); server.addSimpleWorld("world");
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         player = server.addPlayer();
         var yaml = new YamlConfiguration();
         yaml.loadFromString("""
@@ -57,12 +57,13 @@ class PetMenuWorkflowTest {
         var visual = new IdleVisual(); var key = new NamespacedKey(plugin, "pet");
         runtime = new PetRuntime(plugin, config, new PetStore(plugin), new Sessions(),
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
+        assertTrue(runtime.store().load());
         actions = new PetActions(runtime); menus = actions.menus(); listener = new PetListener(runtime, actions);
     }
     @AfterEach void teardown() { MockBukkit.unmock(); }
 
     private Pet pet(String type, UUID owner) {
-        Pet pet = new Pet(UUID.randomUUID(), owner, type, "Pet", PetSex.FEMALE);
+        Pet pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner, type, "Pet", PetSex.FEMALE);
         pet.stored(true); runtime.store().add(pet); return pet;
     }
     private MenuHolder holder() { return (MenuHolder) player.getOpenInventory().getTopInventory().getHolder(); }

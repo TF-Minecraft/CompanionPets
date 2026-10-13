@@ -11,7 +11,7 @@ class ToyInvitationTest {
                 PetPersonality.SHY, PetPersonality.TERRITORIAL, PetPersonality.GRUMPY};
         double[][] table = {{.60, .80, .95}, {.45, .70, .90}, {.10, .40, .85}, {.12, .45, .80}, {.08, .25, .60}};
         for (int i = 0; i < personalities.length; i++) {
-            Pet pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Toby", PetSex.MALE);
+            Pet pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Toby", PetSex.MALE);
             pet.personality(personalities[i]);
             double[] trust = {0, 12, 40, 100, -1, 6, 26};
             double[] expected = {table[i][0], table[i][1], table[i][2], table[i][2], table[i][0],
