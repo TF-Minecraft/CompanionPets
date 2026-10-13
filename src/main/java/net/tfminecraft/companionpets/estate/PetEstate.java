@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -51,6 +52,8 @@ public final class PetEstate implements EstateParticipant {
         if (!net.tfminecraft.companionpets.ownership.CharacterAccess.heirReady() || !runtime.store().ownershipReady())
             return Outcome.retry("Reviewed pet ownership and persistence are not ready");
         if (!guard.test(decision)) return Outcome.retry("The exact estate decision is not current");
+        if (decision.property().character().isPresent() && runtime.store().hasUnassignedOwner(decision.testator().ownerId()))
+            return Outcome.blocked("Legacy pet/house ownership for this account still needs its reviewed heir");
         try {
             Files.createDirectories(journals);
             List<String> moved = new ArrayList<>();
@@ -59,6 +62,9 @@ public final class PetEstate implements EstateParticipant {
                 for (Path older : files.filter(path -> path.toString().endsWith(".yml")).toList()) {
                     YamlConfiguration receipt = readPlan(older);
                     if (!decision.deathId().toString().equals(receipt.getString("death"))) continue;
+                    if (!decision.testator().ownerId().toString().equals(receipt.getString("from-account"))
+                            || !decision.testator().characterId().toString().equals(receipt.getString("from-character")))
+                        throw new InvalidIntent("Historical receipt testator conflicts with this death: " + older.getFileName());
                     if (receipt.getBoolean("complete")) moved.addAll(receipt.getStringList("moved"));
                     else if (!older.equals(file)) {
                         if (changed(receipt)) { hold(receipt); return Outcome.blocked("An earlier partial estate intent needs review: " + older.getFileName()); }
@@ -68,13 +74,18 @@ public final class PetEstate implements EstateParticipant {
                 }
             }
             if (decision.property().character().isEmpty()) return done(moved);
+            if (completedConflict(decision.testator(), moved))
+                return Outcome.blocked("A completed holding appears testator-owned again; review the source and receipts");
             YamlConfiguration plan;
             if (Files.exists(file)) {
                 plan = readPlan(file);
                 if (!matchesDecision(plan, decision)) {
                     hold(plan); return Outcome.blocked("Estate intent does not match the exact recipient/decision envelope");
                 }
-                if (plan.getBoolean("complete")) return done(moved);
+                if (plan.getBoolean("complete")) {
+                    if (remaining(decision.testator())) return Outcome.blocked("Completed estate receipt conflicts with remaining testator property; review a new revision");
+                    return done(moved);
+                }
             } else {
                 CharacterRef to = decision.property().character().orElseThrow();
                 plan = new YamlConfiguration();
@@ -162,18 +173,57 @@ public final class PetEstate implements EstateParticipant {
             if (OwnershipMigration.uuid(plan.getString(key)) == null)
                 throw new InvalidIntent("Invalid " + key + " in " + file.getFileName());
         }
-        if (!(plan.get("revision") instanceof Number) || plan.getLong("revision") < 0
+        if (!(plan.get("revision") instanceof Integer || plan.get("revision") instanceof Long) || plan.getLong("revision") < 0
                 || !(plan.get("complete") instanceof Boolean) || plan.getString("decision", "").isBlank())
             throw new InvalidIntent("Invalid decision envelope in " + file.getFileName());
+        CharacterRef source = new CharacterRef(OwnershipMigration.uuid(plan.getString("from-account")), OwnershipMigration.uuid(plan.getString("from-character")));
+        CharacterRef recipient = new CharacterRef(OwnershipMigration.uuid(plan.getString("to-account")), OwnershipMigration.uuid(plan.getString("to-character")));
+        String captured = plan.getString("decision");
+        if (!captured.startsWith("EstateDecision[deathId=" + plan.getString("death") + ", testator=" + source + ", diedAt=")
+                || !captured.contains(", property=" + Recipient.character(recipient) + ", guildLocks=")
+                || !captured.endsWith(", revision=" + plan.getLong("revision") + "]"))
+            throw new InvalidIntent("Journal envelope conflicts with its captured decision: " + file.getFileName());
         if (!file.getFileName().toString().equals(plan.getString("death") + "-" + plan.getLong("revision") + ".yml"))
             throw new InvalidIntent("Journal path does not match its death/revision: " + file.getFileName());
         for (String key : List.of("pets", "kennels")) {
-            if (!(plan.get(key) instanceof List<?> values) || values.stream().anyMatch(value -> !(value instanceof String)))
+            if (!(plan.get(key) instanceof List<?> values) || values.stream().anyMatch(value -> !(value instanceof String))
+                    || values.stream().distinct().count() != values.size())
                 throw new InvalidIntent("Invalid " + key + " list in " + file.getFileName());
         }
         if (plan.getStringList("pets").stream().anyMatch(id -> OwnershipMigration.uuid(id) == null))
             throw new InvalidIntent("Invalid pet ID in " + file.getFileName());
+        if (plan.getBoolean("complete")) {
+            Object raw = plan.get("moved");
+            List<String> moved = plan.getStringList("moved");
+            List<String> expected = new ArrayList<>();
+            plan.getStringList("pets").forEach(id -> expected.add("pet:" + id));
+            plan.getStringList("kennels").forEach(key -> expected.add("kennel:" + key));
+            if ((raw != null && (!(raw instanceof List<?> values) || values.stream().anyMatch(value -> !(value instanceof String))))
+                    || moved.stream().distinct().count() != moved.size()
+                    || (plan.getBoolean("obsolete") ? !moved.isEmpty() : raw == null || !Set.copyOf(moved).equals(Set.copyOf(expected))))
+                throw new InvalidIntent("Completed receipt IDs conflict with its planned holdings: " + file.getFileName());
+        }
         return plan;
+    }
+    private boolean completedConflict(CharacterRef owner, List<String> moved) {
+        boolean conflict = false;
+        for (Pet pet : runtime.store().ofCharacter(owner.characterId())) {
+            if (owner.ownerId().equals(pet.ownerId()) && moved.contains("pet:" + pet.id())) {
+                pet.ownershipHeld(true); conflict = true;
+            }
+        }
+        for (var entry : runtime.store().kennelCharacters().entrySet()) {
+            if (owner.characterId().equals(entry.getValue()) && owner.ownerId().equals(runtime.store().kennelOwner(entry.getKey()))
+                    && moved.contains("kennel:" + entry.getKey())) {
+                runtime.store().holdKennel(entry.getKey(), true); conflict = true;
+            }
+        }
+        return conflict;
+    }
+    private boolean remaining(CharacterRef owner) {
+        return runtime.store().ofCharacter(owner.characterId()).stream().anyMatch(pet -> owner.ownerId().equals(pet.ownerId()))
+                || runtime.store().kennelCharacters().entrySet().stream().anyMatch(entry -> owner.characterId().equals(entry.getValue())
+                        && owner.ownerId().equals(runtime.store().kennelOwner(entry.getKey())));
     }
     private static boolean matchesDecision(YamlConfiguration plan, EstateDecision decision) {
         CharacterRef recipient = decision.property().character().orElseThrow();

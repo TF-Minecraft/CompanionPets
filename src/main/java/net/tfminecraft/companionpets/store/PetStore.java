@@ -451,6 +451,11 @@ public final class PetStore {
         channel.force(true);
     }
 
+    public boolean hasUnassignedOwner(UUID account) {
+        return of(account).stream().anyMatch(pet -> pet.ownerCharacterId() == null)
+                || kennels.entrySet().stream().anyMatch(entry -> account.equals(entry.getValue()) && !kennelCharacters.containsKey(entry.getKey()));
+    }
+
     public boolean ownershipReady() { return ownershipReady && canRestoreBodies() && !persistenceConflict; }
 
     public boolean canRestoreBodies() {
@@ -759,7 +764,8 @@ public final class PetStore {
             Set<String> consumed = (key.equals("carers") ? readCarerIds : readFriendIds).getOrDefault(pet.id(), Set.of());
             if (previous instanceof Map<?, ?> memories) memories.forEach((id, value) -> {
                 String name = String.valueOf(id);
-                if (next.containsKey(name)) next.put(name, merge(value, next.get(name)));
+                if (!consumed.contains(name) && !(value instanceof Map<?, ?>)) next.put(name, value);
+                else if (next.containsKey(name)) next.put(name, merge(value, next.get(name)));
                 else if (!consumed.contains(name)) next.put(name, value);
             });
             if (next.isEmpty()) result.remove(key); else result.put(key, Collections.unmodifiableMap(next));

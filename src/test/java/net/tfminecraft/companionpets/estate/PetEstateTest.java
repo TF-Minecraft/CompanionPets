@@ -61,6 +61,90 @@ class PetEstateTest {
         Files.writeString(file,Files.readString(file)+"external-progress: kept\n");assertFalse(store.save());
         assertInstanceOf(Outcome.Blocked.class,estate.settle(decision(2,Recipient.character(to))));
     }
+    @Test void globallyReadyDirectoryWithMissingAccountHeirCannotSealBeforeLaterReviewedResolution() throws Exception {
+        Path file=runtime.plugin().getDataFolder().toPath().resolve("pets.yml");
+        var legacy=OwnershipMigration.read(file);legacy.set("pets."+pet.id()+".owner-character",null);
+        var houses=legacy.getMapList("kennels");houses.getFirst().remove("owner-character");legacy.set("kennels",houses);DurableFiles.write(file,legacy.saveToString());assertTrue(store.load());
+        var identity=org.mockito.Mockito.mock(net.tfminecraft.tlibs.character.CharacterIdentity.class);var reviewed=new java.util.concurrent.atomic.AtomicReference<Optional<CharacterRef>>(Optional.empty());
+        org.mockito.Mockito.when(identity.legacyHeirsReady()).thenReturn(true);org.mockito.Mockito.when(identity.legacyHeir(from.ownerId())).thenAnswer(call->reviewed.get());
+        org.bukkit.Bukkit.getServicesManager().register(net.tfminecraft.tlibs.character.CharacterIdentity.class,identity,runtime.plugin(),org.bukkit.plugin.ServicePriority.Highest);
+        assertTrue(store.migrate());assertTrue(store.ownershipReady());assertTrue(store.hasUnassignedOwner(from.ownerId()));
+        assertTrue(store.load());assertTrue(store.migrate());assertTrue(store.hasUnassignedOwner(from.ownerId()));
+        var decision=decision(1,Recipient.character(to));assertInstanceOf(Outcome.Blocked.class,estate.settle(decision));assertFalse(Files.exists(folder.resolve(death+"-1.yml")));
+        reviewed.set(Optional.of(from));assertTrue(store.migrate());assertFalse(store.hasUnassignedOwner(from.ownerId()));
+        assertInstanceOf(Outcome.Done.class,estate.settle(decision));assertEquals(to.characterId(),store.get(pet.id()).ownerCharacterId());assertEquals(to.characterId(),store.kennelCharacter("unloaded,1,2,3"));
+    }
+    @Test void staleCompletedEmptyReceiptNeverHidesLateResolvedPropertyAndRequiresANewRevision() throws Exception {
+        var decision=decision(1,Recipient.character(to));var empty=new YamlConfiguration();
+        empty.set("death",death.toString());empty.set("revision",1L);empty.set("decision",decision.toString());empty.set("complete",true);
+        empty.set("from-account",from.ownerId().toString());empty.set("from-character",from.characterId().toString());
+        empty.set("to-account",to.ownerId().toString());empty.set("to-character",to.characterId().toString());
+        empty.set("pets",List.of());empty.set("kennels",List.of());empty.set("moved",List.of());
+        Path receipt=folder.resolve(death+"-1.yml");DurableFiles.write(receipt,empty.saveToString());String original=Files.readString(receipt);
+        for(int restart=0;restart<2;restart++) {
+            assertTrue(store.load());assertTrue(store.migrate());
+            assertInstanceOf(Outcome.Blocked.class,estate.settle(decision));assertEquals(original,Files.readString(receipt));
+            assertEquals(from.characterId(),store.get(pet.id()).ownerCharacterId());
+        }
+        store.get(pet.id()).ownership(to.ownerId(),to.characterId());assertTrue(store.saveOwnership());
+        assertInstanceOf(Outcome.Blocked.class,estate.settle(decision));assertEquals(original,Files.readString(receipt));
+        assertInstanceOf(Outcome.Done.class,estate.settle(decision(2,Recipient.character(to))));
+        assertEquals(to.characterId(),store.get(pet.id()).ownerCharacterId());assertEquals(to.characterId(),store.kennelCharacter("unloaded,1,2,3"));
+        assertEquals(original,Files.readString(receipt));
+    }
+    @Test void completedTransferIdsCannotBeTransferredAgainAfterAnOlderSourceEnvelopeReturns() {
+        assertInstanceOf(Outcome.Done.class,estate.settle(decision(1,Recipient.character(to))));
+        pet.ownership(from.ownerId(),from.characterId());store.kennel("unloaded,1,2,3",from.ownerId(),from.characterId());assertTrue(store.saveOwnership());
+        var other=new CharacterRef(UUID.randomUUID(),UUID.randomUUID());
+        assertInstanceOf(Outcome.Blocked.class,estate.settle(decision(2,Recipient.character(other))));
+        assertTrue(pet.ownershipHeld());assertTrue(store.kennelHeld("unloaded,1,2,3"));assertEquals(from.characterId(),pet.ownerCharacterId());
+        assertFalse(Files.exists(folder.resolve(death+"-2.yml")));
+    }
+    @Test void historicalReceiptRetainsItsOriginalRecipientUnderANewerDecision() {
+        var completed=estate.settle(decision(1,Recipient.character(to)));assertInstanceOf(Outcome.Done.class,completed);
+        var other=new CharacterRef(UUID.randomUUID(),UUID.randomUUID());
+        assertEquals(completed,estate.settle(decision(2,Recipient.character(other))));
+        assertEquals(to.ownerId(),pet.ownerId());assertEquals(to.characterId(),pet.ownerCharacterId());
+        assertEquals(to.characterId(),store.kennelCharacter("unloaded,1,2,3"));
+    }
+    @Test void corruptedCompletedReceiptIdsCannotHideRestoredSourceOwnershipUnderANewRevision() throws Exception {
+        assertInstanceOf(Outcome.Done.class,estate.settle(decision(1,Recipient.character(to))));
+        Path file=folder.resolve(death+"-1.yml");String original=Files.readString(file);
+        pet.ownership(from.ownerId(),from.characterId());store.kennel("unloaded,1,2,3",from.ownerId(),from.characterId());assertTrue(store.saveOwnership());
+        Path source=runtime.plugin().getDataFolder().toPath().resolve("pets.yml");String restored=Files.readString(source);
+        for(String defect:List.of("missing","empty","changed","duplicate","type")) {
+            var plan=OwnershipMigration.parse(original);var moved=new ArrayList<>(plan.getStringList("moved"));
+            switch(defect) {
+                case "missing" -> plan.set("moved",null);
+                case "empty" -> plan.set("moved",List.of());
+                case "changed" -> plan.set("moved",List.of("pet:"+UUID.randomUUID()));
+                case "duplicate" -> { moved.add(moved.getFirst());plan.set("moved",moved); }
+                default -> plan.set("moved",List.of(7));
+            }
+            DurableFiles.write(file,plan.saveToString());assertInstanceOf(Outcome.Blocked.class,estate.settle(decision(2,Recipient.character(to))),defect);
+            assertEquals(from.characterId(),pet.ownerCharacterId());assertEquals(from.characterId(),store.kennelCharacter("unloaded,1,2,3"));
+            assertTrue(pet.ownershipHeld());assertTrue(store.kennelHeld("unloaded,1,2,3"));assertEquals(restored,Files.readString(source));
+            assertFalse(Files.exists(folder.resolve(death+"-2.yml")));
+        }
+    }
+    @Test void historicalReceiptsBindCapturedSourceRecipientAndIntegralRevisionBeforeCountingMovedIds() throws Exception {
+        var first=decision(1,Recipient.character(to));assertInstanceOf(Outcome.Done.class,estate.settle(first));
+        Path file=folder.resolve(death+"-1.yml");String original=Files.readString(file);
+        var newer=decision(2,Recipient.character(new CharacterRef(UUID.randomUUID(),UUID.randomUUID())));
+        for(String field:List.of("from-account","from-character","to-account","to-character","revision")) {
+            var plan=OwnershipMigration.parse(original);plan.set(field,field.equals("revision")?1.5:UUID.randomUUID().toString());
+            assertEquals(first.toString(),plan.getString("decision"));DurableFiles.write(file,plan.saveToString());
+            assertInstanceOf(Outcome.Blocked.class,estate.settle(newer),field);assertEquals(to.characterId(),pet.ownerCharacterId());
+            assertTrue(pet.ownershipHeld());assertTrue(store.kennelHeld("unloaded,1,2,3"));assertFalse(Files.exists(folder.resolve(death+"-2.yml")));
+        }
+        var plan=OwnershipMigration.parse(original);var otherSource=new CharacterRef(UUID.randomUUID(),UUID.randomUUID());
+        var otherDecision=new EstateDecision(death,otherSource,first.diedAt(),first.decidedAt(),first.heir(),first.deathGuild(),first.deathRealm(),
+                first.money(),first.property(),first.guildLocks(),first.letters(),first.revision());
+        plan.set("from-account",otherSource.ownerId().toString());plan.set("from-character",otherSource.characterId().toString());plan.set("decision",otherDecision.toString());
+        DurableFiles.write(file,plan.saveToString());assertInstanceOf(Outcome.Blocked.class,estate.settle(newer));
+        assertEquals(to.characterId(),pet.ownerCharacterId());assertFalse(Files.exists(folder.resolve(death+"-2.yml")));
+        DurableFiles.write(file,original);assertInstanceOf(Outcome.Done.class,estate.settle(newer));
+    }
     @Test void unavailableSpeciesStillBindsNativeRoutingAndFollowerGateBeforeAndAfterEstate() {
         var world=org.bukkit.Bukkit.getWorlds().isEmpty()?org.mockbukkit.mockbukkit.MockBukkit.getMock().addSimpleWorld("world"):org.bukkit.Bukkit.getWorlds().getFirst();
         var pathfinder=org.mockito.Mockito.mock(com.destroystokyo.paper.entity.Pathfinder.class);
@@ -121,6 +205,9 @@ class PetEstateTest {
         var second=OwnershipMigration.read(folder.resolve(death+"-2.yml"));second.set("complete",false);DurableFiles.write(folder.resolve(death+"-2.yml"),second.saveToString());
         store.kennel("unloaded,1,2,3",UUID.randomUUID(),UUID.randomUUID());
         assertInstanceOf(Outcome.Blocked.class,estate.settle(decision(2,Recipient.character(to))));
+        var obsolete=OwnershipMigration.read(folder.resolve(death+"-1.yml"));assertTrue(obsolete.getBoolean("obsolete"));
+        obsolete.set("moved",List.of("pet:"+pet.id()));DurableFiles.write(folder.resolve(death+"-1.yml"),obsolete.saveToString());
+        assertInstanceOf(Outcome.Blocked.class,estate.settle(decision(3,Recipient.character(to))));
     }
     @Test void startupRecoveryHoldsIncompleteOrUnreadableJournalsAndHourlyReportsEachEstate() throws Exception {
         var decision=decision(1,Recipient.character(to));assertInstanceOf(Outcome.Done.class,estate.settle(decision));
@@ -152,6 +239,8 @@ class PetEstateTest {
             assertInstanceOf(Outcome.Blocked.class,estate.settle(decision),defect);
             assertTrue(pet.ownershipHeld());assertTrue(store.kennelHeld("unloaded,1,2,3"));
         }
+        DurableFiles.write(file,original);Files.move(file,folder.resolve("wrong-journal-path.yml"));
+        assertInstanceOf(Outcome.Blocked.class,estate.settle(decision));
         Path inaccessible=folder.resolve("not-a-directory");Files.writeString(inaccessible,"preserved");
         var unavailable=new PetEstate(runtime,actions,inaccessible);unavailable.guard=ignored->true;
         assertInstanceOf(Outcome.Retry.class,unavailable.settle(decision));assertEquals("preserved",Files.readString(inaccessible));
@@ -168,6 +257,10 @@ class PetEstateTest {
             assertEquals(from.ownerId(),pet.ownerId());assertEquals(from.characterId(),pet.ownerCharacterId());
             assertTrue(pet.ownershipHeld());assertTrue(store.kennelHeld("unloaded,1,2,3"));
         }
+        var other=new CharacterRef(UUID.randomUUID(),UUID.randomUUID());var internallyValid=OwnershipMigration.parse(original);
+        internallyValid.set("to-account",other.ownerId().toString());internallyValid.set("to-character",other.characterId().toString());
+        internallyValid.set("decision",decision(1,Recipient.character(other)).toString());DurableFiles.write(file,internallyValid.saveToString());
+        assertInstanceOf(Outcome.Blocked.class,estate.settle(decision));assertEquals(from.characterId(),pet.ownerCharacterId());
         DurableFiles.write(file,original);assertInstanceOf(Outcome.Done.class,estate.settle(decision));
     }
     @Test void temporaryJournalReadFailureRetainsReceiptAndRetriesWithoutRepublishingProperty() throws Exception {

@@ -123,6 +123,16 @@ class PetStoreTest {
         } finally { org.mockbukkit.mockbukkit.MockBukkit.unmock(); }
     }
 
+    @Test void inertUnsupportedRelationshipPayloadsCannotBeOverwrittenByNewGameplayMemories() throws Exception {
+        UUID id=UUID.randomUUID(),account=UUID.randomUUID(),character=UUID.randomUUID(),carer=UUID.randomUUID(),friend=UUID.randomUUID();
+        String original="identity-version: 2\npets:\n  "+id+":\n    owner: "+account+"\n    owner-character: "+character+"\n    type: wolf\n    carers-characters: true\n    carers: {"+carer+": future-format}\n    friends: {"+friend+": null}\nkennels: []\n";
+        Files.writeString(directory.resolve("pets.yml"),original);var current=store();assertTrue(current.load());var pet=current.get(id);
+        pet.carers().reinforce(carer,20,1000,0);pet.friends().reinforce(friend,20,1000,0);pet.bond(77);assertTrue(current.save());assertTrue(current.close());
+        var restarted=store();assertTrue(restarted.load());assertEquals(77,restarted.get(id).bond());assertTrue(restarted.get(id).carers().entries().isEmpty());assertTrue(restarted.get(id).friends().entries().isEmpty());
+        var raw=net.tfminecraft.companionpets.ownership.OwnershipMigration.raw(Files.readString(directory.resolve("pets.yml")));
+        var row=(Map<?,?>)((Map<?,?>)raw.get("pets")).get(id.toString());assertEquals("future-format",((Map<?,?>)row.get("carers")).get(carer.toString()));
+        var friends=(Map<?,?>)row.get("friends");assertTrue(friends.containsKey(friend.toString()));assertNull(friends.get(friend.toString()));
+    }
     @Test void unknownNullFieldsAndRelationshipMetadataSurviveGameplaySaveAndRestart() throws Exception {
         UUID id=UUID.randomUUID(), account=UUID.randomUUID(), character=UUID.randomUUID(), carer=UUID.randomUUID(), friend=UUID.randomUUID();
         String text="future-root: {kept: null}\nidentity-version: 2\npets:\n  "+id+":\n    owner: "+account+"\n    owner-character: "+character
