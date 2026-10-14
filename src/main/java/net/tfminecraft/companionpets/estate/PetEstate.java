@@ -78,7 +78,7 @@ public final class PetEstate implements EstateParticipant {
             List<String> candidateKennels = current == null ? runtime.store().kennelCharacters().entrySet().stream()
                     .filter(entry -> decision.testator().characterId().equals(entry.getValue())).map(Map.Entry::getKey).toList()
                     : current.getStringList("kennels");
-            if (decision.property().character().isPresent()
+            if ((current == null || !current.getBoolean("complete")) && decision.property().character().isPresent()
                     && (!java.util.Collections.disjoint(candidatePets, otherPets)
                     || !java.util.Collections.disjoint(candidateKennels, otherKennels)))
                 return Outcome.blocked("Another death's incomplete pet estate intent needs review before these holdings can move");

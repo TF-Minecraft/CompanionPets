@@ -89,6 +89,38 @@ class PetEstateTest {
     }
 
     @Test
+    void completedEstateReportStaysDoneWhileTheRecipientsEstateIsIncomplete() throws Exception {
+        var first = decision(0, Recipient.character(to));
+        var completed = estate.settle(first);
+        assertInstanceOf(Outcome.Done.class, completed);
+        Path firstReceipt = folder.resolve(death + "-0.yml");
+        String firstBytes = Files.readString(firstReceipt);
+        UUID nextDeath = UUID.randomUUID();
+        var heir = new CharacterRef(UUID.randomUUID(), UUID.randomUUID());
+        var second = new EstateDecision(nextDeath, to, Optional.of(Instant.EPOCH), Instant.EPOCH,
+                Optional.of(heir), Optional.empty(), Optional.empty(), Recipient.FROZEN,
+                Recipient.character(heir), Recipient.FROZEN, Recipient.SENDER, 0);
+        assertInstanceOf(Outcome.Done.class, estate.settle(second));
+        Path secondReceipt = folder.resolve(nextDeath + "-0.yml");
+        var partial = OwnershipMigration.read(secondReceipt);
+        partial.set("complete", false); partial.set("moved", null);
+        DurableFiles.write(secondReceipt, partial.saveToString());
+        pet.ownershipHeld(true); store.holdKennel("unloaded,1,2,3", true);
+        Path source = runtime.plugin().getDataFolder().toPath().resolve("pets.yml");
+        String sourceBytes = Files.readString(source), partialBytes = Files.readString(secondReceipt);
+        assertEquals(completed, estate.settle(first));
+        assertEquals(firstBytes, Files.readString(firstReceipt));
+        assertEquals(partialBytes, Files.readString(secondReceipt));
+        assertEquals(sourceBytes, Files.readString(source));
+        assertEquals(heir.characterId(), pet.ownerCharacterId());
+        assertTrue(pet.ownershipHeld()); assertTrue(store.kennelHeld("unloaded,1,2,3"));
+        assertInstanceOf(Outcome.Done.class, estate.settle(second));
+        assertFalse(pet.ownershipHeld()); assertFalse(store.kennelHeld("unloaded,1,2,3"));
+        assertEquals(completed, estate.settle(first));
+        assertEquals(firstBytes, Files.readString(firstReceipt));
+    }
+
+    @Test
     void unrelatedIncompleteDeathDoesNotBlockThisExactHeldIntentResume() throws Exception {
         var original = decision(1, Recipient.character(to));
         assertInstanceOf(Outcome.Done.class, estate.settle(original));
