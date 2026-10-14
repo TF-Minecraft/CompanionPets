@@ -69,7 +69,8 @@ jobs:
         run: |
           python3 .github/scripts/plugin-artifact.py \
             --jar "$ARTIFACT_PATH" --version "${TAG#v}" \
-            --stage "$RUNNER_TEMP/plugin-release"
+            --stage "$RUNNER_TEMP/plugin-release" \
+            --dependencies .build/plugin-dependencies.json
 
       - uses: actions/upload-artifact@v7
         with:
