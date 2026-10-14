@@ -74,7 +74,7 @@ class PetSocialCoverageTest {
         };
         server.addWorld(world); owner = server.addPlayer(); owner.teleport(new Location(world, 0, 64, 0));
         owner.openInventory(server.createInventory(null, 9));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         yaml = new YamlConfiguration(); yaml.loadFromString("""
             roaming: {stationary-seconds: 0}
             social: {encounter-chance: 100, chase-chance: 0, search-interval-seconds: 0.5}
@@ -95,7 +95,7 @@ class PetSocialCoverageTest {
     @AfterEach void cleanup() { runtime.store().close(); MockBukkit.unmock(); }
 
     private Pet pet(double x) {
-        Pet result = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Friend " + x, PetSex.MALE);
+        Pet result = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Friend " + x, PetSex.MALE);
         result.personality(PetPersonality.FRIENDLY); result.bond(100);
         for (Need need : Need.values()) result.need(need, 100);
         SocialWolf body = new SocialWolf(); server.registerEntity(body); body.teleport(new Location(world, x, 64, 0));

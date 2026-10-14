@@ -81,7 +81,7 @@ public final class PetTicker implements Runnable {
                 forgetMissingBody(pet.id());
                 continue;
             }
-            Player owner = Bukkit.getPlayer(pet.ownerId());
+            Player owner = runtime.owner(pet);
             boolean online = owner != null && owner.isOnline();
             // Pet House pets with frozen care (owner offline, or no decay while stored) have nothing to update.
             if (pet.stored() && PresenceRules.resolve(true, online, 0, 0,
@@ -254,7 +254,7 @@ public final class PetTicker implements Runnable {
                 net.tfminecraft.companionpets.integration.PetMotion.hold(mob);
                 continue;
             }
-            Player owner = Bukkit.getPlayer(pet.ownerId());
+            Player owner = runtime.owner(pet);
             watchFetchMotion(pet, mob, now);
             if (WaterEscape.needed(mob)) {
                 if (pet.fetch() == null && pet.activity() != Activity.ATTENDING) {
@@ -322,7 +322,7 @@ public final class PetTicker implements Runnable {
             }
             if (mode == Locomotion.Mode.PLAY)
                 PlayNavigationGoal.ensure(runtime, pet, mob,
-                        () -> stepMode(pet, mob, Bukkit.getPlayer(pet.ownerId()), Locomotion.Mode.PLAY, System.currentTimeMillis())).tick();
+                        () -> stepMode(pet, mob, runtime.owner(pet), Locomotion.Mode.PLAY, System.currentTimeMillis())).tick();
             else if (mode != Locomotion.Mode.FOLLOW) stepMode(pet, mob, owner, mode, now);
             express(pet, mob, owner, mode, now);
             actions.moments().tick(pet, mob, owner, mode, now);

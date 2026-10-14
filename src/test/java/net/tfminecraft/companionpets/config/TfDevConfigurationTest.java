@@ -27,7 +27,7 @@ class TfDevConfigurationTest {
             try (var input = getClass().getResourceAsStream("/config.yml")) {
                 bundledYaml.loadFromString(new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
             }
-            var plugin = MockBukkit.createMockPlugin();
+            var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
             var deployed = CompanionConfig.load(plugin, deployedYaml);
             var bundled = CompanionConfig.load(plugin, bundledYaml);
             assertGlobalSettings(deployed, bundled);
@@ -63,13 +63,13 @@ class TfDevConfigurationTest {
             Path path = Path.of(System.getProperty("companionpets.tfdev-config"));
             var current = new YamlConfiguration(); current.load(path.toFile());
             var original = new YamlConfiguration(); original.load(path.getParent().resolve("snapshots/2026-10-04-config.yml").toFile());
-            var config = CompanionConfig.load(MockBukkit.createMockPlugin(), current);
+            var config = CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), current);
             var expectedTypes = new java.util.HashSet<>(original.getConfigurationSection("pets").getKeys(false));
             expectedTypes.remove("fox_custom");
             assertEquals(expectedTypes, config.types().keySet());
             assertEquals(13, config.types().size());
             // Compare effective settings: omitted defaults and legacy map/list forms are equivalent.
-            assertGlobalSettings(CompanionConfig.load(MockBukkit.createMockPlugin(), original), config);
+            assertGlobalSettings(CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), original), config);
             Path assets = path.getParent().getParent().getParent();
             for (var pet : config.types().values()) {
                 var saved = original.getConfigurationSection("pets." + (pet.id().equals("fox") ? "fox_custom" : pet.id()));

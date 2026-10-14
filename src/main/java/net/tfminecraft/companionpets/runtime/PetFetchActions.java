@@ -52,10 +52,11 @@ final class PetFetchActions {
     }
 
     void throwToy(Player player, ItemStack hand, HeldItem held) {
+        if (net.tfminecraft.companionpets.ownership.CharacterAccess.capture(player) == null) return;
         var accepting = runtime.config().toyTypes(held);
         ItemStack thrown = hand.clone();
         thrown.setAmount(1);
-        FetchJob job = new FetchJob(ToyItems.encode(thrown), player.getUniqueId());
+        FetchJob job = new FetchJob(ToyItems.encode(thrown), player.getUniqueId(), net.tfminecraft.companionpets.ownership.CharacterAccess.capture(player));
         if (!HandItems.consume(player, hand)) return;
         Location eye = player.getEyeLocation();
         Vector velocity = eye.getDirection().normalize().multiply(ThrowSpeed.speed(
@@ -139,7 +140,7 @@ final class PetFetchActions {
 
     void step(Pet pet, Mob mob, long now) {
         FetchJob job = pet.fetch();
-        Player owner = Bukkit.getPlayer(job.throwerId());
+        Player owner = job.thrower();
         if (owner == null || !owner.isOnline()) {
             actions.releaseFetch(pet, null, false);
             return;
@@ -322,11 +323,11 @@ final class PetFetchActions {
         FetchJob job = pet.fetch();
         if (job == null) return null;
         if (job.phase() == FetchPhase.CARRY && !pet.id().equals(job.carrierId()))
-            return carrierDestination(pet, job, Bukkit.getPlayer(job.throwerId()));
+            return carrierDestination(pet, job, job.thrower());
         Entity target = switch (job.phase()) {
             case AIR -> entity(job.projectileId());
             case GROUND -> entity(job.itemId());
-            case CARRY -> Bukkit.getPlayer(job.throwerId());
+            case CARRY -> job.thrower();
         };
         return target == null ? null : target.getLocation();
     }
@@ -374,7 +375,7 @@ final class PetFetchActions {
         if (job == null) return;
         detach(pet);
         if (pet.id().equals(job.carrierId())) {
-            Player thrower = Bukkit.getPlayer(job.throwerId());
+            Player thrower = job.thrower();
             if (thrower != null && thrower.isOnline() && toOwner) {
                 finish(job, PetRuntime.inFront(thrower));
             } else if (job.throwerId().equals(pet.ownerId())) {
@@ -399,7 +400,7 @@ final class PetFetchActions {
         for (FetchJob job : List.copyOf(throwsInProgress.values())) {
             for (Pet pet : chasers(job)) {
                 if (runtime.entity(pet) == null || !canChase(pet)
-                        || !pet.ownerId().equals(job.throwerId()) && !sharedFetchAllowed(pet, job)) releaseFetch(pet, false);
+                        || !runtime.owns(pet, job.thrower()) && !sharedFetchAllowed(pet, job)) releaseFetch(pet, false);
             }
             if (!throwsInProgress.containsKey(job.id())) continue;
             Entity target = job.phase() == FetchPhase.AIR ? entity(job.projectileId()) : entity(job.itemId());
@@ -427,7 +428,7 @@ final class PetFetchActions {
     }
 
     private boolean sharedFetchAllowed(Pet pet, FetchJob job) {
-        Player thrower = Bukkit.getPlayer(job.throwerId());
+        Player thrower = job.thrower();
         return thrower != null && actions.anticipation().strangerAllowed(pet, thrower);
     }
     void stashLooseToys() {
@@ -486,7 +487,7 @@ final class PetFetchActions {
     }
 
     private void returnFollower(Pet pet, double speed) {
-        Player owner = Bukkit.getPlayer(pet.ownerId());
+        Player owner = runtime.owner(pet);
         Entity body = runtime.entity(pet);
         if (canChase(pet) && owner != null && owner.isOnline() && body != null && body.getWorld().equals(owner.getWorld()))
             actions.roaming().returnFromFetch(pet, owner, speed);

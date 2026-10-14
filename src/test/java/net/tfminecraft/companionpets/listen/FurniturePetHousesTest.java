@@ -35,7 +35,7 @@ class FurniturePetHousesTest {
     @BeforeEach void setup() throws Exception {
         var server = MockBukkit.mock();
         var world = server.addSimpleWorld("world");
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         owner = server.addPlayer();
         furniture = server.addPlayer();
         furniture.teleport(new Location(world, -2.5, 65, 3.5));

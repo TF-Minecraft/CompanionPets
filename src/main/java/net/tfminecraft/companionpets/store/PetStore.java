@@ -55,14 +55,23 @@ public final class PetStore {
     private final Map<UUID, Pet> pets = new LinkedHashMap<>();
     private record CachedRow(long revision, Map<String, Object> values) { }
     private final Map<UUID, CachedRow> cachedRows = new HashMap<>();
+    private final Map<UUID, Set<String>> readCarerIds = new HashMap<>();
+    private final Map<UUID, Set<String>> readFriendIds = new HashMap<>();
     private Index index;
     private final Runnable invalidate = () -> index = null;
     private final Map<String, UUID> kennels = new LinkedHashMap<>();
+    private final Map<String, UUID> kennelCharacters = new LinkedHashMap<>();
+    private final Set<String> heldKennels = new LinkedHashSet<>();
+    private Map<String, Object> rawDocument = new LinkedHashMap<>();
     private boolean loaded;
+    private boolean ownershipReady;
     private boolean deletionLogHealthy;
     private boolean sessionStarted;
     private final AtomicBoolean dirty = new AtomicBoolean();
     private ExecutorService writer;
+    private volatile String diskHash;
+    private volatile boolean persistenceConflict;
+    public boolean persistenceConflict() { return persistenceConflict; }
 
     public PetStore(JavaPlugin plugin) {
         this(new File(plugin.getDataFolder(), "pets.yml"), plugin.getLogger());
@@ -79,6 +88,7 @@ public final class PetStore {
     public boolean load() {
         cachedRows.clear();
         loaded = false;
+        ownershipReady = false;
         deletionLogHealthy = false;
         if (session.exists()) {
             logger.severe("Previous pet session did not commit a clean shutdown. Stop the server and reconcile pets.yml "
@@ -122,17 +132,32 @@ public final class PetStore {
         YamlConfiguration yaml = new YamlConfiguration();
         try {
             yaml.load(source);
+            persistenceConflict = false;
+            diskHash = net.tfminecraft.companionpets.ownership.OwnershipMigration.hash(Files.readString(source.toPath()));
+            rawDocument = net.tfminecraft.companionpets.ownership.OwnershipMigration.raw(Files.readString(source.toPath()));
             if (!yaml.contains("pets") && !yaml.contains("kennels")) {
                 throw new IllegalArgumentException("Missing pets and kennels data");
             }
+            readCarerIds.clear(); readFriendIds.clear();
             Map<UUID, Pet> nextPets = new LinkedHashMap<>();
             Map<String, UUID> nextKennels = new LinkedHashMap<>();
+            Map<String, UUID> nextCharacters = new LinkedHashMap<>();
             ConfigurationSection petSection = yaml.getConfigurationSection("pets");
             if (yaml.contains("pets") && petSection == null) throw new IllegalArgumentException("pets must be a section");
             if (petSection != null) {
                 for (String id : petSection.getKeys(false)) {
                     Pet pet = readPet(UUID.fromString(id), petSection.getConfigurationSection(id));
                     if (pet == null) throw new IllegalArgumentException("Invalid pet record " + id);
+                    readCarerIds.put(pet.id(), pet.carers().entries().keySet().stream().map(UUID::toString).collect(java.util.stream.Collectors.toSet()));
+                    readFriendIds.put(pet.id(), pet.friends().entries().keySet().stream().map(UUID::toString).collect(java.util.stream.Collectors.toSet()));
+                    Pet previous = sessionStarted ? pets.get(pet.id()) : null;
+                    if (previous != null) {
+                        previous.ownership(pet.ownerId(), pet.ownerCharacterId());
+                        previous.ownershipHeld(previous.ownershipHeld() || pet.ownershipHeld());
+                        previous.carers().clear();
+                        pet.carers().entries().forEach(previous.carers()::restore);
+                        pet = previous;
+                    }
                     nextPets.put(pet.id(), pet);
                 }
             }
@@ -147,15 +172,20 @@ public final class PetStore {
                         ((Number) row.get("x")).intValue(),
                         ((Number) row.get("y")).intValue(),
                         ((Number) row.get("z")).intValue());
-                nextKennels.put(key, UUID.fromString(String.valueOf(owner)));
+                if (nextKennels.putIfAbsent(key, UUID.fromString(String.valueOf(owner))) != null)
+                    throw new IllegalArgumentException("Duplicate Pet House coordinates: " + key);
+                UUID character = net.tfminecraft.companionpets.ownership.OwnershipMigration.uuid(row.get("owner-character"));
+                if (character != null) nextCharacters.put(key, character);
             }
             pets.clear();
             pets.putAll(nextPets);
             deleted.forEach(pets::remove);
-            pets.values().forEach(pet -> pet.indexChanged(invalidate));
+            pets.values().forEach(pet -> { pet.indexChanged(invalidate); pet.persistenceHeld(() -> !loaded || !deletionLogHealthy || persistenceConflict); });
             index = null;
             kennels.clear();
             kennels.putAll(nextKennels);
+            kennelCharacters.clear();
+            kennelCharacters.putAll(nextCharacters);
             loaded = true;
             return true;
         } catch (IOException | InvalidConfigurationException | RuntimeException ex) {
@@ -197,13 +227,15 @@ public final class PetStore {
     }
 
     /** Saves now and waits, for callers that must know the record reached the disk. */
-    public boolean save() {
+    public boolean save() { return save(false); }
+    public boolean saveOwnership() { return save(true); }
+    private boolean save(boolean ownership) {
         Snapshot snapshot = snapshot();
         if (snapshot == null) return false;
         dirty.set(false);
         try {
             // The single writer keeps this after any queued background write, so older data never wins.
-            if (writer().submit(() -> write(snapshot)).get()) return true;
+            if (writer().submit(() -> write(snapshot, ownership)).get()) return true;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         } catch (ExecutionException | RejectedExecutionException ex) {
@@ -224,7 +256,8 @@ public final class PetStore {
         return writer;
     }
 
-    record Snapshot(Map<String, Map<String, Object>> pets, List<Map<String, Object>> kennels) { }
+    record Snapshot(Map<String, Map<String, Object>> pets, List<Map<String, Object>> kennels,
+            Map<String, Object> raw) { }
 
     Snapshot snapshot() {
         if (!loaded || !deletionLogHealthy) {
@@ -234,7 +267,7 @@ public final class PetStore {
         for (Pet pet : pets.values()) {
             CachedRow cached = cachedRows.get(pet.id());
             if (cached == null || cached.revision() != pet.revision()) {
-                cached = new CachedRow(pet.revision(), row(pet));
+                cached = new CachedRow(pet.revision(), preservedRow(pet));
                 cachedRows.put(pet.id(), cached);
             }
             rows.put(pet.id().toString(), cached.values());
@@ -256,15 +289,24 @@ public final class PetStore {
                 logger.warning("Skipping kennel with invalid coordinates: " + entry.getKey());
                 continue;
             }
+            for (Object previous : rawDocument.get("kennels") instanceof List<?> previousRows ? previousRows : List.of()) {
+                if (previous instanceof Map<?, ?> old && String.valueOf(old.get("world")).equals(row.get("world"))
+                        && old.get("x").equals(row.get("x")) && old.get("y").equals(row.get("y")) && old.get("z").equals(row.get("z")))
+                    old.forEach((key, value) -> row.put(String.valueOf(key), value));
+            }
             row.put("owner", entry.getValue().toString());
+            UUID character = kennelCharacters.get(entry.getKey());
+            if (character != null) row.put("owner-character", character.toString());
             kennelRows.add(Collections.unmodifiableMap(row));
         }
-        return new Snapshot(Collections.unmodifiableMap(rows), List.copyOf(kennelRows));
+        return new Snapshot(Collections.unmodifiableMap(rows), List.copyOf(kennelRows), Collections.unmodifiableMap(new LinkedHashMap<>(rawDocument)));
     }
 
     private static Map<String, Object> row(Pet pet) {
         Map<String, Object> row = new LinkedHashMap<>();
         put(row, "owner", pet.ownerId().toString());
+        put(row, "owner-character", pet.ownerCharacterId() == null ? null : pet.ownerCharacterId().toString());
+        put(row, "carers-characters", true);
         put(row, "type", pet.typeId());
         put(row, "name", pet.name());
         put(row, "sex", pet.sex().name());
@@ -322,20 +364,35 @@ public final class PetStore {
         row.put(key, value);
     }
 
-    boolean write(Snapshot snapshot) {
-        YamlConfiguration yaml = new YamlConfiguration();
-        yaml.set("version", 1);
-        snapshot.pets().forEach((id, row) -> yaml.createSection("pets." + id, row));
-        yaml.set("kennels", snapshot.kennels());
+    boolean write(Snapshot snapshot) { return write(snapshot, false); }
+    private boolean write(Snapshot snapshot, boolean ownership) {
+        Map<String, Object> document = new LinkedHashMap<>(snapshot.raw());
+        Map<String, Object> rows = document.get("pets") instanceof Map<?, ?> existing ? stringMap(existing) : new LinkedHashMap<>();
+        deleted.forEach(id -> rows.remove(id.toString()));
+        rows.putAll(snapshot.pets());
+        document.put("version", 1);
+        if (ownershipReady) document.put("identity-version", 2);
+        document.put("pets", rows);
+        document.put("kennels", snapshot.kennels());
         File temp = new File(file.getParentFile(), file.getName() + ".tmp");
         try {
-            yaml.save(temp);
+            if (persistenceConflict || file.exists() != (diskHash != null)
+                    || file.exists() && !diskHash.equals(net.tfminecraft.companionpets.ownership.OwnershipMigration.hash(Files.readString(file.toPath())))) {
+                persistenceConflict = true;
+                throw new IOException("BLOCKED: pets.yml changed outside its current writer; preserve it for review");
+            }
+            Files.createDirectories(temp.toPath().toAbsolutePath().getParent());
+            Files.writeString(temp.toPath(), net.tfminecraft.companionpets.ownership.OwnershipMigration.dump(document));
             if (file.exists()) {
                 File backupTemp = new File(file.getParentFile(), backup.getName() + ".tmp");
                 Files.copy(file.toPath(), backupTemp.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 replace(backupTemp, backup);
             }
-            replace(temp, file);
+            force(temp.toPath());
+            if (ownership) Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            else replace(temp, file);
+            force(file.toPath().toAbsolutePath().getParent());
+            diskHash = net.tfminecraft.companionpets.ownership.OwnershipMigration.hash(Files.readString(file.toPath()));
             if (!backup.exists()) {
                 File backupTemp = new File(file.getParentFile(), backup.getName() + ".tmp");
                 Files.copy(file.toPath(), backupTemp.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -394,6 +451,13 @@ public final class PetStore {
         channel.force(true);
     }
 
+    public boolean hasUnassignedOwner(UUID account) {
+        return of(account).stream().anyMatch(pet -> pet.ownerCharacterId() == null)
+                || kennels.entrySet().stream().anyMatch(entry -> account.equals(entry.getValue()) && !kennelCharacters.containsKey(entry.getKey()));
+    }
+
+    public boolean ownershipReady() { return ownershipReady && canRestoreBodies() && !persistenceConflict; }
+
     public boolean canRestoreBodies() {
         return loaded && deletionLogHealthy;
     }
@@ -420,10 +484,12 @@ public final class PetStore {
                 section.getString("type"),
                 section.getString("name", "Mascota"),
                 enumValue(PetSex.class, section.getString("sex"), PetSex.FEMALE));
+        pet.ownership(pet.ownerId(), net.tfminecraft.companionpets.ownership.OwnershipMigration.uuid(section.get("owner-character")));
+        pet.ownershipHeld(section.contains("owner-character") && pet.ownerCharacterId() == null);
         pet.bornAt(section.getLong("born-at", 0L));
         pet.lastOwnerNearbyMillis(section.getLong("last-owner-nearby-millis", 0L));
         pet.lastGreetingMillis(section.getLong("last-greeting-millis", 0L));
-        readMemories(section.getConfigurationSection("carers"), pet.carers());
+        if (section.getBoolean("carers-characters")) readMemories(section.getConfigurationSection("carers"), pet.carers());
         readMemories(section.getConfigurationSection("friends"), pet.friends());
         pet.personality(enumValue(PetPersonality.class, section.getString("personality"), PetPersonality.forId(id)));
         pet.order(enumValue(PetOrder.class, section.getString("order"), PetOrder.FOLLOW));
@@ -561,6 +627,7 @@ public final class PetStore {
         cachedRows.remove(pet.id());
         if (previous != null && previous != pet) previous.indexChanged(null);
         pet.indexChanged(invalidate);
+        pet.persistenceHeld(() -> !loaded || !deletionLogHealthy || persistenceConflict);
         index = null;
     }
 
@@ -621,24 +688,123 @@ public final class PetStore {
         List<Pet> active = new ArrayList<>();
         Map<UUID, List<Pet>> owners = new HashMap<>();
         Map<UUID, Pet> bodies = new HashMap<>();
+        Map<UUID, List<Pet>> characters = new HashMap<>();
         for (Pet pet : all) {
             if (!pet.stored() && !pet.dead()) active.add(pet);
             owners.computeIfAbsent(pet.ownerId(), id -> new ArrayList<>()).add(pet);
+            if (pet.ownerCharacterId() != null) characters.computeIfAbsent(pet.ownerCharacterId(), id -> new ArrayList<>()).add(pet);
             if (pet.entityId() != null) bodies.putIfAbsent(pet.entityId(), pet);
         }
-        index = new Index(all, List.copyOf(active), owners, bodies);
+        index = new Index(all, List.copyOf(active), owners, bodies, characters);
         return index;
     }
 
     /** Rebuilt only after a record joins, leaves, changes owner, body, storage or death. */
-    private record Index(List<Pet> all, List<Pet> active, Map<UUID, List<Pet>> owners, Map<UUID, Pet> bodies) { }
+    private record Index(List<Pet> all, List<Pet> active, Map<UUID, List<Pet>> owners, Map<UUID, Pet> bodies, Map<UUID, List<Pet>> characters) { }
 
     public void kennel(String key, UUID ownerId) {
         kennels.put(key, ownerId);
     }
 
     public boolean removeKennel(String key) {
+        kennelCharacters.remove(key);
         return kennels.remove(key) != null;
+    }
+
+    public void kennel(String key, UUID account, UUID character) {
+        kennels.put(key, account);
+        if (character != null) kennelCharacters.put(key, character);
+    }
+    public void holdKennel(String key, boolean held) { if (held) heldKennels.add(key); else heldKennels.remove(key); }
+    public boolean kennelHeld(String key) { return heldKennels.contains(key); }
+    public List<String> unassigned() {
+        List<String> rows = new ArrayList<>();
+        all().stream().filter(pet -> pet.ownerCharacterId() == null || pet.ownershipHeld())
+                .forEach(pet -> rows.add("Pet " + pet.name() + " [" + pet.id() + "] needs reviewed ownership"));
+        kennels.forEach((key, account) -> { if (!kennelCharacters.containsKey(key) || heldKennels.contains(key)) rows.add("Pet House " + key + " needs reviewed ownership"); });
+        return List.copyOf(rows);
+    }
+    public UUID kennelCharacter(String key) { return kennelCharacters.get(key); }
+    public Map<String, UUID> kennelCharacters() { return Map.copyOf(kennelCharacters); }
+    public List<Pet> ofCharacter(UUID character) {
+        return character == null ? List.of() : index().characters().getOrDefault(character, List.of());
+    }
+    public boolean migrate() {
+        if (!net.tfminecraft.companionpets.ownership.CharacterAccess.heirReady()) return false;
+        try {
+            // The readiness retry shares a live store: drain older snapshots and commit current
+            // gameplay before freezing migration bytes. No new main-thread writer can race this cut.
+            if (sessionStarted && !saveOwnership()) return false;
+            new net.tfminecraft.companionpets.ownership.OwnershipMigration(file.toPath(),
+                    net.tfminecraft.companionpets.ownership.CharacterAccess::heir).run();
+            cachedRows.clear();
+            boolean success = sessionStarted ? read(file) : load();
+            ownershipReady = success;
+            return success;
+        } catch (IOException ex) {
+            logger.log(Level.SEVERE, "Pet ownership migration is held; saving disabled", ex);
+            loaded = false;
+            return false;
+        }
+    }
+
+    private Map<String, Object> preservedRow(Pet pet) {
+        Object section = rawDocument.get("pets");
+        Object old = section instanceof Map<?, ?> all ? all.get(pet.id().toString()) : null;
+        Map<String, Object> result = old instanceof Map<?, ?> map ? stringMap(map) : new LinkedHashMap<>();
+        Map<String, Object> values = new LinkedHashMap<>(row(pet));
+        for (String key : List.of("favorite-toy", "carried-toy")) if (!values.containsKey(key)) result.remove(key);
+        // An unconverted carer page remains inert/raw until reviewed heirs become ready.
+        boolean legacyCarers = old instanceof Map<?, ?> map && map.containsKey("carers") && !Boolean.TRUE.equals(map.get("carers-characters"));
+        if (legacyCarers) { values.remove("carers"); values.remove("carers-characters"); }
+        for (String key : List.of("carers", "friends")) {
+            if (key.equals("carers") && legacyCarers) continue;
+            Object previous = result.get(key);
+            Map<String, Object> next = values.get(key) instanceof Map<?, ?> map ? stringMap(map) : new LinkedHashMap<>();
+            Set<String> consumed = (key.equals("carers") ? readCarerIds : readFriendIds).getOrDefault(pet.id(), Set.of());
+            if (previous instanceof Map<?, ?> memories) memories.forEach((id, value) -> {
+                String name = String.valueOf(id);
+                if (!consumed.contains(name) && !(value instanceof Map<?, ?>)) next.put(name, value);
+                else if (next.containsKey(name)) next.put(name, merge(value, next.get(name)));
+                else if (!consumed.contains(name)) next.put(name, value);
+            });
+            if (next.isEmpty()) result.remove(key); else result.put(key, Collections.unmodifiableMap(next));
+            values.remove(key);
+        }
+        // Unknown trick fields survive; known word rows retain their extra metadata by literal word.
+        if (result.get("words") instanceof List<?> previous && values.get("words") instanceof List<?> next) {
+            List<Object> words = new ArrayList<>();
+            for (Object word : next) {
+                Object merged = word;
+                if (word instanceof Map<?, ?> current) for (Object oldWord : previous)
+                    if (oldWord instanceof Map<?, ?> oldRow && java.util.Objects.equals(oldRow.get("word"), current.get("word"))) merged = merge(oldWord, current);
+                words.add(merged);
+            }
+            for (Object oldWord : previous) if (!(oldWord instanceof Map<?, ?> oldRow) || !knownTrick(oldRow.get("trick"))) words.add(oldWord);
+            values.put("words", List.copyOf(words));
+        }
+        values.forEach((key, value) -> result.put(key, merge(result.get(key), value)));
+        return Collections.unmodifiableMap(result);
+    }
+    private static boolean knownTrick(Object raw) {
+        try { Trick.valueOf(String.valueOf(raw)); return true; }
+        catch (IllegalArgumentException ex) { return false; }
+    }
+    private static Map<String, Object> stringMap(Map<?, ?> map) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        map.forEach((key, value) -> result.put(String.valueOf(key), value));
+        return result;
+    }
+    private static Object merge(Object old, Object current) {
+        if (old instanceof Map<?, ?> previous && current instanceof Map<?, ?> next) {
+            Map<String, Object> result = stringMap(previous);
+            next.forEach((key, value) -> result.put(String.valueOf(key), merge(result.get(String.valueOf(key)), value)));
+            return Collections.unmodifiableMap(result);
+        }
+        return current;
+    }
+    private static void force(java.nio.file.Path path) throws IOException {
+        try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) { channel.force(true); }
     }
 
     public UUID kennelOwner(String key) {

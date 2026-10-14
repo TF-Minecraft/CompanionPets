@@ -43,6 +43,11 @@ jobs:
           }
           [[ "${TAG^^}" != *SNAPSHOT* ]] || exit 1
 
+      - name: Install shared plugin dependencies
+        uses: TF-Minecraft/TLibs/.github/actions/setup-plugins@8ef41de589f121c98ff892b10696e7c1feb4ca74
+        with:
+          mode: pinned
+
       - name: Set version from tag and build
         id: maven
         env:
@@ -64,7 +69,8 @@ jobs:
         run: |
           python3 .github/scripts/plugin-artifact.py \
             --jar "$ARTIFACT_PATH" --version "${TAG#v}" \
-            --stage "$RUNNER_TEMP/plugin-release"
+            --stage "$RUNNER_TEMP/plugin-release" \
+            --dependencies .build/plugin-dependencies.json
 
       - uses: actions/upload-artifact@v7
         with:

@@ -8,6 +8,10 @@ public final class FetchJob {
     private final String toy;
     private final UUID id = UUID.randomUUID();
     private final UUID throwerId;
+    private final net.tfminecraft.companionpets.ownership.OwnerSession session;
+    public org.bukkit.entity.Player thrower() {
+        return net.tfminecraft.companionpets.ownership.CharacterAccess.current(session) ? org.bukkit.Bukkit.getPlayer(throwerId) : null;
+    }
     private final Set<UUID> favorites = new HashSet<>();
     private final Set<UUID> chasers = new java.util.LinkedHashSet<>();
     private final java.util.Map<UUID, Double> speeds = new java.util.HashMap<>();
@@ -29,9 +33,12 @@ public final class FetchJob {
     private UUID itemId;
     private long missingSince;
 
-    public FetchJob(String toy, UUID throwerId) {
+    public FetchJob(String toy, UUID throwerId) { this(toy, throwerId, null); }
+
+    public FetchJob(String toy, UUID throwerId, net.tfminecraft.companionpets.ownership.OwnerSession session) {
         this.toy = toy;
         this.throwerId = throwerId;
+        this.session = session;
         this.phase = FetchPhase.AIR;
     }
 

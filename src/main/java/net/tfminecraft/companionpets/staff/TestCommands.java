@@ -34,7 +34,7 @@ public final class TestCommands {
                 StaffCommands.require(args.length == 2 && List.of("affection", "bark", "mischief", "dig", "belly", "greeting", "pet-greeting").contains(args[1].toLowerCase(Locale.ROOT)),
                         "Usage: /companionpets moment <affection|bark|mischief|dig|belly|greeting|pet-greeting>, while looking at your pet.");
                 Pet pet = runtime.byEntity(PetActions.lookingAt(player, 6));
-                StaffCommands.require(pet != null && pet.ownerId().equals(player.getUniqueId()), "Look at one of your pets first.");
+                StaffCommands.require(pet != null && runtime.owns(pet, player), "Look at one of your pets first.");
                 if (!audit.append(sender, "moment-requested", pet, StaffAudit.snapshot(pet), args[1])) return true;
                 if (actions.triggerTestMoment(player, args[1])) audit.append(sender, "moment", pet, "requested", StaffAudit.snapshot(pet));
             }

@@ -90,7 +90,7 @@ class PetFetchWorkflowTest {
                             };
                         });
             }
-        }); var plugin = MockBukkit.createMockPlugin();
+        }); var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         world = new net.tfminecraft.companionpets.testutil.CollisionWorldMock() {
             @Override public boolean isChunkLoaded(int x, int z) { return true; }
             @Override public void spawnParticle(org.bukkit.Particle particle, Location at, int count,
@@ -117,7 +117,7 @@ class PetFetchWorkflowTest {
         return outsidePet(ownerId, name, x, "wolf");
     }
     private Pet outsidePet(UUID ownerId, String name, double x, String type) {
-        Pet result = new Pet(UUID.randomUUID(), ownerId, type, name, PetSex.MALE);
+        Pet result = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), ownerId, type, name, PetSex.MALE);
         runtime.store().add(result);
         var body = new FetchWolf(server, UUID.randomUUID(), navigationTargets, navigationSpeeds);
         server.registerEntity(body);
@@ -977,7 +977,7 @@ class PetFetchWorkflowTest {
         var yaml = new YamlConfiguration();
         yaml.loadFromString("items: {toys: [STICK]}\npets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}, cat: {entity: CAT, egg: CAT_SPAWN_EGG, items: {toys: []}}}\n");
         runtime.config(CompanionConfig.load(runtime.plugin(), yaml));
-        Pet cat = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Cat", PetSex.FEMALE);
+        Pet cat = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Cat", PetSex.FEMALE);
         cat.stored(false); cat.entityId(resting.entityId()); runtime.store().add(cat);
         throwToy();
         assertNotNull(pet.fetch()); assertNull(distant.fetch()); assertNull(resting.fetch());

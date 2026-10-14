@@ -52,7 +52,7 @@ class PetTrainingCoverageTest {
         world = server.addSimpleWorld("training");
         owner = server.addPlayer();
         owner.teleport(new Location(world, 0, 64, 0));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 items: {treats: [COD, SALMON]}
@@ -76,7 +76,7 @@ class PetTrainingCoverageTest {
         var field = PetActions.class.getDeclaredField("training");
         field.setAccessible(true);
         training = (PetTraining) field.get(actions);
-        pet = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
         body = wolf(owner.getLocation().add(1, 0, 0));
         body.getPersistentDataContainer().set(key, org.bukkit.persistence.PersistentDataType.STRING, pet.id().toString());
         pet.stored(false);
@@ -411,7 +411,7 @@ class PetTrainingCoverageTest {
         attempt(false);
         training.beginTraining(owner, pet, body);
         assertSame(first, session());
-        var second = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Milo", PetSex.FEMALE);
+        var second = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Milo", PetSex.FEMALE);
         second.stored(false);
         runtime.store().add(second);
         var secondBody = wolf(owner.getLocation().add(2, 0, 0));

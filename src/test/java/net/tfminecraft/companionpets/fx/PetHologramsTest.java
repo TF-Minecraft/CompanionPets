@@ -12,7 +12,7 @@ class PetHologramsTest {
     @BeforeEach void start() { server=MockBukkit.mock(); server.addSimpleWorld("world"); }
     @AfterEach void stop() { MockBukkit.unmock(); }
     @Test void sleepLabelIsReusedAndRemovedWhenItsPetDisappears() {
-        var plugin=MockBukkit.createMockPlugin(); var labels=new PetHolograms(plugin);
+        var plugin=net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(); var labels=new PetHolograms(plugin);
         var pet=server.addPlayer(); pet.teleport(new Location(server.getWorlds().getFirst(),0,64,0));
         labels.sleep(null,true); assertTrue(pet.getWorld().getEntitiesByClass(ArmorStand.class).isEmpty());
         labels.sleep(pet,true); var stands=pet.getWorld().getEntitiesByClass(ArmorStand.class);
@@ -26,7 +26,7 @@ class PetHologramsTest {
         labels.clear();
     }
     @Test void oneTaskFollowsEveryLabelAndStopsWhenNoneRemain() throws Exception {
-        var plugin=MockBukkit.createMockPlugin(); var labels=new PetHolograms(plugin);
+        var plugin=net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(); var labels=new PetHolograms(plugin);
         var world=server.getWorlds().getFirst();
         var first=server.addPlayer(); first.teleport(new Location(world,0,64,0));
         var second=server.addPlayer(); second.teleport(new Location(world,8,64,0));

@@ -66,6 +66,7 @@ public final class PetMenus {
     }
     public void openCare(org.bukkit.entity.Player player, Pet pet, boolean petHouseBack, int petHousePage, org.bukkit.Location house) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.CARE, pet.id(), null);
+        holder.capture(player);
         holder.house(house);
         holder.petHouseBack(petHouseBack);
         holder.petHousePage(petHousePage);
@@ -85,7 +86,7 @@ public final class PetMenus {
     }
 
     private void fillCare(org.bukkit.entity.Player player, Inventory inventory, Pet pet) {
-        fillProfile(inventory, pet, pet.ownerId().equals(player.getUniqueId()),
+        fillProfile(inventory, pet, runtime.owns(pet, player),
                 inventory.getHolder() instanceof MenuHolder holder && holder.petHouseBack());
     }
 
@@ -228,12 +229,13 @@ public final class PetMenus {
     }
     public void openKennel(org.bukkit.entity.Player player, int requestedPage, org.bukkit.Location house) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.KENNEL, null, null);
+        holder.capture(player);
         holder.house(house);
         Inventory inventory = Bukkit.createInventory(holder, 54, title("Pet House"));
         holder.inventory(inventory);
         frame(inventory);
         int slot = 0;
-        List<Pet> pets = runtime.store().of(player.getUniqueId()).stream()
+        List<Pet> pets = runtime.owned(player).stream()
                 .sorted(java.util.Comparator.comparing((Pet p) -> p.name(), String.CASE_INSENSITIVE_ORDER).thenComparing(Pet::id)).toList();
         int page = Math.max(0, Math.min(requestedPage, Math.max(0, (pets.size() - 1) / 45)));
         holder.page(page);
@@ -263,6 +265,7 @@ public final class PetMenus {
 
     public void openLearned(org.bukkit.entity.Player player, Pet pet, int page) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.LEARNED, pet.id(), null);
+        holder.capture(player);
         inheritPetHouseNavigation(player, holder);
         Inventory inventory = Bukkit.createInventory(holder, 27, title(pet.name() + "'s tricks"));
         holder.inventory(inventory);
@@ -315,6 +318,7 @@ public final class PetMenus {
 
     public void openTricks(org.bukkit.entity.Player player, Pet pet, String word, int page) {
         MenuHolder holder = new MenuHolder(MenuHolder.Kind.TRICK, pet.id(), word);
+        holder.capture(player);
         inheritPetHouseNavigation(player, holder);
         Inventory inventory = Bukkit.createInventory(holder, 27, title("Choose a trick"));
         holder.inventory(inventory);

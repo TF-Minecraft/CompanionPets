@@ -102,7 +102,7 @@ class PetTickerCoverageTest {
         owner = server.addPlayer();
         owner.teleport(new Location(world, 0, 64, 0));
         owner.openInventory(server.createInventory(null, 9));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 care:
@@ -141,7 +141,7 @@ class PetTickerCoverageTest {
             new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
         actions = new PetActions(runtime);
         ticker = new PetTicker(runtime, actions);
-        pet = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
         for (Need need : Need.values()) pet.need(need, 80);
         pet.bond(40);
         body = wolf(owner.getLocation().add(1, 0, 0));
@@ -331,7 +331,7 @@ class PetTickerCoverageTest {
     @Test void failedSpawnRetriesWithBackoffAndNeverDecaysAMissingPet() throws Exception {
         body.remove();
         // An enabled provider with an unavailable API is a supported reflective integration failure.
-        MockBukkit.createMockPlugin("MythicMobs");
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("MythicMobs");
         configure("pets.wolf.mythic-mob", "unavailable_pet");
         var failedAttempts = new java.util.concurrent.atomic.AtomicInteger();
         runtime.plugin().getLogger().addHandler(new java.util.logging.Handler() {
@@ -646,7 +646,7 @@ class PetTickerCoverageTest {
     @Test void anActiveSocialEncounterRetainsControlOfBothPetsMovement() throws Exception {
         configure("social.enabled", true);
         pet.personality(PetPersonality.FRIENDLY);
-        Pet friend = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Buddy", PetSex.MALE);
+        Pet friend = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Buddy", PetSex.MALE);
         friend.personality(PetPersonality.FRIENDLY);
         for (Need need : Need.values()) friend.need(need, 80);
         WolfMock friendBody = wolf(owner.getLocation().add(2, 0, 0));

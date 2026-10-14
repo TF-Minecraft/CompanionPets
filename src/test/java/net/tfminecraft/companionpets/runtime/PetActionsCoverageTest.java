@@ -108,7 +108,7 @@ class PetActionsCoverageTest {
         server.addWorld(world);
         owner = server.addPlayer();
         owner.teleport(new Location(world, 0, 64, 0));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 moments: {belly-up: {chance: 0}}
@@ -143,7 +143,7 @@ class PetActionsCoverageTest {
         actions = new PetActions(runtime);
         listener = new PetListener(runtime, actions);
         server.getPluginManager().registerEvents(listener, plugin);
-        pet = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
         body = wolf(owner.getLocation().add(1, 0, 0));
         body.getPersistentDataContainer().set(key, PersistentDataType.STRING, pet.id().toString());
         for (Need need : Need.values()) pet.need(need, 80);
@@ -412,7 +412,7 @@ class PetActionsCoverageTest {
     }
 
     @Test void spacingOnlyCountsNearbyActivePetBodiesOnTheSameLevel() {
-        var other = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Rex", PetSex.MALE);
+        var other = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Rex", PetSex.MALE);
         var otherBody = wolf(new Location(world, 10.5, 64, 0.5));
         otherBody.getPersistentDataContainer().set(runtime.petKey(), PersistentDataType.STRING, other.id().toString());
         runtime.store().add(other); runtime.remember(other, otherBody);
@@ -427,7 +427,7 @@ class PetActionsCoverageTest {
     }
 
     @Test void storingAtTheTotalLimitAlwaysSucceeds() {
-        Pet stored = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
+        Pet stored = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
         stored.stored(true); runtime.store().add(stored);
         assertEquals(2, runtime.store().countPets(owner.getUniqueId()));
         care(PetMenus.careSlot(PetMenus.STORE_SLOT, false, pet.stored()));
@@ -441,7 +441,7 @@ class PetActionsCoverageTest {
 
     @Test void activeLimitKeepsAnExistingStoredPetInTheHouse() {
         configure("limits.max-out", 1);
-        Pet stored = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
+        Pet stored = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
         stored.stored(true); runtime.store().add(stored);
         actions.menus().openCare(owner, stored);
         actions.clickMenu(owner, holder(), PetMenus.careSlot(PetMenus.BRING_OUT_SLOT, false), null, false, false, false);
@@ -451,7 +451,7 @@ class PetActionsCoverageTest {
     }
 
     @Test void testPetRejectsTheTotalWithRoomOutsideAndLeavesExistingPetsUntouched() {
-        Pet stored = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
+        Pet stored = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Stored", PetSex.FEMALE);
         stored.stored(true); runtime.store().add(stored);
         int entities = world.getEntities().size();
         assertFalse(actions.spawnTestPet(owner, "wolf", "Extra"));
@@ -782,7 +782,7 @@ class PetActionsCoverageTest {
 
     @Test void kennelPageNavigationAndSavedPetIconsOpenTheIntendedCareMenu() {
         for (int i = 0; i < 48; i++) {
-            Pet saved = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Pet" + i, PetSex.FEMALE);
+            Pet saved = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Pet" + i, PetSex.FEMALE);
             saved.stored(true); runtime.store().add(saved);
         }
         actions.menus().openKennel(owner);
@@ -835,7 +835,7 @@ class PetActionsCoverageTest {
         actions.onChat(owner, "Toby unfamiliar");
         assertEquals(PetOrder.FOLLOW, pet.order());
         assertTrue(bars().contains("has not learned"));
-        Pet twin = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.FEMALE);
+        Pet twin = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.FEMALE);
         var twinBody = wolf(owner.getLocation().add(2, 0, 0));
         runtime.store().add(twin); runtime.remember(twin, twinBody);
         command("sit", Trick.SIT);
@@ -845,7 +845,7 @@ class PetActionsCoverageTest {
     }
 
     @Test void anUnavailableOptionalProviderRefusesCreationWithoutAddingAPet() {
-        MockBukkit.createMockPlugin("MythicMobs");
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("MythicMobs");
         configure("pets.wolf.mythic-mob", "UnavailableWolf");
         assertNotNull(runtime.config().type("wolf"));
         assertFalse(net.tfminecraft.companionpets.integration.MythicSpawn.available());

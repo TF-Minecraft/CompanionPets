@@ -25,13 +25,13 @@ class NavigationContractCoverageTest {
     boolean inWater;
     @BeforeEach void setup() throws Exception {
         server=MockBukkit.mock(new GoalServerMock()); var world=server.addSimpleWorld("world");
-        var plugin=MockBukkit.createMockPlugin(); var yaml=new YamlConfiguration();
+        var plugin=net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(); var yaml=new YamlConfiguration();
         yaml.loadFromString("pets:\n  dog: {species: dog, egg: EGG}\n");
         var config=CompanionConfig.load(plugin,yaml); var key=new NamespacedKey(plugin,"pet");
         store=new PetStore(plugin); assertTrue(store.load()); var visual=new IdleVisual();
         runtime=new PetRuntime(plugin,config,store,new Sessions(),new Bodies(plugin,key,visual),visual,key,new NamespacedKey(plugin,"toy"));
         actions=new PetActions(runtime); var owner=server.addPlayer();
-        pet=new Pet(UUID.randomUUID(),owner.getUniqueId(),"dog","Toby",PetSex.MALE); pet.stored(false);
+        pet=net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(),owner.getUniqueId(),"dog","Toby",PetSex.MALE); pet.stored(false);
         path=mock(Pathfinder.class);
         body=new WolfMock(server,UUID.randomUUID()) {
             @Override public Pathfinder getPathfinder() { return path; }

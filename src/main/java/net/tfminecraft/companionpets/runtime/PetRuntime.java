@@ -48,6 +48,7 @@ public final class PetRuntime {
         this.config = config;
         this.store = store;
         this.sessions = sessions;
+        sessions.enforceCharacters();
         this.bodies = bodies;
         this.visual = visual;
         this.petKey = petKey;
@@ -93,7 +94,7 @@ public final class PetRuntime {
     public boolean trainingFocused(Pet pet, org.bukkit.entity.Mob body) {
         var session = sessions.training(pet.ownerId());
         return session != null && session.petId().equals(pet.id())
-                && TrainingNavigationGoal.focused(this, pet, body, Bukkit.getPlayer(pet.ownerId()));
+                && TrainingNavigationGoal.focused(this, pet, body, owner(pet));
     }
 
     public Bodies bodies() {
@@ -152,13 +153,32 @@ public final class PetRuntime {
     }
 
     public void recordCare(Player player, Pet pet, double gain, long now) {
-        if (!pet.ownerId().equals(player.getUniqueId())
+        if (characterId(player) != null && !owns(pet, player)
                 && behaves(pet, net.tfminecraft.companionpets.config.PetBehavior.RECOGNIZE_CARERS))
-            pet.carers().reinforce(player.getUniqueId(), gain, now, 60_000);
+            pet.carers().reinforce(characterId(player), gain, now, 60_000);
     }
 
     public boolean followingAllowed(Pet pet, Player owner) {
-        return owner != null && owner.isOnline() && Double.isFinite(distance(owner, pet));
+        return owns(pet, owner) && owner.isOnline() && Double.isFinite(distance(owner, pet));
+    }
+
+    public boolean owns(Pet pet, Player player) {
+        return pet != null && net.tfminecraft.companionpets.ownership.CharacterAccess.owns(pet, player);
+    }
+    public Player owner(Pet pet) {
+        Player player = pet == null ? null : Bukkit.getPlayer(pet.ownerId());
+        return player != null && owns(pet, player) ? player : null;
+    }
+    public UUID characterId(Player player) {
+        var session = net.tfminecraft.companionpets.ownership.CharacterAccess.capture(player);
+        return session == null ? null : session.character();
+    }
+    public java.util.List<Pet> owned(Player player) { return store().ofCharacter(characterId(player)); }
+    public Player person(UUID character) { return net.tfminecraft.companionpets.ownership.CharacterAccess.person(character); }
+    public boolean ownsKennel(String key, Player player) {
+        UUID character = characterId(player);
+        return character != null && !store.kennelHeld(key) && character.equals(store.kennelCharacter(key))
+                && player.getUniqueId().equals(store.kennelOwner(key));
     }
 
     public Entity entity(Pet pet) {

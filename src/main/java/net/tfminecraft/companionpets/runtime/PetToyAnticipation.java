@@ -58,15 +58,16 @@ final class PetToyAnticipation {
         invitations.entrySet().removeIf(e -> e.getValue() != 0 && now >= e.getValue());
         Set<Encounter> candidates = new HashSet<>();
         for (Pet pet : runtime.store().active()) {
-            Player owner = Bukkit.getPlayer(pet.ownerId());
+            Player owner = runtime.owner(pet);
             if (!(runtime.entity(pet) instanceof Mob body) || !ready(pet, body, owner, now)) {
                 breakFocus(pet, now); continue;
             }
             Focus current = active.get(pet.id());
+            if (current != null && !net.tfminecraft.companionpets.ownership.CharacterAccess.current(current.session)) { breakFocus(pet, now); current = null; }
             Player player = owner;
             ItemRef toy = inRange(body, owner, current) ? heldToy(pet, hands.get(owner.getUniqueId())) : null;
             if (toy == null) {
-                if (current != null && !pet.ownerId().equals(current.player.getUniqueId())
+                if (current != null && !runtime.owns(pet, current.player)
                         && !strangerAllowed(pet, current.player)) breakFocus(pet, now);
                 current = active.get(pet.id());
                 player = null;
@@ -74,7 +75,7 @@ final class PetToyAnticipation {
                     double bestDistance = Double.POSITIVE_INFINITY;
                     boolean bestFavorite = false;
                     for (Player carrier : carriers.getOrDefault(body.getWorld(), List.of())) {
-                        if (carrier.getUniqueId().equals(pet.ownerId()) || !inRange(body, carrier, current)
+                        if (runtime.owns(pet, carrier) || !inRange(body, carrier, current)
                                 || !strangerAllowed(pet, carrier)) continue;
                         ItemRef offered = heldToy(pet, hands.get(carrier.getUniqueId()));
                         if (offered == null) continue;
@@ -144,7 +145,7 @@ final class PetToyAnticipation {
     boolean active(Pet pet) { return active.containsKey(pet.id()) && pet.fetch() == null; }
 
     boolean attentive(Pet pet, Player player, long now) {
-        if (!pet.ownerId().equals(player.getUniqueId()) && !strangerAllowed(pet, player)) return false;
+        if (!runtime.owns(pet, player) && !strangerAllowed(pet, player)) return false;
         Focus focus = active.get(pet.id());
         RecentFocus previous = recent.get(pet.id());
         return focus != null ? focus.player.getUniqueId().equals(player.getUniqueId())
@@ -158,7 +159,7 @@ final class PetToyAnticipation {
     void ownerCommanded(Pet pet, long now) {
         ownerCommands.put(pet.id(), now + OWNER_COMMAND_LOCKOUT);
         breakFocus(pet, now);
-        if (pet.fetch() != null && !pet.ownerId().equals(pet.fetch().throwerId()))
+        if (pet.fetch() != null && !runtime.owns(pet, pet.fetch().thrower()))
             actions.releaseFetch(pet, null, false);
     }
 
@@ -167,7 +168,7 @@ final class PetToyAnticipation {
     }
 
     boolean strangerAllowed(Pet pet, Player player) {
-        Player owner = Bukkit.getPlayer(pet.ownerId());
+        Player owner = runtime.owner(pet);
         return owner != null && owner.isOnline() && player.isOnline() && owner.getWorld().equals(player.getWorld())
                 && owner.getLocation().distanceSquared(player.getLocation()) <= STRANGER_LEASH * STRANGER_LEASH
                 && runtime.followingAllowed(pet, owner);
@@ -178,13 +179,14 @@ final class PetToyAnticipation {
         return body.getWorld().equals(player.getWorld()) && body.getLocation().distanceSquared(player.getLocation()) <= range * range;
     }
 
-    private static ToyInvitation invitation(Pet pet, Player player, ItemRef toy) {
-        return ToyInvitation.of(pet, pet.carers().trust(player.getUniqueId()), toy.key().equals(pet.favoriteToy()));
+    private ToyInvitation invitation(Pet pet, Player player, ItemRef toy) {
+        return ToyInvitation.of(pet, pet.carers().trust(runtime.characterId(player)), toy.key().equals(pet.favoriteToy()));
     }
     void advance(Pet pet, long now) {
         Focus focus = active.get(pet.id());
         if (focus == null) return;
         Player player = focus.player;
+        if (!net.tfminecraft.companionpets.ownership.CharacterAccess.current(focus.session)) { cancel(pet); return; }
         if (pet.fetch() != null) return;
         // The navigation goal advances every AI tick; the player's hands are rechecked a few times a second.
         if (now >= focus.handsCheckedAt + HANDS_MILLIS || now < focus.handsCheckedAt)
@@ -198,7 +200,7 @@ final class PetToyAnticipation {
         body.setAware(true);
         PetFx.sit(body, false); PetFx.lie(body, false);
         PetFx.look(body, player.getEyeLocation().subtract(0, 0.55, 0));
-        boolean exuberant = pet.ownerId().equals(player.getUniqueId()) || focus.invitation.exuberant();
+        boolean exuberant = runtime.owns(pet, player) || focus.invitation.exuberant();
         boolean favorite = exuberant && toy.key().equals(pet.favoriteToy());
         if (favorite && !focus.favorite) focus.reactionPending = true;
         focus.favorite = favorite;
@@ -219,7 +221,7 @@ final class PetToyAnticipation {
         }
         pet.toyExcitedUntilMillis(favorite ? focus.reactionUntil : 0);
         boolean reacting = favorite && now < focus.reactionUntil;
-        var feeling = GreetingMood.of(pet, pet.ownerId().equals(player.getUniqueId()) ? pet.bond() : pet.carers().trust(player.getUniqueId()));
+        var feeling = GreetingMood.of(pet, runtime.owns(pet, player) ? pet.bond() : pet.carers().trust(runtime.characterId(player)));
         if (reacting && runtime.behaves(pet, PetBehavior.TOY_VOCALIZING) && focus.sounds < 2 && now >= focus.nextSoundAt
                 && now >= nextPlayerVoice.getOrDefault(player.getUniqueId(), 0L)) {
             runtime.voice().play(body, net.tfminecraft.companionpets.config.PetSounds.Event.TOY,
@@ -248,13 +250,13 @@ final class PetToyAnticipation {
         if (now >= focus.nextMoveAt) {
             focus.playerMoving = playerMoving;
             focus.playerAt = playerAt;
-            double extraDistance = pet.ownerId().equals(player.getUniqueId()) ? 0 : focus.invitation.extraDistance();
+            double extraDistance = runtime.owns(pet, player) ? 0 : focus.invitation.extraDistance();
             focus.front = PetSpacing.toyFront(runtime, pet, player, slot(pet, player), extraDistance);
         }
         Location front = focus.front;
         boolean approachingPlayer = front == null || horizontalDistance(body.getLocation(), front) > 1
                 || Math.abs(body.getLocation().getY() - front.getY()) > 1;
-        boolean wiggle = (pet.ownerId().equals(player.getUniqueId()) || focus.invitation.exuberant()) && runtime.behaves(pet, PetBehavior.TOY_WIGGLE);
+        boolean wiggle = (runtime.owns(pet, player) || focus.invitation.exuberant()) && runtime.behaves(pet, PetBehavior.TOY_WIGGLE);
         if (wiggle && front != null && !approachingPlayer && !focus.playerMoving && now >= focus.nextWiggleAt) {
             focus.wiggleStartedAt = now;
             focus.wiggleUntil = now + 2600;
@@ -305,7 +307,7 @@ final class PetToyAnticipation {
                 : runtime.config().play().toyAttentionSeconds();
         // Retain the timestamp after releasing focus so the next behavior tick
         // cannot immediately reacquire the same boring toy.
-        if (!pet.ownerId().equals(player.getUniqueId())) seconds *= invitation(pet, player, toy).attentionFactor();
+        if (!runtime.owns(pet, player)) seconds *= invitation(pet, player, toy).attentionFactor();
         return now - interest.lastStimulusAt < seconds * 1000;
     }
 
@@ -399,6 +401,7 @@ final class PetToyAnticipation {
         boolean favorite, reactionPending;
         long reactionUntil;
         int sounds, jumps, slot;
-        Focus(Mob body, String toy, Player player) { this.body = body; this.toy = toy; this.player = player; }
+        private final net.tfminecraft.companionpets.ownership.OwnerSession session;
+        Focus(Mob body, String toy, Player player) { this.body = body; this.toy = toy; this.player = player; this.session = net.tfminecraft.companionpets.ownership.CharacterAccess.capture(player); }
     }
 }

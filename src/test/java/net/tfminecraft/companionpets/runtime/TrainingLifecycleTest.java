@@ -21,7 +21,7 @@ class TrainingLifecycleTest {
 
     @Test void offHandTreatIsReportedAsPutAwayRatherThanExhausted() throws Exception {
         var server = MockBukkit.mock();
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var player = server.addPlayer();
         var config = new YamlConfiguration();
         config.loadFromString("items: {treats: [COD, SALMON]}\npets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}}");
@@ -31,7 +31,7 @@ class TrainingLifecycleTest {
         assertTrue(store.load());
         var runtime = new PetRuntime(plugin, CompanionConfig.load(plugin, config),
                 store, new Sessions(), new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
-        var pet = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Toby", PetSex.MALE);
         pet.stored(false);
         store.add(pet);
         var ticker = new PetTicker(runtime, new PetActions(runtime));
@@ -51,7 +51,7 @@ class TrainingLifecycleTest {
 
     @Test void missingPetTypeEndsTrainingWithoutThrowing() throws Exception {
         var server = MockBukkit.mock();
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var player = server.addPlayer();
         var visual = new IdleVisual();
         var key = new NamespacedKey(plugin, "pet");
@@ -59,7 +59,7 @@ class TrainingLifecycleTest {
         assertTrue(store.load());
         var runtime = new PetRuntime(plugin, CompanionConfig.load(plugin, new YamlConfiguration()),
                 store, new Sessions(), new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
-        var pet = new Pet(UUID.randomUUID(), player.getUniqueId(), "removed_type", "Toby", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), player.getUniqueId(), "removed_type", "Toby", PetSex.MALE);
         pet.stored(false);
         store.add(pet);
         runtime.sessions().training(player.getUniqueId(), new TrainingSession(pet.id()));

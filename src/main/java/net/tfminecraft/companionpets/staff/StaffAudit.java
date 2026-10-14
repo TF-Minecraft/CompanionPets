@@ -41,7 +41,7 @@ public final class StaffAudit {
     }
 
     public static String snapshot(Pet pet) {
-        return "owner=" + pet.ownerId() + ";type=" + pet.typeId() + ";name=" + pet.name()
+        return "owner=" + pet.ownerId() + ";character=" + pet.ownerCharacterId() + ";type=" + pet.typeId() + ";name=" + pet.name()
                 + ";stored=" + pet.stored() + ";entity=" + pet.entityId() + ";illness=" + pet.illness()
                 + ";treated=" + pet.treated() + ";order=" + pet.order() + ";activity=" + pet.activity()
                 + ";needs=" + java.util.Arrays.stream(Need.values()).map(n -> n + "=" + pet.need(n)).toList()

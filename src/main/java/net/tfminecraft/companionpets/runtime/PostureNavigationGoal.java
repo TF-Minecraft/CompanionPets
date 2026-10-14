@@ -46,7 +46,7 @@ final class PostureNavigationGoal implements Goal<Mob> {
                 System.currentTimeMillis() < pet.forcedSitUntilMillis(), pet.order(), pet.staying());
         // Like the ticker, an idle pet that may not follow its owner right now stays where it is.
         if (mode == Locomotion.Mode.FOLLOW && pet.activity() == Activity.NONE
-                && !runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId()))) return Locomotion.Mode.STAY;
+                && !runtime.followingAllowed(pet, runtime.owner(pet))) return Locomotion.Mode.STAY;
         return mode;
     }
 

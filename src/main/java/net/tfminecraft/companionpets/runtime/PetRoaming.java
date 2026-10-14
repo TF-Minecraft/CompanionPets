@@ -97,7 +97,7 @@ final class PetRoaming {
 
     Location destination(Pet pet) {
         Attention job = attention.get(pet.id());
-        Player owner = job == null ? null : Bukkit.getPlayer(job.ownerId);
+        Player owner = job == null || !net.tfminecraft.companionpets.ownership.CharacterAccess.current(job.session) ? null : Bukkit.getPlayer(job.ownerId);
         return owner != null && owner.isOnline() ? owner.getLocation() : null;
     }
 
@@ -124,7 +124,7 @@ final class PetRoaming {
             cancelAttention(pet);
             return false;
         }
-        Player owner = Bukkit.getPlayer(job.ownerId);
+        Player owner = net.tfminecraft.companionpets.ownership.CharacterAccess.current(job.session) ? Bukkit.getPlayer(job.ownerId) : null;
         if (owner == null || !owner.isOnline() || now >= (job.waitUntil == 0 ? job.until : job.waitUntil)
                 || !owner.getWorld().equals(body.getWorld())) {
             cancelAttention(pet);
@@ -221,12 +221,13 @@ final class PetRoaming {
         private boolean fetchReturn;
         private double speed = 1.25;
         private final UUID ownerId;
+        private final net.tfminecraft.companionpets.ownership.OwnerSession session;
         private long until;
         private final PetOrder returnOrder;
         private long waitUntil;
         private boolean greeted;
         private Location routeTarget;
         private long routeAt;
-        private Attention(UUID ownerId, long until, PetOrder returnOrder) { this.ownerId = ownerId; this.until = until; this.returnOrder = returnOrder; }
+        private Attention(UUID ownerId, long until, PetOrder returnOrder) { this.ownerId = ownerId; this.session = net.tfminecraft.companionpets.ownership.CharacterAccess.capture(Bukkit.getPlayer(ownerId)); this.until = until; this.returnOrder = returnOrder; }
     }
 }

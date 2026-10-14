@@ -71,7 +71,7 @@ class PetListenerCoverageTest {
         server.addWorld(world);
         owner = server.addPlayer();
         owner.teleport(new Location(world, 0, 64, 0));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 items: {kennel: BARREL, kennel-block: BARREL, toys: [STICK], treats: [COD]}
@@ -94,7 +94,7 @@ class PetListenerCoverageTest {
         actions = new PetActions(runtime);
         listener = new PetListener(runtime, actions);
         server.getPluginManager().registerEvents(listener, plugin);
-        pet = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
         body = wolf(owner.getLocation().add(1, 0, 0));
         body.getPersistentDataContainer().set(key, PersistentDataType.STRING, pet.id().toString());
         for (Need need : Need.values()) pet.need(need, 80);
@@ -311,7 +311,7 @@ class PetListenerCoverageTest {
 
     @Test void committedDamagePenalizesVictimOnceAndAnimatesBothPets() {
         var attackerBody = wolf(owner.getLocation().add(2, 0, 0));
-        Pet attacker = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
+        Pet attacker = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
         runtime.store().add(attacker);
         runtime.remember(attacker, attackerBody);
         body.setSilent(true);

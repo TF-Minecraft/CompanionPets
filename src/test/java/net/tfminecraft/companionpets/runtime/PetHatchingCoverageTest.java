@@ -97,7 +97,7 @@ class PetHatchingCoverageTest {
         server.addWorld(world);
         player = server.addPlayer();
         player.teleport(new Location(world, 0, 64, 0));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 limits: {max-out: 2, max-pets: 2}
@@ -243,7 +243,7 @@ class PetHatchingCoverageTest {
     }
 
     @Test void providerSpawnFailureKeepsTheConsumedEggAsASavedPetInTheHouse() {
-        MockBukkit.createMockPlugin("MythicMobs");
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("MythicMobs");
         reload("pets.wolf.mythic-mob", "UnavailableWolf");
         assertNotNull(runtime.config().type("wolf"));
         assertFalse(MythicSpawn.available(), "fixture plugin advertises integration while its provider API is unavailable");
@@ -366,7 +366,7 @@ class PetHatchingCoverageTest {
 
     private void fillPetHouse() {
         for (int i = 0; i < 2; i++) {
-            var stored = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Stored" + i, net.tfminecraft.companionpets.pet.PetSex.FEMALE);
+            var stored = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Stored" + i, net.tfminecraft.companionpets.pet.PetSex.FEMALE);
             stored.stored(true); runtime.store().add(stored);
         }
     }
@@ -486,7 +486,7 @@ class PetHatchingCoverageTest {
     }
 
     @Test void mythicWolfWithoutNativeFollowingIsRemovedBeforeItCanBecomeAPet() throws Exception {
-        MockBukkit.createMockPlugin("MythicMobs");
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("MythicMobs");
         reload("pets.wolf.mythic-mob", "UntrainableWolf");
         compileMythicProvider();
         var logs = new ArrayList<LogRecord>();
@@ -522,7 +522,7 @@ class PetHatchingCoverageTest {
             Class<?> bodiesType = loader.loadClass(Bodies.class.getName());
             Object bodies = bodiesType.getConstructor(JavaPlugin.class, NamespacedKey.class, PetVisual.class)
                     .newInstance(runtime.plugin(), runtime.petKey(), runtime.visual());
-            Pet candidate = new Pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
+            Pet candidate = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), player.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
 
             Object spawned = bodiesType.getMethod("spawn", Pet.class, PetTypeDef.class, Location.class, Player.class)
                     .invoke(bodies, candidate, runtime.config().type("wolf"), player.getLocation(), player);

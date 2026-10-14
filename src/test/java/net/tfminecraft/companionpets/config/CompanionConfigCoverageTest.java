@@ -30,7 +30,7 @@ class CompanionConfigCoverageTest {
 
     @BeforeEach void setup() {
         MockBukkit.mock();
-        plugin = MockBukkit.createMockPlugin();
+        plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         plugin.getLogger().addHandler(handler);
     }
     @AfterEach void cleanup() {
@@ -327,7 +327,7 @@ class CompanionConfigCoverageTest {
     }
 
     @Test void mythicOnlyTypeUsesTheDocumentedWolfFallbackWithAWarning() throws Exception {
-        MockBukkit.createMockPlugin("MythicMobs");
+        net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin("MythicMobs");
         var config = load("pets: {mythic: {mythic-mob: CustomPet, egg: BONE}}");
         assertEquals(EntityType.WOLF, config.type("mythic").entity());
         assertTrue(warnings.stream().anyMatch(s -> s.contains("assuming WOLF")));

@@ -38,7 +38,7 @@ final class WaterNavigationGoal implements Goal<Mob> {
                 && !pet.stored() && !pet.dead() && WaterEscape.needed(body)
                 && pet.fetch() == null && pet.activity() != Activity.ATTENDING
                 && !(pet.order() == PetOrder.FOLLOW && !pet.staying()
-                    && runtime.followingAllowed(pet, Bukkit.getPlayer(pet.ownerId())));
+                    && runtime.followingAllowed(pet, runtime.owner(pet)));
     }
     @Override public boolean shouldStayActive() { return shouldActivate(); }
     @Override public void start() { routeAt = 0; tick(); }

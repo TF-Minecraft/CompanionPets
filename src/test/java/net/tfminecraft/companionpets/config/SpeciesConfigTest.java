@@ -17,7 +17,7 @@ class SpeciesConfigTest {
     private CompanionConfig load(String text) throws Exception {
         var yaml = new YamlConfiguration();
         yaml.loadFromString(text);
-        return CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        return CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), yaml);
     }
 
     @Test void builtinsAndLegacyPetsShareEvolvingDefaultsAndNativeVoice() throws Exception {
@@ -229,7 +229,7 @@ class SpeciesConfigTest {
     }
 
     @Test void invalidPetAndTemplateEntitiesReportClearWarningsEvenWithAnOverride() throws Exception {
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var warnings = new java.util.ArrayList<String>();
         var handler = new java.util.logging.Handler() {
             public void publish(java.util.logging.LogRecord record) { warnings.add(record.getMessage()); }

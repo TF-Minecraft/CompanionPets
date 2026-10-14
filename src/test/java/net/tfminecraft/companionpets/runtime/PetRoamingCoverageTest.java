@@ -71,7 +71,7 @@ class PetRoamingCoverageTest {
         server.addWorld(world);
         owner = server.addPlayer("Owner");
         owner.teleport(new Location(world, 0, 64, 0));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var yaml = new YamlConfiguration();
         yaml.loadFromString("pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, sounds: false}}");
         var visual = new PetVisual() {
@@ -83,7 +83,7 @@ class PetRoamingCoverageTest {
         runtime = new PetRuntime(plugin, CompanionConfig.load(plugin, yaml), store, new Sessions(),
                 new Bodies(plugin, key, visual), visual, key, new NamespacedKey(plugin, "toy"));
         actions = new PetActions(runtime); roaming = actions.roaming();
-        pet = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
+        pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Toby", PetSex.MALE);
         pet.bindWord("come", Trick.COME); pet.progress(Trick.COME, 100);
         store.add(pet);
         body = body(owner.getLocation().add(8, 0, 0));
@@ -209,7 +209,7 @@ class PetRoamingCoverageTest {
     }
 
     @Test void clearReleasesNameAttentionListeningAndStationarityWithoutChangingOrders() {
-        var other = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Molly", PetSex.FEMALE);
+        var other = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", "Molly", PetSex.FEMALE);
         other.order(PetOrder.SIT);
         runtime.store().add(other);
         runtime.remember(other, body(owner.getLocation().add(3, 0, 0)));

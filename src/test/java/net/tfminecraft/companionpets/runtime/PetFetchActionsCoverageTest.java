@@ -93,7 +93,7 @@ class PetFetchActionsCoverageTest {
         };
         server.addPlayer(owner); owner.teleport(new Location(world, 0, 64, 0));
         owner.openInventory(server.createInventory(null, 9));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         yaml = new YamlConfiguration(); yaml.loadFromString("""
             items: {toys: [STICK]}
             moments: {enabled: false, belly-up: {enabled: false}, greeting: {enabled: false}}
@@ -154,7 +154,7 @@ class PetFetchActionsCoverageTest {
     }
 
     private Pet register(UUID ownerId, String type, Mob body) {
-        var result = new Pet(UUID.randomUUID(), ownerId, type, "Fetcher", PetSex.MALE);
+        var result = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), ownerId, type, "Fetcher", PetSex.MALE);
         for (Need need : Need.values()) result.need(need, 80);
         runtime.store().add(result); runtime.remember(result, body); return result;
     }

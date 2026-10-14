@@ -47,7 +47,7 @@ final class PetMoments {
                 && pet.need(Need.MOOD) >= runtime.config().belly().minMood()
                 && pet.activity() == Activity.NONE && pet.fetch() == null && !gifts.containsKey(pet)
                 && body.isValid() && body.isOnGround() && !body.isInWater() && body.getTarget() == null
-                && owner != null && owner.isOnline() && owner.getUniqueId().equals(pet.ownerId())
+                && owner != null && owner.isOnline() && runtime.owns(pet, owner)
                 && owner.getWorld().equals(body.getWorld()) && owner.getLocation().distanceSquared(body.getLocation()) <= 36
                 && !runtime.sessions().resting(pet.id(), System.currentTimeMillis())
                 && !(runtime.sessions().training(owner.getUniqueId()) instanceof TrainingSession s && s.petId().equals(pet.id()));

@@ -26,7 +26,7 @@ class RelationshipMemoryTest {
     }
     @Test void ownershipTransferClearsMemoriesAndAnticipationWithoutGrantingRights() {
         var owner = UUID.randomUUID(); var person = UUID.randomUUID();
-        var pet = new Pet(UUID.randomUUID(), owner, "wolf", "Toby", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner, "wolf", "Toby", PetSex.MALE);
         pet.carers().reinforce(person, 50, 1000, 0); pet.friends().reinforce(UUID.randomUUID(), 50, 1000, 0);
         assertEquals(owner, pet.ownerId()); pet.toyExcitedUntilMillis(10000); pet.ownerId(UUID.randomUUID());
         assertTrue(pet.carers().entries().isEmpty()); assertTrue(pet.friends().entries().isEmpty());

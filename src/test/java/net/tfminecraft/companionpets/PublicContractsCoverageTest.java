@@ -26,9 +26,9 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 
 class PublicContractsCoverageTest {
     JavaPlugin plugin;
-    @BeforeEach void start() { MockBukkit.mock(); plugin=MockBukkit.createMockPlugin(); }
+    @BeforeEach void start() { MockBukkit.mock(); plugin=net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(); }
     @AfterEach void stop() { MockBukkit.unmock(); }
-    Pet pet() { return new Pet(UUID.randomUUID(),UUID.randomUUID(),"dog","Toby",PetSex.MALE); }
+    Pet pet() { return net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(),UUID.randomUUID(),"dog","Toby",PetSex.MALE); }
     CompanionConfig config(String yaml) throws Exception {
         var source=new YamlConfiguration(); source.loadFromString(yaml); return CompanionConfig.load(plugin,source);
     }

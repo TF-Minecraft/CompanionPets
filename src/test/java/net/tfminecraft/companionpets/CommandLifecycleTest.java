@@ -18,7 +18,7 @@ class CommandLifecycleTest {
     @BeforeEach void setup() {
         server = MockBukkit.mock();
         server.addSimpleWorld("world");
-        plugin = MockBukkit.load(PetsPlugin.class);
+        plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.load(PetsPlugin.class);
         player = server.addPlayer();
         player.openInventory(server.createInventory(null, 9));
     }

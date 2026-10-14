@@ -50,7 +50,7 @@ class StaffMenusCoverageTest {
         staff = server.addPlayer("Staff");
         staff.setOp(true);
         owner = server.addPlayer("Owner");
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var yaml = new YamlConfiguration();
         yaml.loadFromString("pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, default-tricks: []}}");
         var custom = new ArrayList<String>();
@@ -81,7 +81,7 @@ class StaffMenusCoverageTest {
     }
 
     private Pet pet(String name) {
-        var pet = new Pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", name, PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "wolf", name, PetSex.FEMALE);
         pet.stored(true);
         runtime.store().add(pet);
         return pet;
@@ -163,7 +163,7 @@ class StaffMenusCoverageTest {
     @Test void ownerListPaginationSelectsTheActualPetOnTheSecondPage() {
         var pets = new ArrayList<Pet>();
         for (int i = 0; i < 47; i++) pets.add(pet("Pet " + String.format("%02d", i)));
-        var outsider = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Pet 00", PetSex.MALE);
+        var outsider = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Pet 00", PetSex.MALE);
         outsider.stored(true);
         runtime.store().add(outsider);
         menus.list(staff, owner.getUniqueId(), 0);

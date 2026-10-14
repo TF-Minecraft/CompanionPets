@@ -38,7 +38,7 @@ final class PetGreetings {
         }
         // Saved pets are stamped when they leave the Pet House, so they need no tick here.
         for (Pet pet : runtime.store().active()) {
-            Player owner = Bukkit.getPlayer(pet.ownerId());
+            Player owner = runtime.owner(pet);
             boolean near = owner != null && owner.isOnline()
                     && runtime.distance(owner, pet) <= runtime.config().greeting().nearRadius();
             if (pet.lastOwnerNearbyMillis() == 0) {
@@ -63,19 +63,19 @@ final class PetGreetings {
         if (pet.stored() || pet.dead() || !runtime.behaves(pet, PetBehavior.RECOGNIZE_CARERS)
                 || !(runtime.entity(pet) instanceof Mob body)) return;
         for (var entry : List.copyOf(pet.carers().entries().entrySet())) {
-            Player person = Bukkit.getPlayer(entry.getKey());
+            Player person = runtime.person(entry.getKey());
             if (person == null || !person.isOnline() || !person.getWorld().equals(body.getWorld())
-                    || person.getUniqueId().equals(pet.ownerId()) || runtime.distance(person, pet) > 6) continue;
+                    || runtime.owns(pet, person) || runtime.distance(person, pet) > 6) continue;
             var memory = entry.getValue();
             if (!active(pet) && memory.trust() >= net.tfminecraft.companionpets.pet.RelationshipMemory.FAMILIAR_AT
                     && now - memory.nearbyAt() >= 60_000 && now - memory.greetedAt() >= 120_000
-                    && trigger(pet, person, now)) pet.carers().greeted(person.getUniqueId(), now);
-            pet.carers().nearby(person.getUniqueId(), now);
+                    && trigger(pet, person, now)) pet.carers().greeted(runtime.characterId(person), now);
+            pet.carers().nearby(runtime.characterId(person), now);
         }
     }
 
     void ownerDeparted(Player owner, long now) {
-        for (Pet pet : runtime.store().of(owner.getUniqueId())) {
+        for (Pet pet : runtime.owned(owner)) {
             if (!pet.stored() && runtime.distance(owner, pet) <= runtime.config().greeting().nearRadius())
                 pet.lastOwnerNearbyMillis(now);
         }
@@ -85,8 +85,8 @@ final class PetGreetings {
 
     boolean trigger(Pet pet, Player owner, long now) {
         if (!(runtime.entity(pet) instanceof Mob body) || !ready(pet, body, owner, now)) return false;
-        boolean reunion = pet.ownerId().equals(owner.getUniqueId());
-        GreetingMood feeling = GreetingMood.of(pet, reunion ? pet.bond() : pet.carers().trust(owner.getUniqueId()));
+        boolean reunion = runtime.owns(pet, owner);
+        GreetingMood feeling = GreetingMood.of(pet, reunion ? pet.bond() : pet.carers().trust(runtime.characterId(owner)));
         boolean mobile = reunion && feeling.mobile() && (runtime.behaves(pet, PetBehavior.GREETING_CIRCLES)
                 || runtime.behaves(pet, PetBehavior.GREETING_APPROACH));
         actions.clearInteractions(pet);
@@ -125,9 +125,9 @@ final class PetGreetings {
                 && !pet.stored() && !pet.dead() && pet.fetch() == null
                 && (pet.activity() == Activity.NONE || pet.activity() == Activity.SLEEPING)
                 && body.isValid() && !body.isDead() && !body.isInWater() && body.getTarget() == null
-                && owner != null && owner.isOnline() && (pet.ownerId().equals(owner.getUniqueId())
-                        || runtime.behaves(pet, PetBehavior.RECOGNIZE_CARERS) && pet.carers().familiar(owner.getUniqueId()))
-                && (pet.ownerId().equals(owner.getUniqueId()) || !runtime.visual().holdsMovement(body) && !actions.social().engaged(pet))
+                && owner != null && owner.isOnline() && (runtime.owns(pet, owner)
+                        || runtime.behaves(pet, PetBehavior.RECOGNIZE_CARERS) && pet.carers().familiar(runtime.characterId(owner)))
+                && (runtime.owns(pet, owner) || !runtime.visual().holdsMovement(body) && !actions.social().engaged(pet))
                 && body.getWorld().equals(owner.getWorld())
                 && runtime.distance(owner, pet) <= runtime.config().greeting().nearRadius()
                 && !runtime.sessions().resting(pet.id(), now)
@@ -145,7 +145,7 @@ final class PetGreetings {
                         || pet.staying() || now < pet.forcedSitUntilMillis() || !mood(pet, greeting).mobile()
                         : pet.activity() != greeting.previousActivity || pet.order() != greeting.previousOrder
                                 || pet.staying() != greeting.previousStaying || pet.forcedSitUntilMillis() != greeting.previousForcedSit)
-                || !owner.isOnline() || !pet.ownerId().equals(greeting.ownerId)
+                || !owner.isOnline() || !net.tfminecraft.companionpets.ownership.CharacterAccess.current(greeting.session) || !pet.ownerId().equals(greeting.ownerId)
                 || !body.isValid() || body.isDead() || runtime.entity(pet) != body
                 || !owner.getWorld().equals(body.getWorld()) || body.getTarget() != null || body.isInWater()
                 || !runtime.behaves(pet, PetBehavior.GREETING) || !runtime.config().moments().enabled() || !runtime.config().greeting().enabled()
@@ -344,7 +344,7 @@ final class PetGreetings {
     private static long millis(double seconds) { return Math.round(seconds * 1000); }
     private static double square(double value) { return value * value; }
     private GreetingMood mood(Pet pet, Greeting job) {
-        return GreetingMood.of(pet, job.reunion ? pet.bond() : pet.carers().trust(job.owner.getUniqueId()));
+        return GreetingMood.of(pet, job.reunion ? pet.bond() : pet.carers().trust(runtime.characterId(job.owner)));
     }
     private boolean occupiedSlot(UUID recipient, int slot) {
         return active.values().stream().anyMatch(g -> g.mobile && g.owner.getUniqueId().equals(recipient) && g.slot == slot);
@@ -382,9 +382,11 @@ final class PetGreetings {
         int meows;
         long pauseUntil;
 
+        private final net.tfminecraft.companionpets.ownership.OwnerSession session;
         Greeting(Mob body, Player owner, Pet pet, long until, double angle, int direction, boolean mobile, boolean reunion, int slot) {
             this.body = body;
             this.owner = owner;
+            this.session = net.tfminecraft.companionpets.ownership.CharacterAccess.capture(owner);
             this.until = until;
             this.angle = angle;
             this.direction = direction;

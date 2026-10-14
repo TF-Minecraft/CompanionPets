@@ -36,7 +36,7 @@ class PetVisualTickerTest {
                 assertEquals(Particle.SPLASH,particle); assertEquals(24,count); splashes++;
             }
         };
-        server.addWorld(world); var owner=server.addPlayer(); var plugin=MockBukkit.createMockPlugin();
+        server.addWorld(world); var owner=server.addPlayer(); var plugin=net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var yaml=new YamlConfiguration(); yaml.loadFromString("""
             pets:
               dog:
@@ -65,7 +65,7 @@ class PetVisualTickerTest {
         };
         var key=new NamespacedKey(plugin,"pet"); store=new PetStore(plugin); assertTrue(store.load());
         runtime=new PetRuntime(plugin,CompanionConfig.load(plugin,yaml),store,new Sessions(),new Bodies(plugin,key,visual),visual,key,new NamespacedKey(plugin,"toy"));
-        pet=new Pet(UUID.randomUUID(),owner.getUniqueId(),"dog","Toby",PetSex.MALE);
+        pet=net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(),owner.getUniqueId(),"dog","Toby",PetSex.MALE);
         pet.stored(false); store.add(pet); body=new ShakingWolf(server);
         body.teleport(new Location(world,0,64,0)); server.registerEntity(body); runtime.remember(pet,body);
         assertTrue(runtime.config().type("dog").appearance().modeled());

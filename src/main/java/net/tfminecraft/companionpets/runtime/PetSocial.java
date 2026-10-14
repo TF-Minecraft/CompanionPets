@@ -106,7 +106,7 @@ final class PetSocial {
     }
 
     boolean calm(Player player, Pet pet) {
-        if (!pet.ownerId().equals(player.getUniqueId()) && !player.hasPermission("companionpets.test")) return false;
+        if (!runtime.owns(pet, player) && !player.hasPermission("companionpets.test")) return false;
         for (var entry : List.copyOf(active.entrySet())) {
             Encounter e = entry.getValue();
             if (e.phase != Phase.BARK || e.a != pet && e.b != pet) continue;
@@ -135,7 +135,7 @@ final class PetSocial {
     boolean trigger(Player owner, Pet pet, String kind, long now) {
         Mob body = body(pet);
         if (!runtime.config().social().enabled() || body == null || !available(pet)
-                || !pet.ownerId().equals(owner.getUniqueId())) return false;
+                || !runtime.owns(pet, owner)) return false;
         Pet other = null;
         Mob otherBody = null;
         double best = square("greeting".equals(kind) ? runtime.config().social().greetingRadius()
@@ -164,7 +164,7 @@ final class PetSocial {
         boolean territorial = a.personality() == PetPersonality.TERRITORIAL && b.personality() == PetPersonality.TERRITORIAL;
         String choice = forced;
         if (choice == null) {
-            double barkChance = (a.ownerId().equals(b.ownerId()) ? settings.sameOwnerBarkChance()
+            double barkChance = (java.util.Objects.equals(a.ownerCharacterId(), b.ownerCharacterId()) ? settings.sameOwnerBarkChance()
                     : settings.territorialBarkChance()) * (1 - 0.8 * friendship(a, b) / 100);
             if (territorial && friendship(a, b) < RelationshipMemory.FAMILIAR_AT && both(a, b, PetBehavior.SOCIAL_PROTEST)
                     && bodyA.getLocation().distanceSquared(bodyB.getLocation()) <= square(settings.barkRadius())
@@ -338,10 +338,11 @@ final class PetSocial {
     }
 
     private boolean ownersNearby(Pet a, Mob bodyA, Pet b, Mob bodyB) {
-        return ownersNearby(Bukkit.getPlayer(a.ownerId()), bodyA, Bukkit.getPlayer(b.ownerId()), bodyB);
+        return ownersNearby(runtime.owner(a), bodyA, runtime.owner(b), bodyB);
     }
     private boolean ownersNearby(Encounter e, Mob a, Mob b) {
         return e.a.ownerId().equals(e.ownerIdA) && e.b.ownerId().equals(e.ownerIdB)
+                && (e.ownerA == null || runtime.owns(e.a, e.ownerA)) && (e.ownerB == null || runtime.owns(e.b, e.ownerB))
                 && ownersNearby(e.ownerA, a, e.ownerB, b);
     }
     private boolean ownersNearby(Player a, Mob bodyA, Player b, Mob bodyB) {
@@ -351,7 +352,7 @@ final class PetSocial {
                 || bNear && a == null && near(b, bodyA, radius);
     }
     private boolean ownersStationary(Pet a, Pet b, long now) {
-        Player first = Bukkit.getPlayer(a.ownerId()), second = Bukkit.getPlayer(b.ownerId());
+        Player first = runtime.owner(a), second = runtime.owner(b);
         return (first == null || roaming.ownerStationary(first, now)) && (second == null || roaming.ownerStationary(second, now));
     }
     private static boolean near(Player owner, Mob body, double radius) {
@@ -422,7 +423,7 @@ final class PetSocial {
         Encounter(Pet a, Pet b, Phase phase, long now, boolean automatic, PetMeetingMood moodA, PetMeetingMood moodB) {
             this.a = a; this.b = b; this.phase = phase; startedAt = now; this.automatic = automatic;
             this.moodA = moodA; this.moodB = moodB;
-            ownerA = Bukkit.getPlayer(a.ownerId()); ownerB = Bukkit.getPlayer(b.ownerId());
+            ownerA = runtime.owner(a); ownerB = runtime.owner(b);
             ownerIdA = a.ownerId(); ownerIdB = b.ownerId();
             startA = body(a).getLocation(); startB = body(b).getLocation(); nextFxAt = now + 1500;
         }

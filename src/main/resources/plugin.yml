@@ -49,4 +49,5 @@ permissions:
     description: Give configured eggs
     default: op
 
-softdepend: [MythicMobs, ModelEngine, ItemsAdder, MMOItems, MythicLib]
+depend: [TLibs]
+softdepend: [RPCharacters, MythicMobs, ModelEngine, ItemsAdder, MMOItems, MythicLib]

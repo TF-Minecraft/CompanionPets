@@ -58,7 +58,7 @@ class CustomTrickTest {
     }
 
     @Test void customIdsKeepWordsAndProgressWithoutAnActiveDefinition() {
-        Pet pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "beagle", "Dog", PetSex.MALE);
+        Pet pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "beagle", "Dog", PetSex.MALE);
         Trick original = Trick.valueOf("salute");
         pet.bindWord("hello", original); pet.progress(original, 75);
         Trick restored = Trick.valueOf(original.name());

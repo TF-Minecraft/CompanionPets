@@ -31,7 +31,7 @@ class ItemConfigTest {
                     toys: [FEATHER]
                 """);
         legacy.setDefaults(bundled);
-        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), legacy);
+        var config = CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), legacy);
         var defaults = PetItems.defaults();
         assertEquals(defaults.foods(), config.items().foods());
         assertEquals(defaults.treats(), config.items().treats());
@@ -50,7 +50,7 @@ class ItemConfigTest {
         var legacy = new YamlConfiguration();
         legacy.loadFromString("pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}}");
         legacy.setDefaults(bundled);
-        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), legacy);
+        var config = CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), legacy);
         assertEquals(PetItems.defaults(), config.items());
         assertEquals(PetItems.defaults(), config.type("wolf").items());
     }
@@ -84,7 +84,7 @@ class ItemConfigTest {
                   wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}
                   cat: {entity: CAT, egg: CAT_SPAWN_EGG, items: {toys: [BONE]}}
                 """);
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var config = CompanionConfig.load(plugin, yaml);
         var stick = net.tfminecraft.companionpets.item.HeldItem.of(new org.bukkit.inventory.ItemStack(org.bukkit.Material.STICK));
         assertEquals(java.util.Set.of(config.type("wolf")), config.toyTypes(stick));
@@ -127,7 +127,7 @@ class ItemConfigTest {
     @Test void shippedConfigContainsValidSelectorsAndFoodLists() {
         var yaml = YamlConfiguration.loadConfiguration(new InputStreamReader(
                 getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
-        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        var config = CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), yaml);
         assertEquals(java.util.List.of(ItemRef.parse("mmoitems:PETS:FISH_SNACK"),
                 ItemRef.parse("mmoitems:PETS:BISCUIT_TREAT")),
                 config.items().treats());
@@ -198,7 +198,7 @@ class ItemConfigTest {
                     egg: m.pets.pet_other_egg
                     egg-custom-model-data: 12003
                 """);
-        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        var config = CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), yaml);
         assertEquals(3, config.types().size());
         assertEquals(java.util.List.of(ItemRef.parse("m.pets.caring_item")), config.items().brushes());
         assertEquals(ItemRef.parse("ia.tfmc:pet_house_token"), config.kennel());

@@ -78,7 +78,7 @@ class PetSoundsTest {
                   parrot: {entity: PARROT, egg: PARROT_SPAWN_EGG}
                   horse: {entity: HORSE, egg: HORSE_SPAWN_EGG}
                 """);
-        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        var config = CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), yaml);
         assertEquals(java.util.Set.of("dog", "cat"), config.types().keySet());
         assertFalse(config.type("dog").nativeCombat());
     }
@@ -89,7 +89,7 @@ class PetSoundsTest {
                   rabbit: {species: dog, voice: rabbit, egg: RABBIT_SPAWN_EGG}
                   pig: {species: cat, voice: pig, egg: PIG_SPAWN_EGG}
                 """);
-        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        var config = CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), yaml);
         for (String entity : List.of("rabbit", "pig")) {
             var voice = config.type(entity).sounds();
             assertFalse(voice.nativeSounds());

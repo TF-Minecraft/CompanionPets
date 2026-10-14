@@ -47,7 +47,7 @@ class BehaviorProfileTest {
               dog: {entity: WOLF, egg: WOLF_SPAWN_EGG}
               cat: {entity: CAT, egg: CAT_SPAWN_EGG}
             """);
-        var config = CompanionConfig.load(MockBukkit.createMockPlugin(), yaml);
+        var config = CompanionConfig.load(net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), yaml);
         assertEquals(BehaviorProfile.CAT, config.type("fox").behavior());
         assertEquals("minecraft:entity.fox.ambient", config.type("fox").sounds().cue(PetSounds.Event.GREETING).sounds().getFirst());
         assertEquals(BehaviorProfile.DOG, config.type("exuberant").behavior());
@@ -57,7 +57,7 @@ class BehaviorProfileTest {
     }
     @Test void obsoleteListsAreIgnoredWithOneWarningAndUnknownProfilesListTheValidChoices() throws Exception {
         var warnings = new java.util.ArrayList<String>();
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         Handler handler = new Handler() {
             public void publish(LogRecord record) { warnings.add(record.getMessage()); }
             public void flush() { } public void close() { }

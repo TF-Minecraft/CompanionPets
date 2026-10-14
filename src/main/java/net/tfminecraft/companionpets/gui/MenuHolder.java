@@ -14,6 +14,10 @@ public final class MenuHolder implements InventoryHolder {
     }
 
     private final Kind kind;
+    private net.tfminecraft.companionpets.ownership.OwnerSession session;
+    public void capture(org.bukkit.entity.Player player) { session = net.tfminecraft.companionpets.ownership.CharacterAccess.capture(player); }
+    public boolean current(org.bukkit.entity.Player player) { return session != null && session.account().equals(player.getUniqueId())
+            && net.tfminecraft.companionpets.ownership.CharacterAccess.current(session); }
     private final UUID petId;
     private final String word;
     private Inventory inventory;

@@ -51,7 +51,7 @@ class PetSpacingTest {
         };
         server.addWorld(world); elsewhere = server.addSimpleWorld("elsewhere");
         owner = server.addPlayer(); owner.teleport(new Location(world, 0, 64, 0));
-        var plugin = MockBukkit.createMockPlugin();
+        var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         var yaml = new YamlConfiguration();
         yaml.loadFromString("pets: {wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG}}\n");
         var visual = new PetVisual() {
@@ -66,7 +66,7 @@ class PetSpacingTest {
     @AfterEach void cleanup() { runtime.store().close(); MockBukkit.unmock(); }
 
     private Pet record(UUID id, UUID ownerId, Location at) {
-        Pet pet = new Pet(id, ownerId, "wolf", "Friend", PetSex.MALE);
+        Pet pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, ownerId, "wolf", "Friend", PetSex.MALE);
         pet.place(at.getWorld().getName(), at.getX(), at.getY(), at.getZ(), at.getYaw());
         pet.entityId(UUID.randomUUID()); runtime.store().add(pet);
         return pet;

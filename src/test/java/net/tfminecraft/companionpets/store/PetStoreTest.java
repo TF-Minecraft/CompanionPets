@@ -57,9 +57,210 @@ class PetStoreTest {
         return new PetStore(new File(directory.toFile(), "pets.yml"), logger);
     }
 
+    @Test
+    void sixtyPetsWithEmptyRowListsSurviveOrdinarySaveAndReload() throws Exception {
+        var current = store();
+        assertTrue(current.load());
+        UUID account = UUID.randomUUID(), character = UUID.randomUUID();
+        var ids = new ArrayList<UUID>();
+        for (int i = 0; i < 60; i++) {
+            var pet = new Pet(UUID.randomUUID(), account, "wolf", "Pet " + i, PetSex.MALE);
+            pet.ownership(account, character);
+            pet.bond(i);
+            current.add(pet);
+            ids.add(pet.id());
+        }
+        assertTrue(current.save());
+        String saved = Files.readString(directory.resolve("pets.yml"));
+        assertTrue(saved.lines().filter(line -> line.contains("*id")).count() > 50);
+        assertTrue(current.close());
+        var restored = store();
+        assertTrue(restored.load());
+        assertEquals(60, restored.all().size());
+        for (int i = 0; i < ids.size(); i++) {
+            var pet = restored.get(ids.get(i));
+            assertEquals("Pet " + i, pet.name());
+            assertEquals(account, pet.ownerId());
+            assertEquals(character, pet.ownerCharacterId());
+            assertEquals(i, pet.bond());
+            assertTrue(pet.words().isEmpty());
+            assertTrue(pet.announcedLowView().isEmpty());
+        }
+        assertTrue(restored.close());
+    }
+
+    @Test
+    void deferredHeirsMigrateSixtyPetsAfterGameplaySaveAndCloseWithoutRecoveryMarker()
+            throws Exception {
+        org.mockbukkit.mockbukkit.MockBukkit.mock();
+        try {
+            var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
+            UUID account = UUID.randomUUID(), character = UUID.randomUUID();
+            var identity = mock(net.tfminecraft.tlibs.character.CharacterIdentity.class);
+            var ready = new AtomicBoolean();
+            when(identity.legacyHeirsReady()).thenAnswer(call -> ready.get());
+            when(identity.legacyHeir(account)).thenReturn(java.util.Optional.of(
+                    new net.tfminecraft.tlibs.character.CharacterRef(account, character)));
+            org.bukkit.Bukkit.getServicesManager().register(
+                    net.tfminecraft.tlibs.character.CharacterIdentity.class, identity, plugin,
+                    org.bukkit.plugin.ServicePriority.Highest);
+            var current = store();
+            assertTrue(current.load());
+            var ids = new ArrayList<UUID>();
+            for (int i = 0; i < 60; i++) {
+                var pet = new Pet(UUID.randomUUID(), account, "cat", "Legacy " + i, PetSex.FEMALE);
+                current.add(pet);
+                ids.add(pet.id());
+            }
+            assertTrue(current.beginSession());
+            assertFalse(current.migrate());
+            current.get(ids.getFirst()).bond(73);
+            assertTrue(current.save());
+            assertTrue(Files.exists(directory.resolve("pets-recovery-required")));
+            ready.set(true);
+            assertTrue(current.migrate());
+            assertTrue(current.ownershipReady());
+            for (UUID id : ids) assertEquals(character, current.get(id).ownerCharacterId());
+            assertEquals(73, current.get(ids.getFirst()).bond());
+            assertTrue(current.close());
+            assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+            var restored = store();
+            assertTrue(restored.load());
+            assertTrue(restored.migrate());
+            assertEquals(60, restored.all().size());
+            for (UUID id : ids) assertEquals(character, restored.get(id).ownerCharacterId());
+            assertEquals(73, restored.get(ids.getFirst()).bond());
+            assertTrue(restored.close());
+            assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+        } finally {
+            org.mockbukkit.mockbukkit.MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void nullKennelRootCanGainAHouseAndCloseWithoutLosingUnknownNullMetadata() throws Exception {
+        Files.writeString(directory.resolve("pets.yml"),
+                "version: 1\npets: {}\nkennels: null\nfuture-root: {kept: null, value: unchanged}\n");
+        var current = store();
+        assertTrue(current.load());
+        assertTrue(current.beginSession());
+        UUID account = UUID.randomUUID(), character = UUID.randomUUID();
+        current.kennel("unloaded,1,2,3", account, character);
+        assertTrue(current.save());
+        assertTrue(current.close());
+        assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+        var restored = store();
+        assertTrue(restored.load());
+        assertEquals(account, restored.kennelOwner("unloaded,1,2,3"));
+        assertEquals(character, restored.kennelCharacter("unloaded,1,2,3"));
+        var raw = net.tfminecraft.companionpets.ownership.OwnershipMigration.raw(
+                Files.readString(directory.resolve("pets.yml")));
+        var unknown = (Map<?, ?>) raw.get("future-root");
+        assertTrue(unknown.containsKey("kept"));
+        assertNull(unknown.get("kept"));
+        assertEquals("unchanged", unknown.get("value"));
+        assertTrue(restored.close());
+    }
+
+    @Test void sourcePresenceChangesRemainHeldUntilReviewedReloadAndNeverOverwriteExternalBytes() throws Exception {
+        var absent=store();assertTrue(absent.load());String external="pets: {}\nexternal: preserved\n";Files.writeString(directory.resolve("pets.yml"),external);
+        assertFalse(absent.save());assertTrue(absent.persistenceConflict());assertEquals(external,Files.readString(directory.resolve("pets.yml")));
+        var known=store();assertTrue(known.load());Files.delete(directory.resolve("pets.yml"));
+        assertFalse(known.save());assertTrue(known.persistenceConflict());assertFalse(Files.exists(directory.resolve("pets.yml")));
+        Files.writeString(directory.resolve("pets.yml"),external);assertFalse(known.save());assertEquals(external,Files.readString(directory.resolve("pets.yml")));
+        assertTrue(known.load());assertTrue(known.save());
+    }
+    @Test void duplicateKennelsAndMalformedSchemaCannotCollapseOrRewriteRawSource() throws Exception {
+        String one=UUID.randomUUID().toString(),two=UUID.randomUUID().toString();
+        for(String secondOwner:List.of(one,two)) {
+            String original="pets: {}\nkennels:\n- {world: missing, x: 1, y: 2, z: 3, owner: "+one+", metadata: first}\n- {world: missing, x: 1, y: 2, z: 3, owner: "+secondOwner+", metadata: second}\n";
+            Files.writeString(directory.resolve("pets.yml"),original);var current=store();assertFalse(current.load());assertFalse(current.save());
+            assertEquals(original,Files.readString(directory.resolve("pets.yml")));
+        }
+        for(String version:List.of("'2'","2.5","null")) {
+            String original="identity-version: "+version+"\npets: {}\nkennels: []\n";Files.writeString(directory.resolve("pets.yml"),original);
+            var current=store();assertFalse(current.load());assertFalse(current.save());assertEquals(original,Files.readString(directory.resolve("pets.yml")));
+        }
+    }
+    @Test void ownershipPublicationRequiresAtomicMoveAndOrdinarySaveRetainsItsEstablishedFallback() throws Exception {
+        var current=store();assertTrue(current.load());var pet=net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(),UUID.randomUUID(),"wolf","Before",PetSex.MALE);current.add(pet);assertTrue(current.save());
+        String before=Files.readString(directory.resolve("pets.yml"));assertTrue(current.close());
+        current=store();assertTrue(current.load());current.get(pet.id()).name("After");
+        writerWithMoves(current, call -> {
+            if (call.getArgument(1, Path.class).equals(directory.resolve("pets.yml"))) {
+                var options = (CopyOption[]) call.getRawArguments()[2];
+                if (java.util.Arrays.asList(options).contains(StandardCopyOption.ATOMIC_MOVE))
+                    throw new AtomicMoveNotSupportedException("source", "target", "fixture");
+            }
+            return call.callRealMethod();
+        });
+        assertFalse(current.saveOwnership());
+        assertEquals(before, Files.readString(directory.resolve("pets.yml")));
+        assertTrue(current.save());
+        assertTrue(Files.readString(directory.resolve("pets.yml")).contains("After"));
+        assertTrue(current.close());
+    }
+
+    @Test void legacyCarersAreInertUntilReadyAndLiveMigrationRetainsTheExistingPetObject() throws Exception {
+        var server=org.mockbukkit.mockbukkit.MockBukkit.mock();
+        var plugin=net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
+        try {
+            UUID id=UUID.randomUUID(),account=UUID.randomUUID();
+            Files.writeString(directory.resolve("pets.yml"),"pets:\n  "+id+":\n    owner: "+account+"\n    type: wolf\n    carers:\n      "+account+": {trust: 14}\n    friends: {future-id: {future-field: null}}\nkennels: [{world: missing, x: 1, y: 2, z: 3, owner: "+account+"}]\n");
+            var current=store();assertTrue(current.load());Pet existing=current.get(id);assertTrue(existing.carers().entries().isEmpty());assertTrue(current.save());
+            assertNotNull(net.tfminecraft.companionpets.ownership.OwnershipMigration.read(directory.resolve("pets.yml")).get("pets."+id+".carers."+account));
+            assertTrue(current.beginSession());existing.ownershipHeld(true);existing.bond(59);current.requestSave();current.flush();assertTrue(current.migrate());
+            assertEquals(59,net.tfminecraft.companionpets.ownership.OwnershipMigration.read(directory.resolve("pets.yml")).getDouble("pets."+id+".bond"));
+            assertSame(existing,current.get(id));assertTrue(existing.ownershipHeld());existing.ownershipHeld(false);
+            assertEquals(account,existing.ownerCharacterId());assertEquals(14,existing.carers().trust(account));
+            assertTrue(current.unassigned().isEmpty());current.holdKennel("missing,1,2,3",true);existing.ownershipHeld(true);assertEquals(2,current.unassigned().size());
+            assertTrue(current.close());
+        } finally { org.mockbukkit.mockbukkit.MockBukkit.unmock(); }
+    }
+    @Test void externalWriterConflictAndInvalidMigrationFreezeSavingWithoutOverwritingEvidence() throws Exception {
+        var server=org.mockbukkit.mockbukkit.MockBukkit.mock();var plugin=net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
+        try {
+            var current=store();assertTrue(current.load());var pet=net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(),UUID.randomUUID(),"wolf","Toby",PetSex.MALE);current.add(pet);assertTrue(current.save());
+            String external=Files.readString(directory.resolve("pets.yml"))+"external-progress: preserved\n";Files.writeString(directory.resolve("pets.yml"),external);
+            assertFalse(current.save());assertTrue(current.persistenceConflict());assertTrue(pet.ownershipHeld());assertEquals(external,Files.readString(directory.resolve("pets.yml")));
+            Files.writeString(directory.resolve("pets.yml"),"identity-version: 99\npets: {}\n");assertFalse(current.migrate());assertFalse(current.save());
+            org.bukkit.Bukkit.getServicesManager().unregisterAll(plugin);assertFalse(current.migrate());
+        } finally { org.mockbukkit.mockbukkit.MockBukkit.unmock(); }
+    }
+
+    @Test void inertUnsupportedRelationshipPayloadsCannotBeOverwrittenByNewGameplayMemories() throws Exception {
+        UUID id=UUID.randomUUID(),account=UUID.randomUUID(),character=UUID.randomUUID(),carer=UUID.randomUUID(),friend=UUID.randomUUID();
+        String original="identity-version: 2\npets:\n  "+id+":\n    owner: "+account+"\n    owner-character: "+character+"\n    type: wolf\n    carers-characters: true\n    carers: {"+carer+": future-format}\n    friends: {"+friend+": null}\nkennels: []\n";
+        Files.writeString(directory.resolve("pets.yml"),original);var current=store();assertTrue(current.load());var pet=current.get(id);
+        pet.carers().reinforce(carer,20,1000,0);pet.friends().reinforce(friend,20,1000,0);pet.bond(77);assertTrue(current.save());assertTrue(current.close());
+        var restarted=store();assertTrue(restarted.load());assertEquals(77,restarted.get(id).bond());assertTrue(restarted.get(id).carers().entries().isEmpty());assertTrue(restarted.get(id).friends().entries().isEmpty());
+        var raw=net.tfminecraft.companionpets.ownership.OwnershipMigration.raw(Files.readString(directory.resolve("pets.yml")));
+        var row=(Map<?,?>)((Map<?,?>)raw.get("pets")).get(id.toString());assertEquals("future-format",((Map<?,?>)row.get("carers")).get(carer.toString()));
+        var friends=(Map<?,?>)row.get("friends");assertTrue(friends.containsKey(friend.toString()));assertNull(friends.get(friend.toString()));
+    }
+    @Test void unknownNullFieldsAndRelationshipMetadataSurviveGameplaySaveAndRestart() throws Exception {
+        UUID id=UUID.randomUUID(), account=UUID.randomUUID(), character=UUID.randomUUID(), carer=UUID.randomUUID(), friend=UUID.randomUUID();
+        String text="future-root: {kept: null}\nidentity-version: 2\npets:\n  "+id+":\n    owner: "+account+"\n    owner-character: "+character
+                +"\n    type: missing-config\n    future: {kept: null}\n    carers-characters: true\n    carers:\n      "+carer+": {trust: 20, unknown: null}\n    friends:\n      "+friend
+                +": {trust: 15, unknown: null}\n    words: [{word: sit, trick: SIT, unknown: null}, {word: future, trick: FUTURE, unknown: null}]\n    carried-toy: STICK\nkennels: [{world: missing, x: 1, y: 2, z: 3, owner: "+account+", owner-character: "+character+", unknown: null}]\n";
+        Files.writeString(directory.resolve("pets.yml"),text);
+        var first=store();assertTrue(first.load());first.get(id).bond(73);first.get(id).carriedToy(null);assertTrue(first.save());
+        var second=store();assertTrue(second.load());second.get(id).need(Need.HUNGER,42);assertTrue(second.save());
+        var raw=net.tfminecraft.companionpets.ownership.OwnershipMigration.raw(Files.readString(directory.resolve("pets.yml")));
+        assertTrue(((Map<?,?>)raw.get("future-root")).containsKey("kept"));
+        var row=(Map<?,?>)((Map<?,?>)raw.get("pets")).get(id.toString());assertFalse(row.containsKey("carried-toy"));
+        assertTrue(((Map<?,?>)row.get("future")).containsKey("kept"));
+        for(String key:List.of("carers","friends")) {
+            var memory=(Map<?,?>)((Map<?,?>)row.get(key)).values().iterator().next();assertTrue(memory.containsKey("unknown"));assertNull(memory.get("unknown"));
+        }
+        var words=(List<?>)row.get("words");assertEquals(2,words.size());assertTrue(((Map<?,?>)words.getFirst()).containsKey("unknown"));
+        assertTrue(((Map<?,?>)((List<?>)raw.get("kennels")).getFirst()).containsKey("unknown"));
+        assertEquals(73,second.get(id).bond());assertEquals(42,second.get(id).need(Need.HUNGER));
+    }
+
     @Test void capturedSnapshotCanBeWrittenOnAnotherThreadAfterLiveRecordsChange() throws Exception {
         var store = store(); assertTrue(store.load());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Before", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Before", PetSex.FEMALE);
         var friend = UUID.randomUUID();
         pet.carers().reinforce(friend, 20, 1000, 0);
         pet.bindWord("sit", Trick.SIT); pet.progress(Trick.SIT, 40);
@@ -106,26 +307,26 @@ class PetStoreTest {
 
     @Test void iterationSnapshotsStaySafeAcrossAddReplaceRemoveAndReload() {
         var store = store(); assertTrue(store.load());
-        var first = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
+        var first = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
         store.add(first); var before = store.all();
         assertThrows(UnsupportedOperationException.class, () -> before.clear());
-        var second = new Pet(UUID.randomUUID(), first.ownerId(), "cat", "Sol", PetSex.MALE);
+        var second = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), first.ownerId(), "cat", "Sol", PetSex.MALE);
         for (Pet pet : before) store.add(second);
         assertEquals(java.util.List.of(first), before); assertEquals(2, store.all().size());
-        var replacement = new Pet(first.id(), first.ownerId(), "cat", "Luna II", PetSex.FEMALE);
+        var replacement = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(first.id(), first.ownerId(), "cat", "Luna II", PetSex.FEMALE);
         store.add(replacement);
         assertTrue(store.all().contains(replacement)); assertFalse(store.all().contains(first));
         var deleting = store.all();
         for (Pet pet : deleting) assertTrue(store.remove(pet.id()));
         assertEquals(2, deleting.size()); assertTrue(store.all().isEmpty());
         assertTrue(store.save()); assertTrue(store.load()); assertTrue(store.all().isEmpty());
-        store.add(new Pet(UUID.randomUUID(), first.ownerId(), "cat", "New", PetSex.MALE));
+        store.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), first.ownerId(), "cat", "New", PetSex.MALE));
         assertEquals(1, store.all().size()); assertTrue(store.load()); assertTrue(store.all().isEmpty());
     }
 
     @Test void pendingChangesAreWrittenInTheBackgroundLikeADirectSave() throws Exception {
         var store = store(); assertTrue(store.load());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
         pet.bindWord("sit", Trick.SIT); pet.progress(Trick.SIT, 40); pet.favoriteToy("STICK");
         pet.carers().restore(UUID.randomUUID(), new net.tfminecraft.companionpets.pet.RelationshipMemory.Memory(12, 1, 2, 3));
         store.add(pet);
@@ -148,8 +349,8 @@ class PetStoreTest {
     @Test void activeOwnerAndBodyLookupsFollowRecordChanges() {
         var store = store(); assertTrue(store.load());
         var owner = UUID.randomUUID(); var body = UUID.randomUUID();
-        var out = new Pet(UUID.randomUUID(), owner, "cat", "Luna", PetSex.FEMALE);
-        var saved = new Pet(UUID.randomUUID(), owner, "cat", "Sol", PetSex.MALE); saved.stored(true);
+        var out = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner, "cat", "Luna", PetSex.FEMALE);
+        var saved = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner, "cat", "Sol", PetSex.MALE); saved.stored(true);
         store.add(out); store.add(saved);
         assertEquals(java.util.List.of(out), java.util.List.copyOf(store.active()));
         assertEquals(1, store.countOut(owner)); assertEquals(2, store.countPets(owner));
@@ -170,7 +371,7 @@ class PetStoreTest {
 
     @Test void carersAndPetFriendsSurviveRestartWithoutBecomingOwners() throws Exception {
         var first = store(); assertTrue(first.load());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
         var carer = UUID.randomUUID(); var friend = UUID.randomUUID();
         pet.carers().reinforce(carer, 20, 1000, 0); pet.carers().greeted(carer, 2000);
         pet.friends().reinforce(friend, 12, 3000, 0); first.add(pet); assertTrue(first.save());
@@ -187,7 +388,7 @@ class PetStoreTest {
     @Test void explicitStayAndLayPersistAsOrdersAcrossRestart() {
         var first = store(); assertTrue(first.load());
         for (PetOrder order : new PetOrder[]{PetOrder.STAY, PetOrder.LAY}) {
-            var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", order.name(), PetSex.MALE);
+            var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", order.name(), PetSex.MALE);
             pet.order(order); first.add(pet);
         }
         assertTrue(first.save()); var restored = store(); assertTrue(restored.load());
@@ -200,7 +401,7 @@ class PetStoreTest {
         UUID id = UUID.randomUUID();
         PetStore first = store();
         assertTrue(first.load());
-        Pet pet = new Pet(id, owner, "beagle", "Luna", PetSex.FEMALE);
+        Pet pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, owner, "beagle", "Luna", PetSex.FEMALE);
         pet.personality(PetPersonality.PLAYFUL);
         pet.bornAt(123456L);
         pet.lastOwnerNearbyMillis(123000L);
@@ -264,7 +465,7 @@ class PetStoreTest {
         UUID entity = UUID.randomUUID();
         PetStore current = store();
         assertTrue(current.load());
-        Pet pet = new Pet(id, owner, "wolf", "Outside", PetSex.MALE);
+        Pet pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, owner, "wolf", "Outside", PetSex.MALE);
         pet.place("world", -17.25, 81, 35.5, 120);
         pet.entityId(entity);
         pet.bindWord("sit", Trick.SIT);
@@ -294,7 +495,7 @@ class PetStoreTest {
         UUID id = UUID.randomUUID();
         PetStore first = store();
         assertTrue(first.load());
-        first.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        first.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
         first.save();
         Path primary = directory.resolve("pets.yml");
         Path backup = directory.resolve("pets.yml.bak");
@@ -323,7 +524,7 @@ class PetStoreTest {
         UUID newOwner = UUID.randomUUID();
         PetStore current = store();
         assertTrue(current.load());
-        Pet pet = new Pet(id, previousOwner, "wolf", "Rex", PetSex.MALE);
+        Pet pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, previousOwner, "wolf", "Rex", PetSex.MALE);
         current.add(pet);
         current.save();
         pet.ownerId(newOwner);
@@ -342,7 +543,7 @@ class PetStoreTest {
         UUID id = UUID.randomUUID();
         PetStore current = store();
         assertTrue(current.load());
-        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        current.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
         current.save();
         current.remove(id);
         current.save();
@@ -365,7 +566,7 @@ class PetStoreTest {
         UUID id = UUID.randomUUID();
         PetStore current = store();
         assertTrue(current.load());
-        Pet pet = new Pet(id, UUID.randomUUID(), "wolf", "Old name", PetSex.MALE);
+        Pet pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, UUID.randomUUID(), "wolf", "Old name", PetSex.MALE);
         current.add(pet);
         current.save();
         pet.name("New name");
@@ -380,7 +581,7 @@ class PetStoreTest {
         UUID id = UUID.randomUUID();
         PetStore current = store();
         assertTrue(current.load());
-        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        current.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
         assertTrue(current.save());
         String stalePrimary = Files.readString(directory.resolve("pets.yml"));
 
@@ -394,7 +595,7 @@ class PetStoreTest {
         Files.copy(directory.resolve("pets.yml.bak"), directory.resolve("pets.yml"), StandardCopyOption.REPLACE_EXISTING);
         assertNull(storePet(id));
         assertThrows(IllegalArgumentException.class,
-                () -> restarted.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE)));
+                () -> restarted.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE)));
     }
 
     @Test
@@ -403,7 +604,7 @@ class PetStoreTest {
         PetStore current = store();
         assertTrue(current.load());
         assertTrue(current.beginSession());
-        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        current.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
         assertTrue(current.save());
         String stalePrimary = Files.readString(directory.resolve("pets.yml"));
         Path blockedBackup = directory.resolve("pets.yml.bak.tmp");
@@ -427,7 +628,7 @@ class PetStoreTest {
         PetStore current = store();
         assertTrue(current.load());
         assertTrue(current.beginSession());
-        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        current.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
         assertTrue(current.save());
         Files.createDirectory(directory.resolve("pet-deletions.log"));
 
@@ -463,7 +664,7 @@ class PetStoreTest {
         UUID id = UUID.randomUUID();
         PetStore current = store();
         assertTrue(current.load());
-        current.add(new Pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        current.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(id, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
         for (int restart = 0; restart < 3; restart++) {
             assertTrue(current.beginSession());
             assertTrue(current.close());
@@ -530,7 +731,7 @@ class PetStoreTest {
     @Test void kennelWorldNamesContainingCommasRoundTripWithoutBlockingPetSaves() {
         var current = store();
         assertTrue(current.load());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Luna", PetSex.FEMALE);
         current.add(pet);
         String key = PetStore.kennelKey("world,chapter,two", -3, 65, 7);
         current.kennel(key, pet.ownerId());
@@ -551,7 +752,7 @@ class PetStoreTest {
     @Test void backgroundProviderFailureKeepsChangesPendingForRetry() throws Exception {
         var current = store();
         assertTrue(current.load());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Pending", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Pending", PetSex.FEMALE);
         current.add(pet);
         AtomicBoolean unavailable = new AtomicBoolean(true);
         writerWithMoves(current, call -> {
@@ -578,7 +779,7 @@ class PetStoreTest {
     @Test void atomicMoveFallbackCommitsSnapshotsAndKeepsThePreviousBackup() throws Exception {
         var current = store();
         assertTrue(current.load());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "First", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "First", PetSex.FEMALE);
         current.add(pet);
         AtomicInteger fallbacks = new AtomicInteger();
         writerWithMoves(current, call -> {
@@ -605,7 +806,7 @@ class PetStoreTest {
         var current = store();
         assertTrue(current.load());
         assertTrue(current.beginSession());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Interrupted", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Interrupted", PetSex.MALE);
         current.add(pet);
         CountDownLatch writing = new CountDownLatch(1);
         CountDownLatch allowWrite = new CountDownLatch(1);
@@ -645,7 +846,7 @@ class PetStoreTest {
         var current = store();
         assertTrue(current.load());
         assertTrue(current.beginSession());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Saved", PetSex.MALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Saved", PetSex.MALE);
         current.add(pet);
         Path marker = directory.resolve("pets-recovery-required");
         Files.delete(marker);
@@ -668,7 +869,7 @@ class PetStoreTest {
             Path folder = directory.resolve(background ? "background" : "immediate");
             var current = new PetStore(folder.resolve("pets.yml").toFile(), quietLogger());
             assertTrue(current.load());
-            var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Retry", PetSex.FEMALE);
+            var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Retry", PetSex.FEMALE);
             current.add(pet);
             ExecutorService executor = Executors.newSingleThreadExecutor();
             ExecutorService boundary = mock(ExecutorService.class, delegatesTo(executor));
@@ -710,7 +911,7 @@ class PetStoreTest {
         });
         var current = new PetStore(directory.resolve("pets.yml").toFile(), logger);
         assertTrue(current.load());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Retained", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Retained", PetSex.FEMALE);
         current.add(pet);
         Path temp = directory.resolve("pets.yml.tmp");
         Files.createDirectory(temp);
@@ -831,7 +1032,7 @@ class PetStoreTest {
         });
         var current = new PetStore(directory.resolve("pets.yml").toFile(), logger);
         assertTrue(current.load());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Before", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Before", PetSex.FEMALE);
         current.add(pet);
         String valid = PetStore.kennelKey("world,chapter,two", Integer.MIN_VALUE, 65, Integer.MAX_VALUE);
         current.kennel(valid, pet.ownerId());
@@ -882,7 +1083,7 @@ class PetStoreTest {
     @Test void malformedPublicKennelKeyDoesNotPreventValidDataFromPersisting() {
         var current = store();
         assertTrue(current.load());
-        var pet = new Pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Preserved", PetSex.FEMALE);
+        var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "cat", "Preserved", PetSex.FEMALE);
         current.add(pet);
         String valid = PetStore.kennelKey("houses", -3, 65, 7);
         current.kennel(valid, pet.ownerId());

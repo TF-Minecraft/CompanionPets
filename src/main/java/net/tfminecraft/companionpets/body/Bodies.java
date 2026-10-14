@@ -102,13 +102,19 @@ public final class Bodies {
         configure(entity, type);
         tag(entity, pet.id());
         name(entity, pet.name());
-        if (entity instanceof Tameable tameable) {
-            tameable.setTamed(true);
-            tameable.setOwner(Bukkit.getOfflinePlayer(pet.ownerId()));
-        }
+        bindOwner(entity, pet);
         visual.apply(entity, type);
         keepPersistent(entity);
         if (entity instanceof Mob mob) mob.setAware(aware(pet) || net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob));
+    }
+
+    /** Engine routing and the character gate must survive even when the species config is unavailable. */
+    public void bindOwner(Entity entity, Pet pet) {
+        if (entity instanceof Tameable tameable) {
+            tameable.setTamed(true);
+            tameable.setOwner(Bukkit.getOfflinePlayer(pet.ownerId()));
+            OwnerFollowGoal.install(plugin, tameable, pet);
+        }
     }
 
     public UUID readId(Entity entity) {
@@ -130,10 +136,7 @@ public final class Bodies {
         if (entity instanceof Ageable ageable) {
             ageable.setAdult();
         }
-        if (entity instanceof Tameable tameable) {
-            tameable.setTamed(true);
-            tameable.setOwner(owner != null ? owner : Bukkit.getOfflinePlayer(pet.ownerId()));
-        }
+        bindOwner(entity, pet);
         visual.apply(entity, type);
         keepPersistent(entity);
         if (entity instanceof Mob mob) mob.setAware(aware(pet) || net.tfminecraft.companionpets.behavior.WaterEscape.needed(mob));

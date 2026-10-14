@@ -15,7 +15,7 @@ class DefaultTricksTest {
     private JavaPlugin plugin;
     private YamlConfiguration yaml;
     @BeforeEach void setup() throws Exception {
-        MockBukkit.mock(); plugin = MockBukkit.createMockPlugin();
+        MockBukkit.mock(); plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
         yaml = new YamlConfiguration();
         yaml.loadFromString("""
                 pets:
@@ -27,7 +27,7 @@ class DefaultTricksTest {
                 """);
     }
     @AfterEach void teardown() { MockBukkit.unmock(); }
-    private Pet pet(String type) { return new Pet(UUID.randomUUID(), UUID.randomUUID(), type, "Toby", PetSex.MALE); }
+    private Pet pet(String type) { return net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), type, "Toby", PetSex.MALE); }
 
     @Test void everyOrdinaryPetStartsWithVisibleLearnedFollow() {
         var config = CompanionConfig.load(plugin, yaml); var pet = pet("wolf");

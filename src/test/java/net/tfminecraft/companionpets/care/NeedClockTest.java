@@ -255,7 +255,7 @@ class NeedClockTest {
         org.mockbukkit.mockbukkit.MockBukkit.mock();
         try {
             var care = net.tfminecraft.companionpets.config.CompanionConfig.load(
-                    org.mockbukkit.mockbukkit.MockBukkit.createMockPlugin(), yaml).care();
+                    net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin(), yaml).care();
             NeedClock.advance(pet, new CareInput(Presence.NEAR, false, false, true, true, true, minutes(1), care, 0.25));
         } finally { org.mockbukkit.mockbukkit.MockBukkit.unmock(); }
         assertEquals(30, pet.need(Need.HEALTH), 0.001);
@@ -312,7 +312,7 @@ class NeedClockTest {
     }
 
     private static Pet pet() {
-        return new Pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Luna", PetSex.FEMALE);
+        return net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), UUID.randomUUID(), "wolf", "Luna", PetSex.FEMALE);
     }
 
     private static CareInput input(
