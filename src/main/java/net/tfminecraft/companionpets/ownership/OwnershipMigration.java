@@ -133,6 +133,8 @@ public final class OwnershipMigration {
         try {
             var options = new org.yaml.snakeyaml.LoaderOptions();
             options.setAllowDuplicateKeys(false);
+            options.setMaxAliasesForCollections(Integer.MAX_VALUE);
+            options.setCodePointLimit(Integer.MAX_VALUE);
             Object data = new org.yaml.snakeyaml.Yaml(new org.yaml.snakeyaml.constructor.SafeConstructor(options)).load(text);
             if (!(data instanceof Map<?, ?>)) throw new IOException("Ownership document must be a mapping");
             Map<String, Object> document = (Map<String, Object>) data;

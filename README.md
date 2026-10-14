@@ -43,10 +43,10 @@ Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/
 
 ## Tests
 
-With Java 21 and Maven installed, run:
+With Java 21 and the pinned plugin dependencies installed, run:
 
 ```sh
-tfmc-mvn -o -B clean verify
+mvn clean verify
 ```
 
 Tests use JUnit, MockBukkit, and Mockito. Surefire reports go to

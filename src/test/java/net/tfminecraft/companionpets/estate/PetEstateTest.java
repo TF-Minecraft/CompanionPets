@@ -8,6 +8,8 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import net.tfminecraft.companionpets.body.Bodies;
 import net.tfminecraft.companionpets.config.CompanionConfig;
@@ -45,6 +47,81 @@ class PetEstateTest {
     EstateDecision decision(long revision, Recipient recipient) {
         return new EstateDecision(death,from,Optional.of(Instant.EPOCH),Instant.EPOCH,Optional.of(to),Optional.empty(),Optional.empty(),
                 Recipient.FROZEN,recipient,Recipient.FROZEN,Recipient.SENDER,revision);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"pet", "kennel", "both"})
+    void anotherDeathCannotLiftAStalePartialPetOrHouseHold(String holding) throws Exception {
+        var unrelated = new CharacterRef(UUID.randomUUID(), UUID.randomUUID());
+        if (holding.equals("pet")) store.kennel("unloaded,1,2,3", unrelated.ownerId(), unrelated.characterId());
+        if (holding.equals("kennel")) pet.ownership(unrelated.ownerId(), unrelated.characterId());
+        assertTrue(store.saveOwnership());
+        assertInstanceOf(Outcome.Done.class, estate.settle(decision(0, Recipient.character(to))));
+        Path first = folder.resolve(death + "-0.yml");
+        var pending = OwnershipMigration.read(first);
+        pending.set("complete", false);
+        pending.set("moved", null);
+        DurableFiles.write(first, pending.saveToString());
+        assertInstanceOf(Outcome.Blocked.class, estate.settle(decision(1, Recipient.character(to))));
+        if (!holding.equals("kennel")) assertTrue(pet.ownershipHeld());
+        if (!holding.equals("pet")) assertTrue(store.kennelHeld("unloaded,1,2,3"));
+        UUID secondDeath = UUID.randomUUID();
+        var heir = new CharacterRef(UUID.randomUUID(), UUID.randomUUID());
+        var second = new EstateDecision(secondDeath, to, Optional.of(Instant.EPOCH), Instant.EPOCH,
+                Optional.of(heir), Optional.empty(), Optional.empty(), Recipient.FROZEN,
+                Recipient.character(heir), Recipient.FROZEN, Recipient.SENDER, 0);
+        Path source = runtime.plugin().getDataFolder().toPath().resolve("pets.yml");
+        String before = Files.readString(source), intent = Files.readString(first);
+        assertInstanceOf(Outcome.Blocked.class, estate.settle(second));
+        assertEquals(before, Files.readString(source));
+        assertEquals(intent, Files.readString(first));
+        assertFalse(Files.exists(folder.resolve(secondDeath + "-0.yml")));
+        if (!holding.equals("kennel")) {
+            assertEquals(to.ownerId(), pet.ownerId());
+            assertEquals(to.characterId(), pet.ownerCharacterId());
+            assertTrue(pet.ownershipHeld());
+        }
+        if (!holding.equals("pet")) {
+            assertEquals(to.ownerId(), store.kennelOwner("unloaded,1,2,3"));
+            assertEquals(to.characterId(), store.kennelCharacter("unloaded,1,2,3"));
+            assertTrue(store.kennelHeld("unloaded,1,2,3"));
+        }
+    }
+
+    @Test
+    void unrelatedIncompleteDeathDoesNotBlockThisExactHeldIntentResume() throws Exception {
+        var original = decision(1, Recipient.character(to));
+        assertInstanceOf(Outcome.Done.class, estate.settle(original));
+        Path current = folder.resolve(death + "-1.yml");
+        var own = OwnershipMigration.read(current);
+        own.set("complete", false);
+        own.set("moved", null);
+        DurableFiles.write(current, own.saveToString());
+        pet.ownershipHeld(true);
+        store.holdKennel("unloaded,1,2,3", true);
+        UUID otherDeath = UUID.randomUUID(), otherPet = UUID.randomUUID();
+        var otherFrom = new CharacterRef(UUID.randomUUID(), UUID.randomUUID());
+        var otherTo = new CharacterRef(UUID.randomUUID(), UUID.randomUUID());
+        var other = new EstateDecision(otherDeath, otherFrom, Optional.of(Instant.EPOCH), Instant.EPOCH,
+                Optional.of(otherTo), Optional.empty(), Optional.empty(), Recipient.FROZEN,
+                Recipient.character(otherTo), Recipient.FROZEN, Recipient.SENDER, 1);
+        var intent = new YamlConfiguration();
+        intent.set("death", otherDeath.toString()); intent.set("revision", 1L);
+        intent.set("decision", other.toString()); intent.set("complete", false);
+        intent.set("from-account", otherFrom.ownerId().toString());
+        intent.set("from-character", otherFrom.characterId().toString());
+        intent.set("to-account", otherTo.ownerId().toString());
+        intent.set("to-character", otherTo.characterId().toString());
+        intent.set("pets", List.of(otherPet.toString())); intent.set("kennels", List.of());
+        Path otherFile = folder.resolve(otherDeath + "-1.yml");
+        DurableFiles.write(otherFile, intent.saveToString());
+        String unchanged = Files.readString(otherFile);
+        assertInstanceOf(Outcome.Done.class, estate.settle(original));
+        assertEquals(to.characterId(), pet.ownerCharacterId());
+        assertFalse(pet.ownershipHeld());
+        assertFalse(store.kennelHeld("unloaded,1,2,3"));
+        assertTrue(OwnershipMigration.read(current).getBoolean("complete"));
+        assertEquals(unchanged, Files.readString(otherFile));
     }
     @Test void estateCannotSealAnEmptyIntentBeforeReviewedMigrationHasCaughtUpWithProviderReadiness() throws Exception {
         Path file=runtime.plugin().getDataFolder().toPath().resolve("pets.yml");

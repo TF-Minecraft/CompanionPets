@@ -115,6 +115,12 @@ class OwnershipMigrationTest {
             assertFalse(Files.exists(folder.resolve("ownership-migrations/plan-0001.yml")));
         }
     }
+    @Test void strictRawLoaderAcceptsDocumentsAboveBukkitsFormerDefaultCodePointLimit() throws Exception {
+        String opaque = "x".repeat(3_145_729);
+        var raw = OwnershipMigration.raw("pets: {}\nfuture: " + opaque + "\nkennels: []\n");
+        assertEquals(opaque, raw.get("future"));
+    }
+
     @Test void orphanArchiveFromDifferentSourceMustBeReviewedBeforePlanning() throws Exception {
         Path source=folder.resolve("pets.yml");String current="pets: {}\n";Files.writeString(source,current);
         Path archive=folder.resolve("ownership-migrations/plan-0001.original.yml");Files.createDirectories(archive.getParent());Files.writeString(archive,"different source");

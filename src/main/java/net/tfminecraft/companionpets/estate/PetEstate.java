@@ -58,19 +58,42 @@ public final class PetEstate implements EstateParticipant {
             Files.createDirectories(journals);
             List<String> moved = new ArrayList<>();
             Path file = journals.resolve(decision.deathId() + "-" + decision.revision() + ".yml");
+            Map<Path, YamlConfiguration> history = new LinkedHashMap<>();
+            Set<String> otherPets = new java.util.HashSet<>(), otherKennels = new java.util.HashSet<>();
             try (var files = Files.list(journals)) {
                 for (Path older : files.filter(path -> path.toString().endsWith(".yml")).toList()) {
                     YamlConfiguration receipt = readPlan(older);
-                    if (!decision.deathId().toString().equals(receipt.getString("death"))) continue;
-                    if (!decision.testator().ownerId().toString().equals(receipt.getString("from-account"))
-                            || !decision.testator().characterId().toString().equals(receipt.getString("from-character")))
-                        throw new InvalidIntent("Historical receipt testator conflicts with this death: " + older.getFileName());
-                    if (receipt.getBoolean("complete")) moved.addAll(receipt.getStringList("moved"));
-                    else if (!older.equals(file)) {
-                        if (changed(receipt)) { hold(receipt); return Outcome.blocked("An earlier partial estate intent needs review: " + older.getFileName()); }
-                        receipt.set("complete", true); receipt.set("obsolete", true);
-                        DurableFiles.write(older, receipt.saveToString());
+                    history.put(older, receipt);
+                    if (!decision.deathId().toString().equals(receipt.getString("death")) && !receipt.getBoolean("complete")) {
+                        hold(receipt);
+                        otherPets.addAll(receipt.getStringList("pets"));
+                        otherKennels.addAll(receipt.getStringList("kennels"));
                     }
+                }
+            }
+            YamlConfiguration current = history.get(file);
+            List<String> candidatePets = current == null ? runtime.store().ofCharacter(decision.testator().characterId()).stream()
+                    .filter(pet -> pet.ownerId().equals(decision.testator().ownerId())).map(pet -> pet.id().toString()).toList()
+                    : current.getStringList("pets");
+            List<String> candidateKennels = current == null ? runtime.store().kennelCharacters().entrySet().stream()
+                    .filter(entry -> decision.testator().characterId().equals(entry.getValue())).map(Map.Entry::getKey).toList()
+                    : current.getStringList("kennels");
+            if (decision.property().character().isPresent()
+                    && (!java.util.Collections.disjoint(candidatePets, otherPets)
+                    || !java.util.Collections.disjoint(candidateKennels, otherKennels)))
+                return Outcome.blocked("Another death's incomplete pet estate intent needs review before these holdings can move");
+            for (var historical : history.entrySet()) {
+                Path older = historical.getKey();
+                YamlConfiguration receipt = historical.getValue();
+                if (!decision.deathId().toString().equals(receipt.getString("death"))) continue;
+                if (!decision.testator().ownerId().toString().equals(receipt.getString("from-account"))
+                        || !decision.testator().characterId().toString().equals(receipt.getString("from-character")))
+                    throw new InvalidIntent("Historical receipt testator conflicts with this death: " + older.getFileName());
+                if (receipt.getBoolean("complete")) moved.addAll(receipt.getStringList("moved"));
+                else if (!older.equals(file)) {
+                    if (changed(receipt)) { hold(receipt); return Outcome.blocked("An earlier partial estate intent needs review: " + older.getFileName()); }
+                    receipt.set("complete", true); receipt.set("obsolete", true);
+                    DurableFiles.write(older, receipt.saveToString());
                 }
             }
             if (decision.property().character().isEmpty()) return done(moved);
@@ -94,11 +117,8 @@ public final class PetEstate implements EstateParticipant {
                 plan.set("from-account", decision.testator().ownerId().toString());
                 plan.set("from-character", decision.testator().characterId().toString());
                 plan.set("to-account", to.ownerId().toString()); plan.set("to-character", to.characterId().toString());
-                plan.set("pets", runtime.store().ofCharacter(decision.testator().characterId()).stream()
-                        .filter(pet -> pet.ownerId().equals(decision.testator().ownerId())).map(pet -> pet.id().toString()).toList());
-                plan.set("kennels", runtime.store().kennelCharacters().entrySet().stream()
-                        .filter(entry -> decision.testator().characterId().equals(entry.getValue()))
-                        .map(Map.Entry::getKey).toList());
+                plan.set("pets", candidatePets);
+                plan.set("kennels", candidateKennels);
                 DurableFiles.write(file, plan.saveToString());
             }
             if (!guard.test(decision)) return Outcome.retry("Estate changed before publication");

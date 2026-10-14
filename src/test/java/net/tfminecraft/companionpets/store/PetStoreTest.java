@@ -57,6 +57,111 @@ class PetStoreTest {
         return new PetStore(new File(directory.toFile(), "pets.yml"), logger);
     }
 
+    @Test
+    void sixtyPetsWithEmptyRowListsSurviveOrdinarySaveAndReload() throws Exception {
+        var current = store();
+        assertTrue(current.load());
+        UUID account = UUID.randomUUID(), character = UUID.randomUUID();
+        var ids = new ArrayList<UUID>();
+        for (int i = 0; i < 60; i++) {
+            var pet = new Pet(UUID.randomUUID(), account, "wolf", "Pet " + i, PetSex.MALE);
+            pet.ownership(account, character);
+            pet.bond(i);
+            current.add(pet);
+            ids.add(pet.id());
+        }
+        assertTrue(current.save());
+        String saved = Files.readString(directory.resolve("pets.yml"));
+        assertTrue(saved.lines().filter(line -> line.contains("*id")).count() > 50);
+        assertTrue(current.close());
+        var restored = store();
+        assertTrue(restored.load());
+        assertEquals(60, restored.all().size());
+        for (int i = 0; i < ids.size(); i++) {
+            var pet = restored.get(ids.get(i));
+            assertEquals("Pet " + i, pet.name());
+            assertEquals(account, pet.ownerId());
+            assertEquals(character, pet.ownerCharacterId());
+            assertEquals(i, pet.bond());
+            assertTrue(pet.words().isEmpty());
+            assertTrue(pet.announcedLowView().isEmpty());
+        }
+        assertTrue(restored.close());
+    }
+
+    @Test
+    void deferredHeirsMigrateSixtyPetsAfterGameplaySaveAndCloseWithoutRecoveryMarker()
+            throws Exception {
+        org.mockbukkit.mockbukkit.MockBukkit.mock();
+        try {
+            var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
+            UUID account = UUID.randomUUID(), character = UUID.randomUUID();
+            var identity = mock(net.tfminecraft.tlibs.character.CharacterIdentity.class);
+            var ready = new AtomicBoolean();
+            when(identity.legacyHeirsReady()).thenAnswer(call -> ready.get());
+            when(identity.legacyHeir(account)).thenReturn(java.util.Optional.of(
+                    new net.tfminecraft.tlibs.character.CharacterRef(account, character)));
+            org.bukkit.Bukkit.getServicesManager().register(
+                    net.tfminecraft.tlibs.character.CharacterIdentity.class, identity, plugin,
+                    org.bukkit.plugin.ServicePriority.Highest);
+            var current = store();
+            assertTrue(current.load());
+            var ids = new ArrayList<UUID>();
+            for (int i = 0; i < 60; i++) {
+                var pet = new Pet(UUID.randomUUID(), account, "cat", "Legacy " + i, PetSex.FEMALE);
+                current.add(pet);
+                ids.add(pet.id());
+            }
+            assertTrue(current.beginSession());
+            assertFalse(current.migrate());
+            current.get(ids.getFirst()).bond(73);
+            assertTrue(current.save());
+            assertTrue(Files.exists(directory.resolve("pets-recovery-required")));
+            ready.set(true);
+            assertTrue(current.migrate());
+            assertTrue(current.ownershipReady());
+            for (UUID id : ids) assertEquals(character, current.get(id).ownerCharacterId());
+            assertEquals(73, current.get(ids.getFirst()).bond());
+            assertTrue(current.close());
+            assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+            var restored = store();
+            assertTrue(restored.load());
+            assertTrue(restored.migrate());
+            assertEquals(60, restored.all().size());
+            for (UUID id : ids) assertEquals(character, restored.get(id).ownerCharacterId());
+            assertEquals(73, restored.get(ids.getFirst()).bond());
+            assertTrue(restored.close());
+            assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+        } finally {
+            org.mockbukkit.mockbukkit.MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void nullKennelRootCanGainAHouseAndCloseWithoutLosingUnknownNullMetadata() throws Exception {
+        Files.writeString(directory.resolve("pets.yml"),
+                "version: 1\npets: {}\nkennels: null\nfuture-root: {kept: null, value: unchanged}\n");
+        var current = store();
+        assertTrue(current.load());
+        assertTrue(current.beginSession());
+        UUID account = UUID.randomUUID(), character = UUID.randomUUID();
+        current.kennel("unloaded,1,2,3", account, character);
+        assertTrue(current.save());
+        assertTrue(current.close());
+        assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+        var restored = store();
+        assertTrue(restored.load());
+        assertEquals(account, restored.kennelOwner("unloaded,1,2,3"));
+        assertEquals(character, restored.kennelCharacter("unloaded,1,2,3"));
+        var raw = net.tfminecraft.companionpets.ownership.OwnershipMigration.raw(
+                Files.readString(directory.resolve("pets.yml")));
+        var unknown = (Map<?, ?>) raw.get("future-root");
+        assertTrue(unknown.containsKey("kept"));
+        assertNull(unknown.get("kept"));
+        assertEquals("unchanged", unknown.get("value"));
+        assertTrue(restored.close());
+    }
+
     @Test void sourcePresenceChangesRemainHeldUntilReviewedReloadAndNeverOverwriteExternalBytes() throws Exception {
         var absent=store();assertTrue(absent.load());String external="pets: {}\nexternal: preserved\n";Files.writeString(directory.resolve("pets.yml"),external);
         assertFalse(absent.save());assertTrue(absent.persistenceConflict());assertEquals(external,Files.readString(directory.resolve("pets.yml")));

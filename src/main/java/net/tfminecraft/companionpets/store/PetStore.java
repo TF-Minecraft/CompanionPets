@@ -289,7 +289,7 @@ public final class PetStore {
                 logger.warning("Skipping kennel with invalid coordinates: " + entry.getKey());
                 continue;
             }
-            for (Object previous : (List<?>) rawDocument.getOrDefault("kennels", List.of())) {
+            for (Object previous : rawDocument.get("kennels") instanceof List<?> previousRows ? previousRows : List.of()) {
                 if (previous instanceof Map<?, ?> old && String.valueOf(old.get("world")).equals(row.get("world"))
                         && old.get("x").equals(row.get("x")) && old.get("y").equals(row.get("y")) && old.get("z").equals(row.get("z")))
                     old.forEach((key, value) -> row.put(String.valueOf(key), value));
