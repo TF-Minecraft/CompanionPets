@@ -43,9 +43,20 @@ public final class PetEstate implements EstateParticipant {
     @Override public String id() { return "companionpets"; }
     @Override public Holdings describe(UUID character) {
         List<String> labels = new ArrayList<>();
-        runtime.store().ofCharacter(character).forEach(pet -> labels.add("Pet: " + pet.name()));
-        runtime.store().kennelCharacters().forEach((key, owner) -> { if (character.equals(owner)) labels.add("Pet House: " + key); });
+        runtime.store().ofCharacter(character).forEach(pet -> labels.add(pet.name()));
+        runtime.store().kennelCharacters().forEach((key, owner) -> { if (character.equals(owner)) labels.add(houseLabel(key, mainWorld.get())); });
         return labels.isEmpty() ? Holdings.NONE : new Holdings(Map.of("pets-and-houses", labels.size()), labels);
+    }
+    /** The first world's name, or null; a house elsewhere names its world. */
+    static Supplier<String> mainWorld = () -> Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().getFirst().getName();
+    /** {@code world,x,y,z} as "Pet house at x y z", adding the world when it is not {@code main}. */
+    static String houseLabel(String key, String main) {
+        String[] part = key.split(",");
+        if (part.length < 4) return "Pet house " + key;
+        // A world name may hold commas; the last three fields are the coordinates.
+        int n = part.length;
+        String world = String.join(",", java.util.Arrays.copyOf(part, n - 3));
+        return "Pet house at " + part[n - 3] + " " + part[n - 2] + " " + part[n - 1] + (world.equals(main) ? "" : " (" + world + ")");
     }
     @Override public Outcome settle(EstateDecision decision) {
         if (runtime.store().persistenceConflict()) return Outcome.blocked("Pet source changed outside its current writer; review is required");
