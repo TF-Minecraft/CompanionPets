@@ -52,8 +52,11 @@ public final class PetEstate implements EstateParticipant {
     /** {@code world,x,y,z} as "Pet house at x y z", adding the world when it is not {@code main}. */
     static String houseLabel(String key, String main) {
         String[] part = key.split(",");
-        if (part.length != 4) return "Pet house " + key;
-        return "Pet house at " + part[1] + " " + part[2] + " " + part[3] + (part[0].equals(main) ? "" : " (" + part[0] + ")");
+        if (part.length < 4) return "Pet house " + key;
+        // A world name may hold commas; the last three fields are the coordinates.
+        int n = part.length;
+        String world = String.join(",", java.util.Arrays.copyOf(part, n - 3));
+        return "Pet house at " + part[n - 3] + " " + part[n - 2] + " " + part[n - 1] + (world.equals(main) ? "" : " (" + world + ")");
     }
     @Override public Outcome settle(EstateDecision decision) {
         if (runtime.store().persistenceConflict()) return Outcome.blocked("Pet source changed outside its current writer; review is required");

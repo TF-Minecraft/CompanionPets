@@ -392,6 +392,8 @@ class PetEstateTest {
         assertEquals("Pet house at 1 2 3 (nether)", PetEstate.houseLabel("nether,1,2,3", "TFMC_Map"));
         assertEquals("Pet house at 1 2 3 (nether)", PetEstate.houseLabel("nether,1,2,3", null));
         assertEquals("Pet house odd", PetEstate.houseLabel("odd", "TFMC_Map"));
+        assertEquals("Pet house at 1 2 3", PetEstate.houseLabel("build,world,1,2,3", "build,world"));
+        assertEquals("Pet house at 1 2 3 (build,world)", PetEstate.houseLabel("build,world,1,2,3", "TFMC_Map"));
         var original = PetEstate.mainWorld;
         assertEquals(org.bukkit.Bukkit.getWorlds().isEmpty() ? null : org.bukkit.Bukkit.getWorlds().getFirst().getName(), original.get());
         PetEstate.mainWorld = () -> "unloaded";
