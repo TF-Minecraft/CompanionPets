@@ -71,6 +71,18 @@ public final class StaffCommands {
                 .sorted(Comparator.comparing(this::ownerName, String.CASE_INSENSITIVE_ORDER)).toList();
     }
 
+    private String ownerToken(UUID id, boolean creating) {
+        var access = net.tfminecraft.companionpets.ownership.CharacterAccess.resolve(id.toString());
+        if (!id.equals(access) || (creating && !net.tfminecraft.companionpets.ownership.CharacterAccess.alive(id))) return null;
+        String name = ownerName(id);
+        // Owner arguments consume one token. Confirm names select exactly this directory identity.
+        if (name != null && !name.isBlank() && name.chars().noneMatch(Character::isWhitespace)
+                && !name.equalsIgnoreCase("unassigned")
+                && id.equals(net.tfminecraft.companionpets.ownership.CharacterAccess.resolve(name))
+                && net.tfminecraft.tlibs.character.Characters.findByName(name).size() == 1) return name;
+        return id.toString();
+    }
+
     public List<Pet> owned(UUID owner) {
         return runtime.store().ofCharacter(owner).stream().sorted(Comparator.comparing((Pet p) -> p.name(), String.CASE_INSENSITIVE_ORDER).thenComparing(Pet::id)).toList();
     }
@@ -209,9 +221,20 @@ public final class StaffCommands {
         if (args.length == 2) {
             if (action.equals("egg")) { choices.add("all"); choices.addAll(runtime.config().types().keySet()); }
             else if (List.of("list", "find", "create").contains(action)) {
-                owners().forEach(id -> { if (!ownerName(id).equals("Unknown player")) choices.add(ownerName(id)); });
-                if (action.equals("create")) {
-                    Bukkit.getOnlinePlayers().forEach(p -> choices.add(p.getName()));
+                boolean creating = action.equals("create");
+                owners().stream().map(id -> ownerToken(id, creating)).filter(Objects::nonNull).forEach(choices::add);
+                if (action.equals("list")) choices.add("unassigned");
+                if (creating) {
+                    for (Player player : Bukkit.getOnlinePlayers()) {
+                        var session = net.tfminecraft.companionpets.ownership.CharacterAccess.capture(player);
+                        if (session == null) continue;
+                        String token = ownerToken(session.character(), true);
+                        if (token != null) choices.add(token);
+                        if (session.character().equals(
+                                net.tfminecraft.companionpets.ownership.CharacterAccess.resolve(player.getName()))
+                                && net.tfminecraft.tlibs.character.Characters.findByName(player.getName()).size() < 2)
+                            choices.add(player.getName());
+                    }
                 }
             }
         } else if (action.equals("egg")) {

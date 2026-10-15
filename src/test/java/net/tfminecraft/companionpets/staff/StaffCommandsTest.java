@@ -357,7 +357,7 @@ class StaffCommandsTest {
         add(staff.getUniqueId(), "wolf", "Staff pet", true);
         add(owner.getUniqueId(), "wolf", "Toby Junior", true);
         for (String action : List.of("list", "find")) {
-            assertEquals(List.of("Owner", "Staff"), commands.complete(staff, new String[]{action, ""}));
+            assertEquals(action.equals("list") ? List.of("Owner", "Staff", "unassigned") : List.of("Owner", "Staff"), commands.complete(staff, new String[]{action, ""}));
             assertEquals(List.of("Toby", "Toby Junior"), commands.complete(staff, new String[]{action, "Owner", ""}));
             assertEquals(List.of("Junior"), commands.complete(staff, new String[]{action, "Owner", "Toby", "J"}));
             assertTrue(commands.complete(staff, new String[]{action, "Staff", "Toby"}).isEmpty());
@@ -376,7 +376,7 @@ class StaffCommandsTest {
             assertThrows(IllegalArgumentException.class, () -> commands.resolveOwner("NotCached"));
             assertEquals(List.of("Owner", "Staff"), commands.complete(staff, new String[]{"create", ""}));
             for (String action : List.of("list", "find")) {
-                assertEquals(List.of("Owner"), commands.complete(staff, new String[]{action, ""}));
+                assertEquals(action.equals("list") ? List.of("Owner", "unassigned") : List.of("Owner"), commands.complete(staff, new String[]{action, ""}));
                 assertEquals(List.of("Toby"), commands.complete(staff, new String[]{action, "Owner", ""}));
             }
             command("list", "Owner");
@@ -511,6 +511,79 @@ class StaffCommandsTest {
         assertTrue(staff.nextMessage().contains("Created Retry"));
         var afterRetry = new PetStore(plugin); assertTrue(afterRetry.load());
         assertEquals(Set.of("Toby", "Retry"), new HashSet<>(afterRetry.of(owner.getUniqueId()).stream().map(Pet::name).toList()));
+    }
+
+    @Test void ownerCandidatesRoundTripThroughTheDirectoryForMultiwordDuplicateAndUnresolvedOwners() {
+        var infos = new LinkedHashMap<UUID, net.tfminecraft.tlibs.character.CharacterInfo>();
+        var duplicateAccount = server.addPlayer("Duplicate");
+        for (String name : List.of("Old Owner", "Duplicate", "Duplicate", "Solo", "unassigned", "Dead Owner")) {
+            UUID id = UUID.randomUUID();
+            UUID account = name.equals("Duplicate") && infos.values().stream().noneMatch(info -> info.name().equals("Duplicate"))
+                ? duplicateAccount.getUniqueId() : UUID.randomUUID();
+            var ref = new net.tfminecraft.tlibs.character.CharacterRef(account, id);
+            infos.put(id, new net.tfminecraft.tlibs.character.CharacterInfo(ref, name,
+                name.equals("Dead Owner") ? net.tfminecraft.tlibs.character.CharacterStatus.DEAD
+                    : net.tfminecraft.tlibs.character.CharacterStatus.ALIVE, null, Set.of(), 0, null));
+            Pet saved = add(account, "wolf", "Pet " + name, true); saved.ownership(account, id);
+        }
+        UUID unresolved = UUID.randomUUID(); pet.ownership(owner.getUniqueId(), unresolved);
+        var identity = new net.tfminecraft.tlibs.character.CharacterIdentity() {
+            public Optional<net.tfminecraft.tlibs.character.CharacterSession> currentSession(org.bukkit.entity.Player player) {
+                return player == null ? Optional.empty() : infos.values().stream()
+                    .filter(info -> info.ref().ownerId().equals(player.getUniqueId()))
+                    .map(info -> new net.tfminecraft.tlibs.character.CharacterSession(info.ref(), 1)).findFirst();
+            }
+            public boolean isCurrent(net.tfminecraft.tlibs.character.CharacterSession session) {
+                return currentSession(server.getPlayer(session.ref().ownerId())).filter(session::equals).isPresent();
+            }
+            public Optional<net.tfminecraft.tlibs.character.CharacterInfo> info(UUID id) { return Optional.ofNullable(infos.get(id)); }
+            public Optional<net.tfminecraft.tlibs.character.CharacterInfo> lastPlayed(UUID account) { return Optional.empty(); }
+            public Optional<List<net.tfminecraft.tlibs.character.CharacterInfo>> characters(UUID account) { return Optional.of(infos.values().stream().filter(info -> info.ref().ownerId().equals(account)).toList()); }
+            public List<net.tfminecraft.tlibs.character.CharacterInfo> findByName(String name) { return infos.values().stream().filter(info -> info.name().equalsIgnoreCase(name)).toList(); }
+            public String displayName(org.bukkit.entity.Player player) { return player.getName(); }
+        };
+        server.getServicesManager().unregister(net.tfminecraft.tlibs.character.CharacterIdentity.class,
+            server.getServicesManager().load(net.tfminecraft.tlibs.character.CharacterIdentity.class));
+        server.getServicesManager().register(net.tfminecraft.tlibs.character.CharacterIdentity.class, identity,
+            plugin, org.bukkit.plugin.ServicePriority.Highest);
+        forbidOfflineScan = true;
+        assertEquals("Unknown character", net.tfminecraft.companionpets.ownership.CharacterAccess.name(unresolved));
+        assertEquals("Unassigned character", net.tfminecraft.companionpets.ownership.CharacterAccess.name(null));
+        for (String action : List.of("list", "find", "create")) {
+            var choices = commands.complete(staff, new String[]{action, ""});
+            assertFalse(choices.contains("Old Owner")); assertFalse(choices.contains("Duplicate"));
+            assertFalse(choices.contains("Unknown character")); assertFalse(choices.contains("Unassigned character"));
+            assertFalse(choices.contains(unresolved.toString()));
+            for (var entry : infos.entrySet()) {
+                UUID id = entry.getKey(); var info = entry.getValue();
+                String token = info.name().equals("Solo") ? "Solo" : id.toString();
+                if (action.equals("create") && !info.alive()) { assertFalse(choices.contains(token)); continue; }
+                assertTrue(choices.contains(token), action + " missing " + token + " from " + choices);
+                assertEquals(id, commands.resolveOwner(token));
+                assertEquals(List.of(token), commands.complete(staff, new String[]{action, token.substring(0, Math.min(8, token.length())).toUpperCase(Locale.ROOT)}));
+            }
+        }
+        var first = infos.values().iterator().next();
+        var console = server.getConsoleSender();
+        commands.execute(console, "list", first.ref().characterId().toString());
+        assertEquals("Pets belonging to Old Owner:", console.nextMessage());
+        assertTrue(console.nextMessage().contains("Pet Old Owner"));
+        // A missing provider must not turn the fallback label into an owner argument.
+        server.getServicesManager().unregister(net.tfminecraft.tlibs.character.CharacterIdentity.class,
+            server.getServicesManager().load(net.tfminecraft.tlibs.character.CharacterIdentity.class));
+        assertEquals(List.of("unassigned"), commands.complete(staff, new String[]{"list", ""}));
+    }
+
+    @Test void listUnassignedCompletesWithPrefixesAndOnlyTheListPermission() {
+        assertEquals(List.of("unassigned"), commands.complete(staff, new String[]{"list", "un"}));
+        assertEquals(List.of("unassigned"), commands.complete(staff, new String[]{"LIST", "UnA"}));
+        assertTrue(commands.complete(staff, new String[]{"list", ""}).contains("unassigned"));
+        assertTrue(commands.complete(staff, new String[]{"find", "un"}).isEmpty());
+        assertTrue(commands.complete(staff, new String[]{"create", "un"}).isEmpty());
+        commands.execute(server.getConsoleSender(), "list", "unassigned");
+        assertTrue(server.getConsoleSender().nextMessage().contains("Unassigned or held pet records"));
+        staff.setOp(false); staff.addAttachment(plugin, "companionpets.admin.list", false);
+        assertTrue(commands.complete(staff, new String[]{"list", "un"}).isEmpty());
     }
 
     @Test void modelledEggDeliveryPreservesConfiguredIdentityAndCompletesOnlineTargetsAndAmounts() throws Exception {
