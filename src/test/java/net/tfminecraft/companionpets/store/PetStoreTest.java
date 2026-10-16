@@ -637,6 +637,7 @@ class PetStoreTest {
         assertFalse(current.canRestoreBodies());
         assertFalse(current.save());
         assertFalse(current.close());
+        assertFalse(Files.exists(directory.resolve("pets-session-intact")));
         PetStore restarted = store();
         assertFalse(restarted.load());
         assertNull(restarted.get(id));
@@ -644,12 +645,39 @@ class PetStoreTest {
     }
 
     @Test
-    void interruptedSessionRequiresReconciliationEvenIfSaveDataIsValid() throws Exception {
+    void killedHealthySessionResumesFromTheLastSaveAndKeepsCommittedDeaths() throws Exception {
+        UUID kept = UUID.randomUUID(), died = UUID.randomUUID();
         PetStore current = store();
         assertTrue(current.load());
         assertTrue(current.beginSession());
+        current.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(kept, UUID.randomUUID(), "wolf", "Rex", PetSex.MALE));
+        current.add(net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(died, UUID.randomUUID(), "wolf", "Ash", PetSex.MALE));
+        assertTrue(current.save());
+        assertTrue(current.remove(died));
+        current.get(kept).name("Unsaved rename");
+        // The process dies here: no close(), and pets.yml still lists the pet that died.
+        assertTrue(Files.readString(directory.resolve("pets.yml")).contains(died.toString()));
+
+        PetStore restarted = store();
+        assertTrue(restarted.load());
+        assertEquals("Rex", restarted.get(kept).name());
+        assertNull(restarted.get(died));
+        assertTrue(restarted.isDeleted(died));
+        assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+        assertFalse(Files.exists(directory.resolve("pets-session-intact")));
+        assertTrue(restarted.beginSession());
+        assertTrue(restarted.close());
+        assertFalse(Files.exists(directory.resolve("pets-recovery-required")));
+        assertFalse(Files.exists(directory.resolve("pets-session-intact")));
+    }
+
+    @Test
+    void legacyRecoveryGuardWithoutIntactProofStillRequiresReconciliation() throws Exception {
+        PetStore current = store();
+        assertTrue(current.load());
         assertTrue(current.save());
         String primary = Files.readString(directory.resolve("pets.yml"));
+        Files.writeString(directory.resolve("pets-recovery-required"), "guard from an older release\n");
 
         PetStore restarted = store();
         assertFalse(restarted.load());
@@ -657,6 +685,17 @@ class PetStoreTest {
         assertFalse(restarted.close());
         assertEquals(primary, Files.readString(directory.resolve("pets.yml")));
         assertTrue(Files.exists(directory.resolve("pets-recovery-required")));
+    }
+
+    @Test
+    void staleIntactProofWithoutGuardIsDiscarded() throws Exception {
+        Files.writeString(directory.resolve("pets-session-intact"), "left by a crash while arming\n");
+        PetStore current = store();
+        assertTrue(current.load());
+        assertFalse(Files.exists(directory.resolve("pets-session-intact")));
+        assertTrue(current.beginSession());
+        assertTrue(Files.exists(directory.resolve("pets-session-intact")));
+        assertTrue(current.close());
     }
 
     @Test
@@ -696,6 +735,7 @@ class PetStoreTest {
         assertTrue(current.load());
         Files.createDirectory(directory.resolve("pets-recovery-required"));
         assertFalse(current.beginSession());
+        assertFalse(Files.exists(directory.resolve("pets-session-intact")));
         assertFalse(current.save());
         assertFalse(current.canRestoreBodies());
         assertFalse(current.close());

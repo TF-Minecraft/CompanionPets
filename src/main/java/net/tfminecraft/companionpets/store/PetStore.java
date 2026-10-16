@@ -51,6 +51,8 @@ public final class PetStore {
     private final File backup;
     private final File deletions;
     private final File session;
+    /** Present while every death and release of the active session is in pet-deletions.log. */
+    private final File intact;
     private final Set<UUID> deleted = new LinkedHashSet<>();
     private final Map<UUID, Pet> pets = new LinkedHashMap<>();
     private record CachedRow(long revision, Map<String, Object> values) { }
@@ -82,6 +84,7 @@ public final class PetStore {
         this.backup = new File(file.getParentFile(), file.getName() + ".bak");
         this.deletions = new File(file.getParentFile(), "pet-deletions.log");
         this.session = new File(file.getParentFile(), "pets-recovery-required");
+        this.intact = new File(file.getParentFile(), "pets-session-intact");
         this.logger = logger;
     }
 
@@ -90,9 +93,21 @@ public final class PetStore {
         loaded = false;
         ownershipReady = false;
         deletionLogHealthy = false;
-        if (session.exists()) {
-            logger.severe("Previous pet session did not commit a clean shutdown. Stop the server and reconcile pets.yml "
-                    + "with pet-deletions.log and actual deaths before removing pets-recovery-required; saving is disabled");
+        if (!session.exists()) {
+            discard(intact);
+        } else if (intact.exists()) {
+            // A killed process only loses unsaved positions and needs: every death and release
+            // reached pet-deletions.log before its body went away, so the saved data is consistent.
+            logger.warning("Previous pet session stopped without a clean shutdown; no deaths or releases were left "
+                    + "uncommitted, so pets resume from the last saved pets.yml");
+            if (!discard(session) || !discard(intact)) {
+                logger.severe("Could not clear pets-recovery-required; saving is disabled");
+                return false;
+            }
+        } else {
+            logger.severe("Previous pet session did not commit a clean shutdown, and a pet save or deletion may have failed. "
+                    + "Stop the server and reconcile pets.yml with pet-deletions.log and actual deaths before removing "
+                    + "pets-recovery-required; saving is disabled");
             return false;
         }
         try {
@@ -410,6 +425,11 @@ public final class PetStore {
         if (!loaded || !deletionLogHealthy || sessionStarted) return false;
         try {
             Files.createDirectories(session.toPath().getParent());
+            // The proof goes first, so a crash between the two writes leaves only a stale proof.
+            try (FileChannel channel = FileChannel.open(intact.toPath(), StandardOpenOption.CREATE,
+                    StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                writeAndForce(channel, "Every pet death and release of the active session is in pet-deletions.log.\n");
+            }
             try (FileChannel channel = FileChannel.open(session.toPath(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
                 writeAndForce(channel, "Pet session active; reconcile terminal transitions if shutdown does not complete.\n");
             }
@@ -417,6 +437,7 @@ public final class PetStore {
             return true;
         } catch (IOException ex) {
             loaded = false;
+            discard(intact);
             logger.log(Level.SEVERE, "Could not arm pet recovery protection; saving is disabled", ex);
             return false;
         }
@@ -432,10 +453,14 @@ public final class PetStore {
                 Thread.currentThread().interrupt();
             }
         }
-        if (!saved) return false;
+        if (!saved) {
+            breakIntact();
+            return false;
+        }
         if (sessionStarted) {
             try {
                 Files.delete(session.toPath());
+                Files.deleteIfExists(intact.toPath());
                 sessionStarted = false;
             } catch (IOException ex) {
                 logger.log(Level.SEVERE, "Could not confirm clean pet shutdown", ex);
@@ -443,6 +468,23 @@ public final class PetStore {
             }
         }
         return true;
+    }
+
+    /**
+     * Withdraws the proof that a killed session may resume unattended. A delete needs no free
+     * space, so it still works after the write that failed.
+     */
+    private void breakIntact() {
+        if (!discard(intact)) logger.severe("Could not remove pets-session-intact; remove it before the next start");
+    }
+
+    private static boolean discard(File target) {
+        try {
+            Files.deleteIfExists(target.toPath());
+            return true;
+        } catch (IOException | SecurityException ex) {
+            return false;
+        }
     }
 
     static void writeAndForce(FileChannel channel, String value) throws IOException {
@@ -643,6 +685,7 @@ public final class PetStore {
             }
         } catch (IOException ex) {
             deletionLogHealthy = false;
+            breakIntact();
             logger.log(Level.SEVERE, "Could not commit deletion for pet " + id
                     + "; body recovery and saving are disabled. The session guard requires operator reconciliation", ex);
             return false;
@@ -744,6 +787,7 @@ public final class PetStore {
         } catch (IOException ex) {
             logger.log(Level.SEVERE, "Pet ownership migration is held; saving disabled", ex);
             loaded = false;
+            breakIntact();
             return false;
         }
     }
