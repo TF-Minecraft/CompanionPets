@@ -142,6 +142,19 @@ class PetsPluginLifecycleTest {
         assertTrue(messages.stream().anyMatch(record -> record.getMessage().contains("did not commit a clean shutdown")));
     }
 
+    @Test void killedServerWithAnIntactSessionStartsPetsAgain() throws Exception {
+        prepare(); var owner = server.addPlayer(); var pet = pet(owner.getUniqueId()); pet.stored(true); saveBeforeEnable(pet);
+        Files.writeString(file("pets-session-intact"), "intact\n");
+        Files.writeString(file("pets-recovery-required"), "session active\n");
+        enable();
+        assertTrue(plugin.isEnabled()); assertNotNull(runtime().store().get(pet.id()));
+        assertTrue(messages.stream().anyMatch(record -> record.getMessage().contains("pets resume from the last saved pets.yml")));
+        assertTrue(Files.exists(file("pets-recovery-required")), "The new session arms its own guard");
+        server.getPluginManager().disablePlugin(plugin);
+        assertFalse(Files.exists(file("pets-recovery-required")));
+        assertFalse(Files.exists(file("pets-session-intact")));
+    }
+
     @Test void corruptSavedPetsDisableStartupWithoutOverwritingTheEvidence() throws Exception {
         prepare(); Files.writeString(file("pets.yml"), "pets: [broken\n");
         server.getPluginManager().enablePlugin(plugin);
