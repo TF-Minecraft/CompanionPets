@@ -253,7 +253,7 @@ class PetListenerCoverageTest {
 
     @Test void highPriorityDamageCancellationPreservesMoodAndAnimations() {
         atHigh(EntityDamageByEntityEvent.class, event -> event.setCancelled(true));
-        var event = fire(attack(owner, body, 2));
+        var event = fire(attack(server.addPlayer(), body, 2));
         assertTrue(event.isCancelled());
         assertEquals(80, pet.need(Need.MOOD));
         assertTrue(animations.isEmpty());
@@ -261,7 +261,7 @@ class PetListenerCoverageTest {
     }
 
     @Test void zeroFinalDamageDoesNotCountAsBeingStruck() {
-        fire(attack(owner, body, 0));
+        fire(attack(server.addPlayer(), body, 0));
         assertEquals(80, pet.need(Need.MOOD));
         assertTrue(animations.isEmpty());
     }
@@ -352,6 +352,37 @@ class PetListenerCoverageTest {
         assertTrue(animations.isEmpty()); assertTrue(cancelledAnimations.isEmpty()); assertTrue(sounds.isEmpty());
         var ordinary = fire(new EntityDamageEvent(wolf(owner.getLocation()), cause, 1));
         assertFalse(ordinary.isCancelled()); assertFalse(observed.getLast());
+    }
+
+    @Test void ownerDamageIsCancelledBeforeOtherPluginsWhetherMeleeProjectileOrSkill() {
+        var observed = new ArrayList<Boolean>();
+        server.getPluginManager().registerEvent(EntityDamageByEntityEvent.class, new Listener() { }, EventPriority.LOW,
+                (unused, event) -> observed.add(((EntityDamageEvent) event).isCancelled()), runtime.plugin());
+        Snowball shot = world.spawn(owner.getEyeLocation(), Snowball.class);
+        shot.setShooter(owner);
+        // Skill effects may hit through another entity while naming the caster as the cause.
+        Snowball effect = world.spawn(owner.getEyeLocation(), Snowball.class);
+        var skill = DamageSource.builder(DamageType.MAGIC).withCausingEntity(owner).withDirectEntity(effect).build();
+        for (var event : List.of(attack(owner, body, 10), attack(shot, body, 10),
+                new EntityDamageByEntityEvent(effect, body, EntityDamageEvent.DamageCause.MAGIC, skill, 10))) {
+            assertTrue(fire(event).isCancelled());
+        }
+        assertEquals(List.of(true, true, true), observed);
+        assertEquals(80, pet.need(Need.MOOD));
+        assertTrue(animations.isEmpty());
+        assertTrue(cancelledAnimations.isEmpty());
+    }
+
+    @Test void ownerProtectionCoversOnlyTheirOwnPets() {
+        var stranger = server.addPlayer();
+        assertFalse(fire(attack(stranger, body, 2)).isCancelled());
+        assertEquals(80 - runtime.config().care().struckMoodPenalty(), pet.need(Need.MOOD));
+        var otherBody = wolf(owner.getLocation().add(2, 0, 0));
+        Pet other = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), stranger.getUniqueId(), "wolf", "Luna", PetSex.FEMALE);
+        runtime.store().add(other);
+        runtime.remember(other, otherBody);
+        assertFalse(fire(attack(owner, otherBody, 2)).isCancelled());
+        assertFalse(fire(attack(owner, wolf(owner.getLocation()), 2)).isCancelled());
     }
 
     @Test void toyProjectileDamageIsCancelledBeforeMoodOrVisualEffects() {
