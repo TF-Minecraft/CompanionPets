@@ -215,6 +215,20 @@ public final class PetListener implements Listener {
                 && runtime.byEntity(event.getEntity()) != null) event.setCancelled(true);
     }
 
+    /** Owners cannot hurt their own pets: following pets end up inside area skills such as dashes. */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onOwnerDamage(EntityDamageByEntityEvent event) {
+        Pet pet = runtime.byEntity(event.getEntity());
+        if (pet != null && pet.ownerId().equals(responsiblePlayer(event))) event.setCancelled(true);
+    }
+
+    private static UUID responsiblePlayer(EntityDamageByEntityEvent event) {
+        Entity cause = event.getDamageSource().getCausingEntity();
+        if (cause == null) cause = event.getDamager();
+        if (cause instanceof Projectile projectile && projectile.getShooter() instanceof Entity shooter) cause = shooter;
+        return cause instanceof Player player ? player.getUniqueId() : null;
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onVisualDamage(EntityDamageEvent event) {
         if (event.getFinalDamage() <= 0) return;
