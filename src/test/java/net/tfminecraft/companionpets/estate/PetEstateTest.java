@@ -331,6 +331,20 @@ class PetEstateTest {
         estate.decided=()->List.of(decision);estate.guard=ignored->false;estate.reconcile();org.mockito.Mockito.verifyNoInteractions(service);
         estate.guard=ignored->true;estate.reconcile();org.mockito.Mockito.verify(service).report(org.mockito.ArgumentMatchers.eq(death),org.mockito.ArgumentMatchers.eq("companionpets"),org.mockito.ArgumentMatchers.eq(1L),org.mockito.ArgumentMatchers.any(Outcome.class));
     }
+    @Test void hourlyPassWaitsSilentlyForReadinessButStillReportsAPersistenceConflict() throws Exception {
+        var service=org.mockito.Mockito.mock(EstateService.class);
+        org.bukkit.Bukkit.getServicesManager().register(EstateService.class,service,runtime.plugin(),org.bukkit.plugin.ServicePriority.Highest);
+        var decision=decision(1,Recipient.FROZEN);estate.decided=()->List.of(decision);
+        var identity=org.mockito.Mockito.mock(net.tfminecraft.tlibs.character.CharacterIdentity.class);var ready=new java.util.concurrent.atomic.AtomicBoolean();
+        org.mockito.Mockito.when(identity.legacyHeirsReady()).thenAnswer(call->ready.get());
+        org.bukkit.Bukkit.getServicesManager().register(net.tfminecraft.tlibs.character.CharacterIdentity.class,identity,runtime.plugin(),org.bukkit.plugin.ServicePriority.Highest);
+        estate.reconcile();org.mockito.Mockito.verifyNoInteractions(service);
+        ready.set(true);estate.reconcile();
+        org.mockito.Mockito.verify(service).report(org.mockito.ArgumentMatchers.eq(death),org.mockito.ArgumentMatchers.eq("companionpets"),org.mockito.ArgumentMatchers.eq(1L),org.mockito.ArgumentMatchers.isA(Outcome.Done.class));
+        ready.set(false);Path file=runtime.plugin().getDataFolder().toPath().resolve("pets.yml");
+        Files.writeString(file,Files.readString(file)+"external-progress: kept\n");assertFalse(store.save());estate.reconcile();
+        org.mockito.Mockito.verify(service).report(org.mockito.ArgumentMatchers.eq(death),org.mockito.ArgumentMatchers.eq("companionpets"),org.mockito.ArgumentMatchers.eq(1L),org.mockito.ArgumentMatchers.isA(Outcome.Blocked.class));
+    }
     @Test void malformedJournalBlocksButFilesystemFailureRemainsRetryable() throws Exception {
         var decision=decision(1,Recipient.character(to));assertInstanceOf(Outcome.Done.class,estate.settle(decision));
         Path file=folder.resolve(death+"-1.yml");String original=Files.readString(file);

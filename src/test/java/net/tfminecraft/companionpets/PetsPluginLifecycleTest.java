@@ -125,9 +125,14 @@ class PetsPluginLifecycleTest {
         org.mockito.Mockito.when(identity.legacyHeirsReady()).thenAnswer(call->ready.get());
         org.mockito.Mockito.when(identity.legacyHeir(owner.getUniqueId())).thenReturn(java.util.Optional.of(new net.tfminecraft.tlibs.character.CharacterRef(owner.getUniqueId(),owner.getUniqueId())));
         org.bukkit.Bukkit.getServicesManager().register(net.tfminecraft.tlibs.character.CharacterIdentity.class,identity,plugin,org.bukkit.plugin.ServicePriority.Highest);
+        var estates=org.mockito.Mockito.mock(net.tfminecraft.tlibs.character.estate.EstateService.class);
+        org.bukkit.Bukkit.getServicesManager().register(net.tfminecraft.tlibs.character.estate.EstateService.class,estates,plugin,org.bukkit.plugin.ServicePriority.Highest);
         enable();var existing=runtime().store().get(pet.id());assertNull(existing.ownerCharacterId());server.getScheduler().performOneTick();assertNull(existing.ownerCharacterId());
+        org.mockito.Mockito.verify(estates,org.mockito.Mockito.never()).decided();
         ready.set(true);server.getScheduler().performTicks(20);assertSame(existing,runtime().store().get(pet.id()));assertEquals(owner.getUniqueId(),existing.ownerCharacterId());
         assertTrue(Files.exists(file("ownership-migrations/plan-0001.yml")));
+        // The estate pass skipped while heirs were pending runs once as soon as they are ready.
+        org.mockito.Mockito.verify(estates).decided();
     }
 
     @Test void recoveryGuardDisablesStartupAndPreservesFilesWithoutSchedulingActions() throws Exception {

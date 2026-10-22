@@ -34,11 +34,12 @@ public final class PetEstate implements EstateParticipant {
     public PetEstate(PetRuntime runtime, PetActions actions, Path journals) {
         this.runtime = runtime; this.actions = actions; this.journals = journals;
     }
-    public static void start(Plugin plugin, PetRuntime runtime, PetActions actions) {
+    public static PetEstate start(Plugin plugin, PetRuntime runtime, PetActions actions) {
         PetEstate estate = new PetEstate(runtime, actions, plugin.getDataFolder().toPath().resolve("estates"));
         estate.recover();
         Bukkit.getServicesManager().register(EstateParticipant.class, estate, plugin, ServicePriority.Normal);
         Bukkit.getScheduler().runTaskTimer(plugin, estate::reconcile, 1L, 72000L);
+        return estate;
     }
     @Override public String id() { return "companionpets"; }
     @Override public Holdings describe(UUID character) {
@@ -60,8 +61,7 @@ public final class PetEstate implements EstateParticipant {
     }
     @Override public Outcome settle(EstateDecision decision) {
         if (runtime.store().persistenceConflict()) return Outcome.blocked("Pet source changed outside its current writer; review is required");
-        if (!net.tfminecraft.companionpets.ownership.CharacterAccess.heirReady() || !runtime.store().ownershipReady())
-            return Outcome.retry("Reviewed pet ownership and persistence are not ready");
+        if (!ready()) return Outcome.retry("Reviewed pet ownership and persistence are not ready");
         if (!guard.test(decision)) return Outcome.retry("The exact estate decision is not current");
         if (decision.property().character().isPresent() && runtime.store().hasUnassignedOwner(decision.testator().ownerId()))
             return Outcome.blocked("Legacy pet/house ownership for this account still needs its reviewed heir");
@@ -301,7 +301,15 @@ public final class PetEstate implements EstateParticipant {
             runtime.plugin().getLogger().severe("Pet estate journals unreadable; ownership stays held: " + ex.getMessage());
         }
     }
-    void reconcile() {
+    private boolean ready() {
+        return net.tfminecraft.companionpets.ownership.CharacterAccess.heirReady() && runtime.store().ownershipReady();
+    }
+    /**
+     * Hourly, and once more when ownership becomes ready after a restart. Until then the pass is
+     * skipped rather than answering RETRY over estates already settled; a conflict still reports.
+     */
+    public void reconcile() {
+        if (!runtime.store().persistenceConflict() && !ready()) return;
         for (EstateDecision decision : decided.get()) {
             if (guard.test(decision)) Estates.report(decision.deathId(), id(), decision.revision(), settle(decision));
         }
