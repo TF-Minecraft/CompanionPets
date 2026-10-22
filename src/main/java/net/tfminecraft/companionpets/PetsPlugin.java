@@ -49,6 +49,7 @@ public class PetsPlugin extends JavaPlugin {
     private BukkitTask visualTicker;
     private BukkitTask tailTicker;
     private BukkitTask heirWait;
+    private net.tfminecraft.companionpets.estate.PetEstate estate;
     private PetVisual visual;
     private PetRuntime runtime;
     private PetListener petListener;
@@ -93,7 +94,7 @@ public class PetsPlugin extends JavaPlugin {
         if (net.tfminecraft.companionpets.ownership.CharacterAccess.available())
             Bukkit.getPluginManager().registerEvents(new net.tfminecraft.companionpets.ownership.CharacterLifecycle(runtime, actions), this);
         if (net.tfminecraft.companionpets.estate.EstateProbe.available())
-            net.tfminecraft.companionpets.estate.PetEstate.start(this, runtime, actions);
+            estate = net.tfminecraft.companionpets.estate.PetEstate.start(this, runtime, actions);
         staff = new net.tfminecraft.companionpets.staff.StaffCommands(runtime, actions);
         tests = new net.tfminecraft.companionpets.staff.TestCommands(runtime, actions, staff);
         Bukkit.getPluginManager().registerEvents(staff.menus(), this);
@@ -123,6 +124,8 @@ public class PetsPlugin extends JavaPlugin {
                     if (body != null && type != null) runtime.bodies().reattach(body, pet, type);
                 }
                 heirWait.cancel();
+                // The first hourly estate pass ran before ownership was ready; settle due estates now.
+                if (estate != null) estate.reconcile();
             }, 1L, 20L);
         }
         getLogger().info("CompanionPets enabled (" + config.types().size() + " pet types)");
