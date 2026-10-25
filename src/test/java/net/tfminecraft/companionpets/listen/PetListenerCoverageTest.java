@@ -385,6 +385,36 @@ class PetListenerCoverageTest {
         assertFalse(fire(attack(owner, wolf(owner.getLocation()), 2)).isCancelled());
     }
 
+    @Test void invulnerablePetsTakeNoDamageFromAnySourceBeforeOtherPlugins() throws Exception {
+        var yaml = new YamlConfiguration();
+        yaml.loadFromString("""
+                items: {kennel: BARREL, kennel-block: BARREL, toys: [STICK], treats: [COD]}
+                care: {invulnerable: true}
+                pets:
+                  wolf: {entity: WOLF, egg: WOLF_SPAWN_EGG, default-tricks: []}
+                """);
+        runtime.config(CompanionConfig.load(runtime.plugin(), yaml));
+        var observed = new ArrayList<Boolean>();
+        server.getPluginManager().registerEvent(EntityDamageEvent.class, new Listener() { }, EventPriority.LOW,
+                (unused, event) -> observed.add(((EntityDamageEvent) event).isCancelled()), runtime.plugin());
+        var stranger = server.addPlayer();
+        Snowball shot = world.spawn(stranger.getEyeLocation(), Snowball.class);
+        shot.setShooter(stranger);
+        List<EntityDamageEvent> events = new ArrayList<>(List.of(attack(stranger, body, 1_000), attack(shot, body, 1_000),
+                attack(wolf(owner.getLocation()), body, 1_000)));
+        for (var cause : List.of(EntityDamageEvent.DamageCause.FALL, EntityDamageEvent.DamageCause.LAVA,
+                EntityDamageEvent.DamageCause.FIRE_TICK, EntityDamageEvent.DamageCause.VOID, EntityDamageEvent.DamageCause.KILL)) {
+            events.add(new EntityDamageEvent(body, cause, 1_000));
+        }
+        for (var event : events) assertTrue(fire(event).isCancelled(), event.getCause().name());
+        assertTrue(observed.stream().allMatch(Boolean::booleanValue));
+        assertEquals(events.size(), observed.size());
+        assertEquals(80, pet.need(Need.MOOD));
+        assertTrue(animations.isEmpty());
+        assertFalse(fire(attack(stranger, wolf(owner.getLocation()), 2)).isCancelled());
+        assertFalse(fire(new EntityDamageEvent(wolf(owner.getLocation()), EntityDamageEvent.DamageCause.FALL, 2)).isCancelled());
+    }
+
     @Test void toyProjectileDamageIsCancelledBeforeMoodOrVisualEffects() {
         Snowball toy = world.spawn(owner.getEyeLocation(), Snowball.class);
         toy.getPersistentDataContainer().set(runtime.toyKey(), PersistentDataType.STRING, UUID.randomUUID().toString());
