@@ -128,6 +128,7 @@ public final class CompanionConfig {
                 num(logger, care, "minutes-until-sick", defaults.minutesUntilSick()),
                 care != null && care.contains("decay-while-stored") ? care.getBoolean("decay-while-stored") : defaults.decayWhileStored(),
                 care != null && care.contains("death-on-neglect") ? care.getBoolean("death-on-neglect") : defaults.deathOnNeglect(),
+                care != null && care.contains("invulnerable") ? care.getBoolean("invulnerable") : defaults.invulnerable(),
                 num(logger, care, "play-seconds", defaults.playSeconds()),
                 num(logger, care, "play-mood-gain", defaults.playMoodGain()),
                 num(logger, care, "play-energy-cost", defaults.playEnergyCost()),

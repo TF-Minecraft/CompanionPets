@@ -154,6 +154,7 @@ class NeedClockTest {
                 care.minutesUntilSick(),
                 care.decayWhileStored(),
                 true,
+                care.invulnerable(),
                 care.playSeconds(),
                 care.playMoodGain(),
                 care.playEnergyCost(),

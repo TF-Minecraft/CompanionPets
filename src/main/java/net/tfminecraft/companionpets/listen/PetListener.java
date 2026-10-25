@@ -215,11 +215,18 @@ public final class PetListener implements Listener {
                 && runtime.byEntity(event.getEntity()) != null) event.setCancelled(true);
     }
 
-    /** Owners cannot hurt their own pets: following pets end up inside area skills such as dashes. */
+    /**
+     * Owners cannot hurt their own pets: following pets end up inside area skills such as dashes.
+     * With care.invulnerable nothing can, since a pet's death deletes it.
+     */
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onOwnerDamage(EntityDamageByEntityEvent event) {
+    public void onProtectedDamage(EntityDamageEvent event) {
         Pet pet = runtime.byEntity(event.getEntity());
-        if (pet != null && pet.ownerId().equals(responsiblePlayer(event))) event.setCancelled(true);
+        if (pet == null) return;
+        if (runtime.config().care().invulnerable()
+                || event instanceof EntityDamageByEntityEvent attack && pet.ownerId().equals(responsiblePlayer(attack))) {
+            event.setCancelled(true);
+        }
     }
 
     private static UUID responsiblePlayer(EntityDamageByEntityEvent event) {

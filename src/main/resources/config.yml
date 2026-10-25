@@ -258,6 +258,7 @@ care:
   minutes-until-sick: 60        # Additional minutes with critical needs after the unwell threshold before sickness.
   decay-while-stored: false     # true advances care in the Pet House while the owner is online.
   death-on-neglect: false       # true kills at zero health from illness; false leaves the pet weakened.
+  invulnerable: false           # true cancels all damage to pets; false only blocks damage from their owner.
   play-seconds: 6               # Loaded duration in seconds; currently unused by runtime play.
   play-mood-gain: 22            # Mood points gained on play completion or when comforting an ill pet.
   play-energy-cost: 1           # Energy points spent on play completion.
