@@ -4,9 +4,14 @@ import static net.bytebuddy.matcher.ElementMatchers.is;
 import static net.bytebuddy.matcher.ElementMatchers.named;
 import static net.bytebuddy.matcher.ElementMatchers.takesArguments;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import net.bytebuddy.agent.ByteBuddyAgent;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
+import net.bytebuddy.description.type.TypeDescription;
+import net.bytebuddy.dynamic.DynamicType;
+import net.bytebuddy.utility.JavaModule;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.junit.platform.launcher.LauncherSession;
@@ -30,16 +35,30 @@ public final class HolderLookupPatch implements LauncherSessionListener {
         if (installed) {
             return;
         }
+        AtomicBoolean patched = new AtomicBoolean();
         new AgentBuilder.Default()
                 .disableClassFormatChanges()
                 .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
                 .with(AgentBuilder.InitializationStrategy.NoOp.INSTANCE)
                 .with(AgentBuilder.TypeStrategy.Default.REDEFINE)
                 .with(AgentBuilder.Listener.StreamWriting.toSystemError().withErrorsOnly())
+                .with(new AgentBuilder.Listener.Adapter() {
+                    @Override
+                    public void onTransformation(TypeDescription type, ClassLoader loader, JavaModule module,
+                            boolean loaded, DynamicType dynamicType) {
+                        if (type.getName().equals(InventoryMock.class.getName())) {
+                            patched.set(true);
+                        }
+                    }
+                })
                 .type(is(InventoryMock.class))
                 .transform((builder, type, loader, module, domain) -> builder.visit(Advice.to(PlainHolder.class)
                         .on(named("getHolder").and(takesArguments(boolean.class)))))
                 .installOn(ByteBuddyAgent.install());
+        // A failed retransformation only reaches the listeners, so check it took before marking it done.
+        if (!patched.get()) {
+            throw new IllegalStateException("Could not patch InventoryMock#getHolder(boolean)");
+        }
         installed = true;
     }
 
