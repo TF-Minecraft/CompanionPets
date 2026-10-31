@@ -36,6 +36,7 @@ public final class HolderLookupPatch implements LauncherSessionListener {
             return;
         }
         AtomicBoolean patched = new AtomicBoolean();
+        AtomicBoolean rejected = new AtomicBoolean();
         new AgentBuilder.Default()
                 .disableClassFormatChanges()
                 .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
@@ -50,13 +51,22 @@ public final class HolderLookupPatch implements LauncherSessionListener {
                             patched.set(true);
                         }
                     }
+
+                    // The JVM can still reject the new bytes after onTransformation.
+                    @Override
+                    public void onError(String typeName, ClassLoader loader, JavaModule module, boolean loaded,
+                            Throwable throwable) {
+                        if (typeName.equals(InventoryMock.class.getName())) {
+                            rejected.set(true);
+                        }
+                    }
                 })
                 .type(is(InventoryMock.class))
                 .transform((builder, type, loader, module, domain) -> builder.visit(Advice.to(PlainHolder.class)
                         .on(named("getHolder").and(takesArguments(boolean.class)))))
                 .installOn(ByteBuddyAgent.install());
         // A failed retransformation only reaches the listeners, so check it took before marking it done.
-        if (!patched.get()) {
+        if (!patched.get() || rejected.get()) {
             throw new IllegalStateException("Could not patch InventoryMock#getHolder(boolean)");
         }
         installed = true;
