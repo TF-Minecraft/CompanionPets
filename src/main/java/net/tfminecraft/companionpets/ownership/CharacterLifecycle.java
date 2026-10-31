@@ -20,7 +20,7 @@ public final class CharacterLifecycle implements Listener {
         Player player = Bukkit.getPlayer(event.getSession().ref().ownerId());
         if (player != null) {
             actions.ownerSessionChanged(player);
-            if (player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder) player.closeInventory();
+            if (player.getOpenInventory().getTopInventory().getHolder(false) instanceof MenuHolder) player.closeInventory();
         }
         runtime.sessions().clearPlayer(event.getSession().ref().ownerId());
     }

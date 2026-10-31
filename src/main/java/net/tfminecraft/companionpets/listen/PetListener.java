@@ -138,7 +138,7 @@ public final class PetListener implements Listener {
 
     @EventHandler
     public void onClick(InventoryClickEvent event) {
-        InventoryHolder holder = event.getView().getTopInventory().getHolder();
+        InventoryHolder holder = event.getView().getTopInventory().getHolder(false);
         if (!(holder instanceof MenuHolder menu) || !(event.getWhoClicked() instanceof Player player)) {
             return;
         }
@@ -152,14 +152,14 @@ public final class PetListener implements Listener {
 
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
-        if (event.getView().getTopInventory().getHolder() instanceof MenuHolder) {
+        if (event.getView().getTopInventory().getHolder(false) instanceof MenuHolder) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        if (event.getInventory().getHolder() instanceof MenuHolder menu
+        if (event.getInventory().getHolder(false) instanceof MenuHolder menu
                 && menu.kind() == MenuHolder.Kind.TRICK
                 && !menu.navigating()
                 && event.getPlayer() instanceof Player player) {

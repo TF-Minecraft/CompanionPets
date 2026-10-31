@@ -101,7 +101,7 @@ public final class StaffMenus implements Listener {
     }
 
     @EventHandler public void onClick(InventoryClickEvent event) {
-        if (!(event.getView().getTopInventory().getHolder() instanceof StaffMenuHolder holder)) return;
+        if (!(event.getView().getTopInventory().getHolder(false) instanceof StaffMenuHolder holder)) return;
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player) || !holder.viewer().equals(player.getUniqueId())) return;
         if (event.getClickedInventory() != event.getView().getTopInventory() || !(event.getClick().isLeftClick() || event.getClick().isRightClick())
@@ -109,6 +109,6 @@ public final class StaffMenus implements Listener {
         if (allowed(player, "list")) holder.click(event.getSlot(), event.getClick().isRightClick());
     }
     @EventHandler public void onDrag(InventoryDragEvent event) {
-        if (event.getView().getTopInventory().getHolder() instanceof StaffMenuHolder) event.setCancelled(true);
+        if (event.getView().getTopInventory().getHolder(false) instanceof StaffMenuHolder) event.setCancelled(true);
     }
 }

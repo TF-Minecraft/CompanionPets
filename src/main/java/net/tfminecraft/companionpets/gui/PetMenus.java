@@ -77,7 +77,7 @@ public final class PetMenus {
     }
 
     public void refreshCare(org.bukkit.entity.Player player, Pet pet) {
-        if (!(player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder holder)
+        if (!(player.getOpenInventory().getTopInventory().getHolder(false) instanceof MenuHolder holder)
                 || holder.kind() != MenuHolder.Kind.CARE
                 || !pet.id().equals(holder.petId())) {
             return;
@@ -87,7 +87,7 @@ public final class PetMenus {
 
     private void fillCare(org.bukkit.entity.Player player, Inventory inventory, Pet pet) {
         fillProfile(inventory, pet, runtime.owns(pet, player),
-                inventory.getHolder() instanceof MenuHolder holder && holder.petHouseBack());
+                inventory.getHolder(false) instanceof MenuHolder holder && holder.petHouseBack());
     }
 
     public void fillInformation(Inventory inventory, Pet pet) {
@@ -334,7 +334,7 @@ public final class PetMenus {
 
     private void inheritPetHouseNavigation(org.bukkit.entity.Player player, MenuHolder holder) {
         Inventory previousInventory = player.getOpenInventory().getTopInventory();
-        if (previousInventory != null && previousInventory.getHolder() instanceof MenuHolder previous
+        if (previousInventory != null && previousInventory.getHolder(false) instanceof MenuHolder previous
                 && holder.petId().equals(previous.petId())) {
             holder.petHouseBack(previous.petHouseBack());
             holder.petHousePage(previous.petHousePage());

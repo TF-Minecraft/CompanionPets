@@ -252,7 +252,8 @@ public class PetsPlugin extends JavaPlugin {
             return;
         }
         for (var player : Bukkit.getOnlinePlayers()) {
-            if (player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder || player.getOpenInventory().getTopInventory().getHolder() instanceof net.tfminecraft.companionpets.staff.StaffMenuHolder) player.closeInventory();
+            var holder = player.getOpenInventory().getTopInventory().getHolder(false);
+            if (holder instanceof MenuHolder || holder instanceof net.tfminecraft.companionpets.staff.StaffMenuHolder) player.closeInventory();
         }
         actions.clearInteractions();
         actions.holograms().clear();
