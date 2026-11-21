@@ -104,7 +104,7 @@ public final class PetMenus {
         ItemStack food = type == null || type.foodIcon() == null ? new ItemStack(Material.COOKED_BEEF) : type.foodIcon().icon(Material.COOKED_BEEF);
         boolean sick = pet.illness() != Illness.NONE;
 
-        inventory.setItem(4, named(egg, PetTexts.speciesName(pet.typeId()), NamedTextColor.WHITE,
+        inventory.setItem(4, named(egg, PetTypeDef.speciesName(type, pet.typeId()), NamedTextColor.WHITE,
                 line("Species", NamedTextColor.GRAY)));
         inventory.setItem(11, named(Material.WHITE_DYE, "Sex", NamedTextColor.WHITE,
                 line(PetTexts.sexName(pet.sex()), NamedTextColor.GRAY)));
@@ -245,7 +245,7 @@ public final class PetMenus {
             ItemStack icon = type == null ? new ItemStack(Material.BONE) : type.eggIcon();
             boolean stored = pet.stored();
             ItemStack item = named(icon, pet.name(), NamedTextColor.GOLD,
-                    line(PetTexts.sexName(pet.sex()) + " " + PetTexts.speciesName(pet.typeId()).toLowerCase(java.util.Locale.ROOT),
+                    line(PetTexts.sexName(pet.sex()) + " " + PetTypeDef.speciesName(type, pet.typeId()),
                             NamedTextColor.GRAY),
                     line(stored ? "Resting in the Pet House" : "Out and about", stored ? NamedTextColor.DARK_GRAY : NamedTextColor.GREEN),
                     line("Energy ", StatLook.theme(Need.ENERGY)).append(StatLook.bar(pet.need(Need.ENERGY))),

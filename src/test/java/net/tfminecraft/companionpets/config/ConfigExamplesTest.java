@@ -148,6 +148,8 @@ class ConfigExamplesTest {
         assertEquals(BehaviorProfile.CAT, fox.behavior());
         assertEquals(SexMode.CHOOSE, fox.sexMode());
         assertEquals(12002, fox.eggCustomModelData());
+        assertEquals("Arctic Fox", fox.speciesName());
+        assertEquals("Black Cat", config.type("catblack").speciesName());
         assertEquals("companionpets.hatch.fox", fox.hatchPermission());
         assertEquals("companionpets.hatch", config.type("rabbit").hatchPermission());
         assertEquals(List.of(ItemRef.vanilla(Material.SALMON)), fox.treats());

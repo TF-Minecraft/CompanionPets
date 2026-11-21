@@ -282,6 +282,7 @@ public final class CompanionConfig {
             if (section == null) {
                 continue;
             }
+            String displayName = blankToNull(section.getString("display-name")); // Own entry only; never inherited from species.
             PetDefinitions.Resolved resolved;
             try {
                 resolved = definitions.resolve(section);
@@ -365,7 +366,7 @@ public final class CompanionConfig {
                     sexMode,
                     appearance,
                     petItems, tricks, defaults, resolved.behavior(),
-                    PetSounds.read(section, entity, logger), section.getBoolean("native-combat", false), resolved.species(), hatchPermission));
+                    PetSounds.read(section, entity, logger), section.getBoolean("native-combat", false), resolved.species(), hatchPermission, displayName));
         }
         return Collections.unmodifiableMap(types);
     }

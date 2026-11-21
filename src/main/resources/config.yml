@@ -123,6 +123,7 @@ pets:
   # cat = restrained, chatty greetings and stalking toys; basic = neutral hops/sounds.
   # fox_example:
   #   species: dog              # Inherits global defaults and species.dog settings.
+  #   display-name: Arctic Fox  # Species name players see; default is a readable name from the ID. Not inherited.
   #   entity: WOLF              # Only WOLF or CAT, even for a visible fox.
   #   mythic-mob: ""            # Optional MythicMobs mob ID; nonempty requires MythicMobs.
   #   egg: EGG                  # Vanilla, MMOItems or ItemsAdder selector.

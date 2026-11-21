@@ -38,9 +38,75 @@ class PetTextsTest {
     @Test
     void speciesAndItemNamesReadNaturally() {
         assertEquals("Wolf", PetTexts.speciesName("wolf"));
-        assertEquals("Snow fox", PetTexts.speciesName("snow_fox"));
+        assertEquals("Snow Fox", PetTexts.speciesName("snow_fox"));
         assertEquals("Pet", PetTexts.speciesName(""));
         assertEquals("glow berries", PetTexts.itemName("GLOW_BERRIES"));
+    }
+
+    @Test
+    void everyTfmcPetTypeHasAReadableSpeciesNameAndConfigNamesWin() {
+        var expected = new java.util.LinkedHashMap<String, String>();
+        expected.put("wolf", "Wolf"); expected.put("cat", "Cat"); expected.put("beagle", "Beagle");
+        expected.put("chihuahua", "Chihuahua"); expected.put("corgi", "Corgi"); expected.put("golden", "Golden Retriever");
+        expected.put("husky", "Husky"); expected.put("catblack", "Black Cat"); expected.put("catfunny", "Funny Cat");
+        expected.put("catorange", "Orange Cat"); expected.put("mainecoon", "Maine Coon"); expected.put("fox", "Fox");
+        expected.put("frog", "Frog"); expected.put("bernesse", "Bernese Mountain Dog"); expected.put("bordercollie", "Border Collie");
+        expected.put("catgray", "Gray Cat"); expected.put("cattabby", "Tabby Cat"); expected.put("lagottoromagnolo", "Lagotto Romagnolo");
+        expected.put("yorkshire", "Yorkshire Terrier"); expected.put("bordercolliegray", "Gray Border Collie");
+        expected.put("cavalier_king_charles_spaniel", "Cavalier King Charles Spaniel"); expected.put("sphynx", "Sphynx Cat");
+        expected.forEach((id, name) -> assertEquals(name, PetTexts.speciesName(id), id));
+        assertEquals("Maine Coon", PetTexts.speciesName(" MaineCoon "));
+        assertEquals("Ginger Tom", PetTexts.speciesName(" Ginger Tom ", "catorange"));
+        assertEquals("Orange Cat", PetTexts.speciesName("  ", "catorange"));
+        assertEquals("Orange Cat", PetTexts.speciesName(null, "catorange"));
+        assertEquals("Black Cat", net.tfminecraft.companionpets.config.PetTypeDef.speciesName(null, "catblack"));
+    }
+
+    @Test
+    void hatchPromptAndPetHouseUseTheReadableSpeciesName() throws Exception {
+        var server = MockBukkit.mock();
+        PetStore store = null;
+        PetActions actions = null;
+        try {
+            server.addSimpleWorld("world");
+            var plugin = net.tfminecraft.companionpets.testutil.OwnershipFixture.plugin();
+            var owner = server.addPlayer();
+            var yaml = new YamlConfiguration();
+            yaml.loadFromString("pets: {mainecoon: {species: cat, egg: CAT_SPAWN_EGG, sex: choose}, wolf: {species: dog, egg: WOLF_SPAWN_EGG, display-name: Grey Wolf}}");
+            var config = CompanionConfig.load(plugin, yaml);
+            store = new PetStore(plugin);
+            assertTrue(store.load());
+            var visual = new IdleVisual();
+            var key = new NamespacedKey(plugin, "pet");
+            var runtime = new PetRuntime(plugin, config, store, new Sessions(), new Bodies(plugin, key, visual),
+                    visual, key, new NamespacedKey(plugin, "toy"));
+            actions = new PetActions(runtime);
+            var egg = new ItemStack(Material.CAT_SPAWN_EGG);
+            owner.getInventory().setItemInMainHand(egg);
+            actions.useWorld(owner, egg, null, null, false, true);
+            assertTrue(owner.nextMessage().contains("Will your new Maine Coon be a boy or a girl?"));
+            actions.onChat(owner, "cancel");
+            var wolfEgg = new ItemStack(Material.WOLF_SPAWN_EGG);
+            owner.getInventory().setItemInMainHand(wolfEgg);
+            owner.nextMessage();
+            actions.useWorld(owner, wolfEgg, null, null, false, true);
+            String told = owner.nextMessage();
+            assertTrue(told.contains("Your new Grey Wolf is a "), told);
+            actions.onChat(owner, "cancel");
+            var pet = net.tfminecraft.companionpets.testutil.OwnershipFixture.pet(UUID.randomUUID(), owner.getUniqueId(), "mainecoon", "Luna", PetSex.FEMALE);
+            pet.stored(true);
+            store.add(pet);
+            actions.menus().openCare(owner, pet);
+            var species = owner.getOpenInventory().getTopInventory().getItem(4).getItemMeta().displayName();
+            assertEquals("Maine Coon", PlainTextComponentSerializer.plainText().serialize(species));
+            actions.menus().openKennel(owner);
+            var lore = owner.getOpenInventory().getTopInventory().getItem(0).getItemMeta().lore();
+            assertEquals("Female Maine Coon", PlainTextComponentSerializer.plainText().serialize(lore.get(0)));
+        } finally {
+            if (actions != null) actions.holograms().clear();
+            if (store != null) assertTrue(store.close());
+            MockBukkit.unmock();
+        }
     }
 
     @Test
@@ -66,7 +132,7 @@ class PetTextsTest {
             var egg = new ItemStack(Material.WOLF_SPAWN_EGG);
             owner.getInventory().setItemInMainHand(egg);
             actions.useWorld(owner, egg, null, null, false, true);
-            assertTrue(owner.nextMessage().contains("Will your new pet be a boy or a girl?"));
+            assertTrue(owner.nextMessage().contains("Will your new Pet be a boy or a girl?"));
             assertEquals("_-_", runtime.sessions().hatch(owner.getUniqueId()).typeId());
             actions.onChat(owner, "cancel");
             assertNull(runtime.sessions().hatch(owner.getUniqueId()));
@@ -108,7 +174,7 @@ class PetTextsTest {
         Locale previous = Locale.getDefault();
         try {
             Locale.setDefault(Locale.forLanguageTag("tr-TR"));
-            assertEquals("Arctic fox", PetTexts.speciesName("-ARCTIC_FOX-"));
+            assertEquals("Arctic Fox", PetTexts.speciesName("-ARCTIC_FOX-"));
             assertEquals("iron ingot", PetTexts.itemName("IRON_INGOT"));
             assertEquals("high five", PetTexts.trickName(Trick.valueOf("HIGH_FIVE")));
         } finally { Locale.setDefault(previous); }
