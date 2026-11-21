@@ -1,6 +1,5 @@
 package net.tfminecraft.companionpets.runtime;
 
-import java.util.Locale;
 import java.util.UUID;
 
 import org.bukkit.entity.Entity;
@@ -40,7 +39,7 @@ final class PetHatching {
         }
         HatchPrompt prompt = new HatchPrompt(type.id(), System.currentTimeMillis() + PROMPT_MILLIS);
         runtime.sessions().hatch(player.getUniqueId(), prompt);
-        String species = PetTexts.speciesName(type.id()).toLowerCase(Locale.ROOT);
+        String species = type.speciesName();
         if (type.sexMode() == SexMode.CHOOSE) {
             PetFx.tell(player, "Will your new " + species + " be a boy or a girl? Type \"male\" or \"female\", or \"cancel\" to keep the egg.");
             return;

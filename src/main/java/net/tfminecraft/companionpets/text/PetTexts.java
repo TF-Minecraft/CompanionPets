@@ -32,13 +32,40 @@ public final class PetTexts {
         return sex == PetSex.FEMALE ? "Female" : "Male";
     }
 
+    /** Readable names for TFMC pet type IDs whose IDs run words together; configs may override them with display-name. */
+    private static final java.util.Map<String, String> BUILT_IN_NAMES = java.util.Map.ofEntries(
+            java.util.Map.entry("golden", "Golden Retriever"),
+            java.util.Map.entry("catblack", "Black Cat"),
+            java.util.Map.entry("catfunny", "Funny Cat"),
+            java.util.Map.entry("catorange", "Orange Cat"),
+            java.util.Map.entry("catgray", "Gray Cat"),
+            java.util.Map.entry("cattabby", "Tabby Cat"),
+            java.util.Map.entry("mainecoon", "Maine Coon"),
+            java.util.Map.entry("bernesse", "Bernese Mountain Dog"),
+            java.util.Map.entry("bordercollie", "Border Collie"),
+            java.util.Map.entry("bordercolliegray", "Gray Border Collie"),
+            java.util.Map.entry("lagottoromagnolo", "Lagotto Romagnolo"),
+            java.util.Map.entry("yorkshire", "Yorkshire Terrier"),
+            java.util.Map.entry("sphynx", "Sphynx Cat"));
+
+    /** Player-facing species name: the configured display name, else a built-in or Title Case name from the type ID. */
+    public static String speciesName(String displayName, String typeId) {
+        return displayName == null || displayName.isBlank() ? speciesName(typeId) : displayName.trim();
+    }
+
     public static String speciesName(String typeId) {
         if (typeId == null || typeId.isBlank()) {
             return "Pet";
         }
-        String clean = typeId.replace('_', ' ').replace('-', ' ').trim();
-        if (clean.isEmpty()) return "Pet";
-        return clean.substring(0, 1).toUpperCase(Locale.ROOT) + clean.substring(1).toLowerCase(Locale.ROOT);
+        String builtIn = BUILT_IN_NAMES.get(typeId.trim().toLowerCase(Locale.ROOT));
+        if (builtIn != null) return builtIn;
+        StringBuilder name = new StringBuilder();
+        for (String word : typeId.replace('_', ' ').replace('-', ' ').trim().split(" +")) {
+            if (word.isEmpty()) continue;
+            if (!name.isEmpty()) name.append(' ');
+            name.append(word.substring(0, 1).toUpperCase(Locale.ROOT)).append(word.substring(1).toLowerCase(Locale.ROOT));
+        }
+        return name.isEmpty() ? "Pet" : name.toString();
     }
 
     public static String itemName(String material) {

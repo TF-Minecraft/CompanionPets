@@ -88,6 +88,21 @@ class CompanionConfigCoverageTest {
         assertTrue(warnings.stream().anyMatch(s -> s.contains("max-out exceeds limits.max-pets") && s.endsWith("2")));
     }
 
+    @Test void displayNameComesOnlyFromThePetEntryAndBlankFallsBackToTheId() throws Exception {
+        var config = load("""
+                species: {fox: {entity: WOLF, display-name: Fox Kit}}
+                pets:
+                  catblack: {species: cat, egg: CAT_SPAWN_EGG, display-name: " Shadow Cat "}
+                  fox: {species: fox, egg: FOX_SPAWN_EGG}
+                  mainecoon: {species: cat, egg: OCELOT_SPAWN_EGG, display-name: "  "}
+                """);
+        assertEquals("Shadow Cat", config.type("catblack").speciesName());
+        assertNull(config.type("fox").displayName());
+        assertEquals("Fox", config.type("fox").speciesName());
+        assertNull(config.type("mainecoon").displayName());
+        assertEquals("Maine Coon", config.type("mainecoon").speciesName());
+    }
+
     @Test void hatchPermissionInheritsThroughSpeciesAndFalseOrBlankClearsIt() throws Exception {
         var config = load("""
                 hatching: {permission: " roles.pet_master "}

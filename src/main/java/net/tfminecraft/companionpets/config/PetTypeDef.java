@@ -29,12 +29,23 @@ public record PetTypeDef(
         PetSounds sounds,
         boolean nativeCombat,
         String species,
-        String hatchPermission) {
+        String hatchPermission,
+        String displayName) {
 
     public PetTypeDef {
         tricks = Set.copyOf(tricks);
         defaultTricks = List.copyOf(defaultTricks);
         java.util.Objects.requireNonNull(behavior);
+    }
+
+    /** Player-facing species name: display-name from this pet's config entry, else a readable name from its ID. */
+    public String speciesName() {
+        return net.tfminecraft.companionpets.text.PetTexts.speciesName(displayName, id);
+    }
+
+    /** Player-facing name for a saved pet's type, also when that type is no longer configured. */
+    public static String speciesName(PetTypeDef type, String typeId) {
+        return type == null ? net.tfminecraft.companionpets.text.PetTexts.speciesName(typeId) : type.speciesName();
     }
 
     /** A null hatch permission lets anyone hatch this type's egg. */
